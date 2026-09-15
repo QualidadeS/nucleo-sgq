@@ -6699,97 +6699,74 @@ async function loginUser(){
   }
 }
 async function registerUser(){
-  const name=(document.getElementById('registerName').value||'').trim();
-  const email=(document.getElementById('registerEmail').value||'').trim().toLowerCase();
-  const unit=(document.getElementById('registerUnit').value||'').trim();
-  const sector=(document.getElementById('registerSector').value||'').trim();
-  const password=document.getElementById('registerPassword').value||'';
-  const password2=document.getElementById('registerPassword2').value||'';
-  const msg=document.getElementById('registerMessage');
-  const submitBtn=document.getElementById('registerSubmitBtn');
-  const showRegisterMessage=(text,type='error')=>{
-    if(!msg)return;
-    msg.textContent=text;
-    msg.style.display='block';
-    msg.style.background=type==='success'?'#ecfdf3':type==='info'?'#eff6ff':'#fef2f2';
-    msg.style.color=type==='success'?'#027a48':type==='info'?'#1d4ed8':'#b42318';
-    msg.style.border='1px solid '+(type==='success'?'#abefc6':type==='info'?'#bfdbfe':'#fecdca');
-  };
-  if(msg)msg.style.display='none';
+  const el=id=>document.getElementById(id);
+  const name=(el('registerName')?.value||'').trim();
+  const email=(el('registerEmail')?.value||'').trim().toLowerCase();
+  const unit=(el('registerUnit')?.value||'').trim();
+  const sector=(el('registerSector')?.value||'').trim();
+  const password=el('registerPassword')?.value||'';
+  const password2=el('registerPassword2')?.value||'';
+  const msg=el('registerMessage');
+  const submitBtn=el('registerSubmitBtn');
+
+  function showRegisterMessage(text,type='error'){
+    if(msg){
+      msg.textContent=text;
+      msg.style.cssText='display:block!important;margin-top:12px;padding:12px 14px;border-radius:10px;font-weight:700;white-space:normal;position:relative;z-index:99999;'+
+        (type==='success'?'background:#ecfdf3;color:#027a48;border:1px solid #abefc6;':
+         type==='info'?'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;':
+         'background:#fef2f2;color:#b42318;border:1px solid #fecdca;');
+      try{msg.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(_e){}
+    }
+  }
+
+  // O retorno aparece ANTES de qualquer acesso a storage/backend.
+  showRegisterMessage('Validando cadastro...','info');
 
   if(!name||!email||!unit||!sector||!password||!password2){
-    showRegisterMessage('Preencha nome, e-mail SETA, unidade, setor, senha e confirmação da senha.');
-    return;
+    showRegisterMessage('Preencha nome, e-mail SETA, unidade, setor, senha e confirmação da senha.'); return;
   }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    showRegisterMessage('Informe um e-mail corporativo válido.');
-    return;
+    showRegisterMessage('Informe um e-mail corporativo válido.'); return;
   }
   if(password.length<4){
-    showRegisterMessage('A senha precisa ter pelo menos 4 caracteres.');
-    return;
+    showRegisterMessage('A senha precisa ter pelo menos 4 caracteres.'); return;
   }
   if(password!==password2){
-    showRegisterMessage('As senhas não coincidem. Confira a confirmação da senha.');
-    return;
-  }
-  const existingByEmail=getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===email);
-  if(existingByEmail){
-    showAuthMode('login');
-    document.getElementById('loginName').value=existingByEmail.name||name;
-    document.getElementById('loginUnit').value=existingByEmail.unit||unit;
-    refreshLoginSectorByUnit();
-    fillSectorSelect('loginSector',{selectedValue:existingByEmail.sector||sector});
-    document.getElementById('loginMessage').innerHTML='Já existe um cadastro com esse e-mail. Use a opção <b>Entrar</b>.';
-    return;
-  }
-  if(findKnownUserByNameSector(name,sector)){
-    showAuthMode('login');
-    document.getElementById('loginName').value=name;
-    document.getElementById('loginUnit').value=unit;
-    refreshLoginSectorByUnit();
-    fillSectorSelect('loginSector',{selectedValue:sector});
-    document.getElementById('loginMessage').innerHTML='Já existe um cadastro com esse nome e setor. Use a opção <b>Entrar</b>.';
-    return;
+    showRegisterMessage('As senhas não coincidem. Confira a confirmação da senha.'); return;
   }
 
-  const users=getOperationalUsers();
-  const generatedId=email;
-  const created={
-    name,email,unit,sector,selfRegistered:true,password,
-    role:'operational',approvalStatus:portalBackendEnabled()?'pending':'approved',
-    createdAt:new Date().toISOString()
-  };
-
-  users.push(created);
-  localStorage.setItem(USERS_KEY,JSON.stringify(users));
+  const created={name,email,unit,sector,selfRegistered:true,password,role:'operational',approvalStatus:portalBackendEnabled()?'pending':'approved',createdAt:new Date().toISOString()};
 
   if(portalBackendEnabled()){
     showRegisterMessage('Enviando cadastro para o SGQ...','info');
     if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Enviando...';}
     try{
-      // Fluxo confirmado: a própria resposta do Apps Script informa se gravou.
-      const res=await portalJsonp({
-        acao:'portal_register_user',
-        payload:portalBase64EncodeJson(created)
-      },25000);
-
-      if(!res?.sucesso)throw new Error(res?.erro||'O Apps Script não confirmou a gravação.');
-
-      // A confirmação válida é a própria resposta de portal_register_user.
-      // Não consultar portal_pending_users aqui: essa ação é administrativa e o novo
-      // usuário ainda não possui sessão/token, então a verificação podia falhar mesmo
-      // depois de o cadastro ter sido gravado corretamente.
-      showRegisterMessage('Cadastro enviado com sucesso. Agora ele está aguardando aprovação do SGQ. Depois da aprovação, use a opção Entrar.','success');
-      if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Cadastro enviado';}
+      const res=await portalJsonp({acao:'portal_register_user',payload:portalBase64EncodeJson(created)},25000);
+      if(!res || !res.sucesso) throw new Error((res&&res.erro)||'O Apps Script não confirmou a gravação.');
+      // Cache local é opcional: nunca pode apagar/impedir o retorno ao usuário.
+      try{
+        const users=getOperationalUsers();
+        if(!users.some(u=>String(u.email||'').trim().toLowerCase()===email)) users.push(created);
+        localStorage.setItem(USERS_KEY,JSON.stringify(users));
+      }catch(storageErr){ console.warn('Cadastro confirmado; cache local indisponível:',storageErr); }
+      showRegisterMessage('Cadastro enviado com sucesso! Agora ele está aguardando aprovação do SGQ.','success');
+      if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Cadastro enviado ✓';}
       return;
     }catch(e){
-      // Não deixa um "pendente fantasma" local.
-      localStorage.setItem(USERS_KEY,JSON.stringify(getOperationalUsers().filter(u=>String(u.email||'')!==generatedId)));
-      showRegisterMessage('Não foi possível concluir o cadastro: '+(e.message||e));
+      console.error('Erro no cadastro:',e);
+      showRegisterMessage('Erro no cadastro: '+(e?.message||String(e)||'erro desconhecido'));
       if(submitBtn){submitBtn.disabled=false;submitBtn.textContent='Tentar novamente';}
       return;
     }
+  }
+
+  // Modo sem backend: só aqui tenta persistir localmente.
+  try{
+    const users=getOperationalUsers(); users.push(created); localStorage.setItem(USERS_KEY,JSON.stringify(users));
+  }catch(e){
+    showRegisterMessage('Erro ao salvar o cadastro neste navegador: '+(e?.message||e));
+    return;
   }
 
   const session={name,email,unit,sector,role:'operational'};
