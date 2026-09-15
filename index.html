@@ -13142,12 +13142,11 @@ function canViewRO(ro){
 }
 
 function isAdmin(){
+  // A permissão deve vir exclusivamente do perfil autenticado pelo backend.
+  // Não inferir ADM pelo e-mail/cache local: isso fazia um usuário operacional
+  // ganhar o menu completo quando usava um e-mail presente na antiga lista de ADMs.
   const session=getSession();
-  if(session && session.role==='admin') return true;
-
-  const st=getAccessState();
-  const email=currentEmail();
-  return st.admins.map(x=>String(x).trim().toLowerCase()).includes(email);
+  return !!(session && String(session.role||'').toLowerCase()==='admin');
 }
 
 function showConfigSection(name){
