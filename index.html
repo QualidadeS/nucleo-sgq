@@ -6596,9 +6596,6 @@ let loginAttemptNonce=0;
 
 async function loginUser(){
   const thisLoginAttempt=++loginAttemptNonce;
-
-  // Não destrói a sessão atual antes de o novo login ser validado.
-  // A troca da identidade acontece somente depois de autenticação bem-sucedida.
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=(document.getElementById('loginSector')?.value||'').trim();
@@ -6606,153 +6603,90 @@ async function loginUser(){
   const msg=document.getElementById('loginMessage');
   const enterBtn=document.getElementById('loginEnterBtn');
   if(msg)msg.classList.remove('hidden');
-
   if(!name||!unit||!sector||!password){
     if(msg)msg.textContent='Informe seu nome, selecione a unidade e o setor e digite sua senha.';
     return;
   }
-
-  if(enterBtn){enterBtn.disabled=true}
+  if(enterBtn)enterBtn.disabled=true;
   if(msg)msg.textContent='Validando acesso...';
-
   try{
     let session=null;
-
-    // A base central é a fonte principal do login.
     if(portalBackendEnabled()){
-      let remote;
+      // Primeiro consulta a própria base central para descobrir o texto EXATO
+      // do setor gravado para a pessoa. Isso evita bloquear todos os logins
+      // quando o nome do setor da configuração mudou (ex.: Qualidade/SGQ).
+      let backendSector=sector;
       try{
-        // Compatibilidade: deployments anteriores do Núcleo autenticam por
-        // nome + setor + senha. A unidade é validada no retorno, quando existir.
-        remote=await portalJsonp({
-          acao:'portal_login_jsonp',
-          nome:name,
-          setor:sector,
-          senha:password
-        },25000);
-      }catch(firstError){
-        // Alguns deployments mais novos aceitam/esperam unidade. Só tentamos
-        // essa forma se a chamada compatível não conseguiu sequer responder.
-        remote=await portalJsonp({
-          acao:'portal_login_jsonp',
-          nome:name,
-          unidade:unit,
-          setor:sector,
-          senha:password
-        },25000);
-      }
+        const directory=await portalJsonp({acao:'portal_login_users'},12000);
+        const list=Array.isArray(directory?.users)?directory.users:[];
+        const nk=normalizeAnswer(name), uk=normalizeAnswer(unit), sk=normalizeAnswer(sector);
+        const sameName=list.filter(u=>normalizeAnswer(u.name||u.nome||'')===nk);
+        const unitMatch=sameName.find(u=>{
+          const x=normalizeAnswer(u.unit||u.unidade||'');
+          const filial=uk.includes('filial')||uk.includes('linhares');
+          const matriz=uk.includes('matriz')||uk.includes('sao bento');
+          return (filial&&(x.includes('filial')||x.includes('linhares'))) ||
+                 (matriz&&(x.includes('matriz')||x.includes('sao bento'))) || x===uk;
+        });
+        const sectorMatch=sameName.find(u=>normalizeAnswer(u.sector||u.setor||'')===sk);
+        const chosen=unitMatch||sectorMatch||(sameName.length===1?sameName[0]:null);
+        if(chosen && (chosen.sector||chosen.setor)) backendSector=chosen.sector||chosen.setor;
+      }catch(e){ console.warn('Não foi possível consultar diretório de login; usando setor informado.',e); }
 
+      const remote=await portalJsonp({
+        acao:'portal_login_jsonp',
+        nome:name,
+        setor:backendSector,
+        senha:password
+      },25000);
       if(thisLoginAttempt!==loginAttemptNonce)return;
-
-      if(!remote || remote.sucesso===false){
-        if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
+      if(!remote || remote.sucesso!==true){
+        if(msg)msg.textContent=(remote&&remote.erro)||'O Apps Script não autorizou este login.';
         return;
       }
-
       const u=remote.user||remote.usuario||{};
       const returnedUnit=u.unit||u.unidade||'';
-      // Só confere a unidade quando o backend realmente a devolve.
-      // Backends antigos autenticam por nome+setor+senha e podem não retornar unidade.
       if(returnedUnit){
-        const selectedUnitKey=normalizeAnswer(unit);
-        const returnedUnitKey=normalizeAnswer(returnedUnit);
+        const selectedUnitKey=normalizeAnswer(unit), returnedUnitKey=normalizeAnswer(returnedUnit);
         const selectedIsFilial=selectedUnitKey.includes('filial')||selectedUnitKey.includes('linhares');
         const returnedIsFilial=returnedUnitKey.includes('filial')||returnedUnitKey.includes('linhares');
         const selectedIsMatriz=selectedUnitKey.includes('matriz')||selectedUnitKey.includes('sao bento');
         const returnedIsMatriz=returnedUnitKey.includes('matriz')||returnedUnitKey.includes('sao bento');
         if((selectedIsFilial&&!returnedIsFilial)||(selectedIsMatriz&&!returnedIsMatriz)){
-          if(msg)msg.textContent='A unidade selecionada não corresponde ao seu cadastro.';
+          if(msg)msg.textContent='A unidade selecionada não corresponde ao seu cadastro ('+returnedUnit+').';
           return;
         }
       }
       const rawRole=String(u.role||u.tipoAcesso||u.tipo_acesso||'operational').toLowerCase();
       session={
-        name:u.name||u.nome||name,
-        email:u.email||u.e_mail||'',
-        unit:returnedUnit||unit,
-        sector:u.sector||u.setor||sector,
+        name:u.name||u.nome||name,email:u.email||u.e_mail||'',unit:returnedUnit||unit,
+        sector:u.sector||u.setor||backendSector,
         role:(rawRole==='admin'||rawRole.includes('administr')?'admin':rawRole==='manager'||rawRole.includes('gest')?'manager':'operational'),
         managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:(Array.isArray(u.setoresGerenciados)?u.setoresGerenciados:[]),
-        approvalStatus:u.approvalStatus||u.statusAprovacao||'approved',
-        authToken:remote.authToken||remote.token||''
+        approvalStatus:u.approvalStatus||u.statusAprovacao||'approved',authToken:remote.authToken||remote.token||''
       };
     }else{
-      // Fallback local apenas se a base central estiver indisponível/desativada.
-      const known=findKnownUserByNameSector(name,sector);
-      if(!known){
-        if(msg)msg.textContent='Usuário não encontrado.';
-        return;
-      }
-      if(known.approvalStatus==='pending'){
-        if(msg)msg.textContent='Seu cadastro ainda está aguardando aprovação do SGQ.';
-        return;
-      }
-      if(known.approvalStatus==='rejected'){
-        if(msg)msg.textContent='Este cadastro não foi aprovado pelo SGQ.';
-        return;
-      }
-      if(known.active===false || known.approvalStatus==='disabled' || known.status==='disabled'){
-        if(msg)msg.textContent='Este acesso está desativado. Procure o SGQ.';
-        return;
-      }
-      if(String(known.password||'')!==password){
-        if(msg)msg.textContent='Senha incorreta.';
-        return;
-      }
-      session={
-        name:known.name,
-        email:known.email||'',
-        unit:known.unit||'Matriz',
-        sector:known.sector,
-        role:(known.role==='admin'?'admin':known.role==='manager'?'manager':'operational'),
-        managedSectors:Array.isArray(known.managedSectors)?known.managedSectors:[],
-        approvalStatus:known.approvalStatus||'approved'
-      };
+      throw new Error('O endereço do Apps Script não está configurado.');
     }
 
-    // A autenticação já foi concluída. Só agora descartamos qualquer identidade anterior.
+    // Troca atômica: somente depois de o backend aprovar a nova conta.
     try{localStorage.removeItem(SESSION_KEY)}catch(e){}
-    try{
-      const previousAccess=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
-      previousAccess.currentUser='';
-      localStorage.setItem(ACCESS_KEY,JSON.stringify(previousAccess));
-    }catch(e){}
     setSession(session);
     try{currentUser=session.email||session.name||''}catch(e){window.currentUser=session.email||session.name||''}
     const access=getAccessState()||{};
     if(!Array.isArray(access.admins))access.admins=[];
     access.currentUser=session.email||session.name||'';
-    if(session.role==='admin'){
-      const adminEmail=String(session.email||'').trim().toLowerCase();
-      if(adminEmail && !access.admins.map(x=>String(x).toLowerCase()).includes(adminEmail)){
-        access.admins.push(adminEmail);
-      }
-    }
     localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
 
-    if(msg)msg.textContent='Acesso autorizado. Abrindo Núcleo...';
-    const loginOverlay=document.getElementById('loginOverlay');
-    const appShell=document.getElementById('appShell');
+    if(msg)msg.textContent='Acesso autorizado.';
+    const loginOverlay=document.getElementById('loginOverlay'), appShell=document.getElementById('appShell');
     if(loginOverlay){loginOverlay.classList.add('hidden');loginOverlay.style.display='none'}
     if(appShell)appShell.classList.remove('hidden');
-
     try{document.activeElement?.blur()}catch(e){}
-
-    [
-      ()=>refreshAccessUI(),
-      ()=>enforceAdminVisibility(),
-      ()=>refreshRoRegistrationAccess(),
-      ()=>showList(),
-      ()=>refreshNotificationBell(),
-      ()=>refreshContestPendingBadge(),
-      ()=>refreshPdcaSidebarBadge(),
-      ()=>schedulePendingAnnouncementCheck()
-    ].forEach(step=>{
-      try{step()}catch(err){console.error('Núcleo pós-login:',err)}
-    });
+    [()=>refreshAccessUI(),()=>enforceAdminVisibility(),()=>refreshRoRegistrationAccess(),()=>showList(),()=>refreshNotificationBell(),()=>refreshContestPendingBadge(),()=>refreshPdcaSidebarBadge(),()=>schedulePendingAnnouncementCheck()].forEach(step=>{try{step()}catch(err){console.error('Núcleo pós-login:',err)}});
   }catch(loginError){
     console.error('Falha no login do Núcleo:',loginError);
-    if(thisLoginAttempt===loginAttemptNonce && msg)msg.textContent='Erro ao entrar: '+(loginError?.message||loginError);
+    if(thisLoginAttempt===loginAttemptNonce && msg)msg.textContent='Falha de comunicação com o Apps Script: '+(loginError?.message||loginError);
   }finally{
     if(thisLoginAttempt===loginAttemptNonce && enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
   }
