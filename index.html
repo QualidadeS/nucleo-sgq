@@ -4789,61 +4789,120 @@ function portalJsonp(params,timeoutMs=12000){
     document.head.appendChild(script);
   });
 }
-function portalAuthV2(name,sector,password,timeoutMs=15000){
-  return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
-    if(!base){reject(new Error('URL do Apps Script não configurada.'));return;}
+function portalAuthV3(name,sector,password){
+  const base=portalApiBase();
+  if(!base)throw new Error('URL do Apps Script não configurada.');
 
-    const nonce='auth_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-    const iframe=document.createElement('iframe');
-    const form=document.createElement('form');
-    const timer=setTimeout(()=>finish(new Error('A autenticação não respondeu em 15 segundos.')),timeoutMs);
-    let done=false;
+  const nonce='auth_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  sessionStorage.setItem('nucleo-auth-pending-v3',JSON.stringify({
+    nonce,
+    name:String(name||''),
+    sector:String(sector||''),
+    startedAt:Date.now()
+  }));
 
-    function cleanup(){
-      clearTimeout(timer);
-      window.removeEventListener('message',onMessage);
-      try{form.remove()}catch(e){}
-      setTimeout(()=>{try{iframe.remove()}catch(e){}},100);
-    }
-    function finish(err,data){
-      if(done)return;
-      done=true;
-      cleanup();
-      if(err)reject(err); else resolve(data);
-    }
-    function onMessage(event){
-      const d=event && event.data;
-      if(!d || d.type!=='nucleo-auth-v2' || d.nonce!==nonce)return;
-      try{
-        const raw=String(d.payloadB64||'').replace(/-/g,'+').replace(/_/g,'/');
-        const padded=raw+'='.repeat((4-raw.length%4)%4);
-        const json=decodeURIComponent(Array.from(atob(padded),c=>'%'+c.charCodeAt(0).toString(16).padStart(2,'0')).join(''));
-        finish(null,JSON.parse(json));
-      }catch(e){
-        finish(new Error('A resposta de autenticação veio inválida.'));
-      }
-    }
+  const form=document.createElement('form');
+  form.method='POST';
+  form.action=base;
+  form.target='_self';
+  form.style.display='none';
 
-    window.addEventListener('message',onMessage);
-    iframe.name='nucleoAuthFrame_'+Date.now();
-    iframe.style.display='none';
-    document.body.appendChild(iframe);
-
-    form.method='POST';
-    form.action=base;
-    form.target=iframe.name;
-    form.style.display='none';
-    const fields={acao:'portal_auth_v2',nome:name,setor:sector,senha:password,nonce};
-    Object.entries(fields).forEach(([k,v])=>{
-      const input=document.createElement('input');
-      input.type='hidden'; input.name=k; input.value=String(v??'');
-      form.appendChild(input);
-    });
-    document.body.appendChild(form);
-    form.submit();
+  const fields={acao:'portal_auth_v2',nome:name,setor:sector,senha:password,nonce};
+  Object.entries(fields).forEach(([k,v])=>{
+    const input=document.createElement('input');
+    input.type='hidden'; input.name=k; input.value=String(v??'');
+    form.appendChild(input);
   });
+
+  document.body.appendChild(form);
+  form.submit();
 }
+
+function nucleoDecodeAuthPayload_(raw){
+  const normalized=String(raw||'').replace(/-/g,'+').replace(/_/g,'/');
+  const padded=normalized+'='.repeat((4-normalized.length%4)%4);
+  const bytes=atob(padded);
+  let encoded='';
+  for(let i=0;i<bytes.length;i++)encoded+='%'+bytes.charCodeAt(i).toString(16).padStart(2,'0');
+  return JSON.parse(decodeURIComponent(encoded));
+}
+
+function consumePortalAuthV3Return(){
+  if(!location.search.includes('auth_return=1'))return false;
+  const msg=document.getElementById('loginMessage');
+  const enterBtn=document.getElementById('loginEnterBtn');
+
+  try{
+    const pending=JSON.parse(sessionStorage.getItem('nucleo-auth-pending-v3')||'null');
+    const parts=String(window.name||'').split('|');
+    if(parts.length<3 || parts[0]!=='NUCLEO_AUTH_V3'){
+      throw new Error('O Apps Script retornou sem os dados de autenticação.');
+    }
+    const nonce=parts[1];
+    const payload=parts.slice(2).join('|');
+    if(!pending || pending.nonce!==nonce){
+      throw new Error('A resposta de autenticação não corresponde à tentativa atual.');
+    }
+
+    const remote=nucleoDecodeAuthPayload_(payload);
+    window.name='';
+    sessionStorage.removeItem('nucleo-auth-pending-v3');
+    history.replaceState(null,'',location.pathname);
+
+    if(!remote || remote.sucesso===false){
+      showAuthMode('login');
+      if(msg){
+        msg.classList.remove('hidden');
+        msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
+      }
+      if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
+      return true;
+    }
+
+    const remoteUser=remote.user||{};
+    const normalized={
+      name:remoteUser.name||pending.name,
+      email:remoteUser.email||'',
+      unit:remoteUser.unit||'Matriz',
+      sector:remoteUser.sector||pending.sector,
+      role:remoteUser.role||'operational',
+      managedSectors:Array.isArray(remoteUser.managedSectors)?remoteUser.managedSectors:[],
+      approvalStatus:remoteUser.approvalStatus||'approved'
+    };
+    localStorage.setItem(SESSION_KEY,JSON.stringify(normalized));
+    currentUser=normalized;
+
+    const loginOverlay=document.getElementById('loginOverlay');
+    const appShell=document.getElementById('appShell');
+    if(loginOverlay){loginOverlay.classList.add('hidden');loginOverlay.style.display='none'}
+    if(appShell)appShell.classList.remove('hidden');
+
+    [
+      ()=>refreshAccessUI(),
+      ()=>enforceAdminVisibility(),
+      ()=>refreshRoRegistrationAccess(),
+      ()=>showList(),
+      ()=>refreshNotificationBell(),
+      ()=>refreshContestPendingBadge(),
+      ()=>refreshPdcaSidebarBadge(),
+      ()=>schedulePendingAnnouncementCheck()
+    ].forEach(step=>{try{step()}catch(err){console.error('Núcleo pós-login:',err)}});
+
+    return true;
+  }catch(err){
+    window.name='';
+    sessionStorage.removeItem('nucleo-auth-pending-v3');
+    history.replaceState(null,'',location.pathname);
+    showAuthMode('login');
+    if(msg){
+      msg.classList.remove('hidden');
+      msg.textContent='Falha no retorno do Apps Script: '+(err?.message||err);
+    }
+    if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
+    return true;
+  }
+}
+
 
 function portalPostForm(params){
   const base=portalApiBase();
@@ -6645,30 +6704,9 @@ async function loginUser(){
     // No celular/novo navegador o localStorage pode estar vazio.
     // Nesses casos, consulta a base central do Apps Script.
     if(portalBackendEnabled()){
-      try{
-        const remote=await portalAuthV2(name,sector,password,15000);
-
-        if(remote?.sucesso && remote?.user){
-          const u=remote.user;
-          const users=getOperationalUsers();
-          const key=String(u.email||u.name||'').trim().toLowerCase();
-          const existing=users.findIndex(x=>String(x.email||x.name||'').trim().toLowerCase()===key);
-          const cached={...u,password,approvalStatus:u.approvalStatus||'approved'};
-          if(existing>=0)users[existing]={...users[existing],...cached};
-          else users.push(cached);
-          localStorage.setItem(USERS_KEY,JSON.stringify(users));
-          known=cached;
-        }else if(remote?.erro && !known){
-          if(msg)msg.textContent=remote.erro;
-          return;
-        }
-      }catch(remoteError){
-        if(!known){
-          if(msg)msg.textContent='Falha na autenticação central: '+(remoteError?.message||remoteError);
-          return;
-        }
-        console.warn('Login central indisponível; usando cadastro local.',remoteError);
-      }
+      if(msg)msg.textContent='Conectando ao Apps Script...';
+      portalAuthV3(name,sector,password);
+      return;
     }
 
     if(!known){
@@ -6810,7 +6848,7 @@ async function registerUser(){
       if(!found)throw new Error('O cadastro não apareceu na base central após a gravação.');
 
       msg.textContent='Cadastro recebido pelo SGQ e aguardando aprovação.';
-      showAuthMode('login');
+      if(!consumePortalAuthV3Return())showAuthMode('login');
       return;
     }catch(e){
       // Não deixa um "pendente fantasma" local.
