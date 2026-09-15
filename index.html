@@ -4758,22 +4758,34 @@ function portalBase64EncodeJson(obj){
   const json=JSON.stringify(obj||{});
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function portalJsonp(params,timeoutMs=20000){
+function portalJsonp(params,timeoutMs=12000){
   return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
+    let base=portalApiBase();
     if(!base){reject(new Error('URL do Apps Script não configurada.'));return;}
+    base=String(base).trim().replace(/\/+$/,'');
+    if(!/\/exec$/i.test(base)){reject(new Error('A URL do Apps Script precisa terminar em /exec.'));return;}
     const cb='portalSgqCb_'+Date.now()+'_'+Math.floor(Math.random()*99999);
     const script=document.createElement('script');
-    const timer=setTimeout(()=>{cleanup();reject(new Error('Tempo limite ao consultar a base central.'));},timeoutMs);
+    let finished=false;
+    let timer=null;
     function cleanup(){
-      clearTimeout(timer);
+      if(timer)clearTimeout(timer);
       try{delete window[cb]}catch(e){window[cb]=undefined}
       try{script.remove()}catch(e){}
     }
-    window[cb]=(data)=>{cleanup();resolve(data)};
-    script.onerror=()=>{cleanup();reject(new Error('O Apps Script não respondeu.'))};
-    const p=new URLSearchParams({...params,callback:cb,_:Date.now()});
-    script.src=base+(base.includes('?')?'&':'?')+p.toString();
+    function fail(message){
+      if(finished)return;
+      finished=true; cleanup(); reject(new Error(message));
+    }
+    window[cb]=(data)=>{if(finished)return; finished=true; cleanup(); resolve(data)};
+    script.async=true;
+    script.referrerPolicy='no-referrer';
+    script.onerror=()=>fail('Não foi possível conectar ao Apps Script publicado.');
+    const p=new URLSearchParams();
+    Object.entries(params||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null)p.set(k,String(v))});
+    p.set('callback',cb); p.set('_',String(Date.now()));
+    script.src=base+'?'+p.toString();
+    timer=setTimeout(()=>fail('O Apps Script não respondeu ao login em 12 segundos.'),Math.min(Number(timeoutMs)||12000,12000));
     document.head.appendChild(script);
   });
 }
@@ -6583,7 +6595,7 @@ async function loginUser(){
           nome:name,
           setor:sector,
           senha:password
-        },25000);
+        },12000);
 
         if(remote?.sucesso && remote?.user){
           const u=remote.user;
@@ -6600,11 +6612,11 @@ async function loginUser(){
           return;
         }
       }catch(remoteError){
-        // Se já existe cópia local, ainda permite uso local.
         if(!known){
-          if(msg)msg.textContent='Não foi possível consultar a base central. Verifique sua internet e abra o NÚCLEO pelo link publicado.';
+          if(msg)msg.textContent='Falha ao conectar com a base central: '+(remoteError?.message||remoteError);
           return;
         }
+        console.warn('Login central indisponível; usando cadastro local.',remoteError);
       }
     }
 
@@ -6671,6 +6683,9 @@ async function loginUser(){
     postLoginSteps.forEach(step=>{
       try{step()}catch(err){console.error('Núcleo pós-login:',err)}
     });
+  }catch(loginError){
+    console.error('Falha no login do Núcleo:',loginError);
+    if(msg)msg.textContent='Erro ao entrar: '+(loginError?.message||loginError);
   }finally{
     if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
   }
