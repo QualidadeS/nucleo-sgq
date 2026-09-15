@@ -6619,7 +6619,6 @@ async function loginUser(){
       const remote=await portalJsonp({
         acao:'portal_login_jsonp',
         nome:name,
-        unidade:unit,
         setor:sector,
         senha:password
       },15000);
@@ -6681,23 +6680,41 @@ async function loginUser(){
     }
 
     // Substitui de fato a sessão anterior ao trocar de usuário.
+    // O backend já autorizou. Grave a sessão e abra o aplicativo ANTES de qualquer
+    // manutenção auxiliar de permissões locais. Assim uma configuração local antiga
+    // nunca consegue bloquear um login válido.
     setSession(session);
-    const access=getAccessState()||{};
-    if(!Array.isArray(access.admins))access.admins=[];
-    access.currentUser=session.email||session.name||'';
-    if(session.role==='admin'){
-      const adminEmail=String(session.email||'').trim().toLowerCase();
-      if(adminEmail && !access.admins.map(x=>String(x).toLowerCase()).includes(adminEmail)){
-        access.admins.push(adminEmail);
-      }
-    }
-    localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
 
     if(msg)msg.textContent='Acesso autorizado. Abrindo Núcleo...';
     const loginOverlay=document.getElementById('loginOverlay');
+    if(loginOverlay){
+      loginOverlay.classList.add('hidden');
+      loginOverlay.style.setProperty('display','none','important');
+      loginOverlay.setAttribute('aria-hidden','true');
+    }
+
+    // Compatibilidade com versões que tinham ou não um wrapper #appShell.
     const appShell=document.getElementById('appShell');
-    if(loginOverlay){loginOverlay.classList.add('hidden');loginOverlay.style.display='none'}
-    if(appShell)appShell.classList.remove('hidden');
+    if(appShell){
+      appShell.classList.remove('hidden');
+      appShell.style.removeProperty('display');
+    }
+    document.body.classList.add('nucleo-authenticated');
+
+    // Atualiza o estado auxiliar sem assumir que `admins` já exista no navegador.
+    try{
+      const access=getAccessState()||{};
+      access.currentUser=session.email||session.name||'';
+      if(!Array.isArray(access.admins))access.admins=[];
+      if(session.role==='admin'){
+        const adminEmail=String(session.email||'').trim().toLowerCase();
+        const adminsLower=access.admins.map(x=>String(x||'').trim().toLowerCase());
+        if(adminEmail && !adminsLower.includes(adminEmail))access.admins.push(session.email);
+      }
+      localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
+    }catch(accessError){
+      console.warn('Estado auxiliar de acesso não impediu o login:',accessError);
+    }
 
     try{document.activeElement?.blur()}catch(e){}
 
@@ -9930,6 +9947,10 @@ function printSacPreview(){
 @media(max-width:760px){
   #mySacsCards{grid-template-columns:1fr!important}
 }
+</style>
+
+<style id="login-success-hardening">
+body.nucleo-authenticated #loginOverlay{display:none!important;visibility:hidden!important;pointer-events:none!important}
 </style>
 </head><body>${content.innerHTML}</body></html>`);
   w.document.close();
