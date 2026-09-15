@@ -2506,8 +2506,9 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
       <input id="registerPassword" type="password" placeholder="Crie uma senha">
       <div class="label">Confirmar senha</div>
       <input id="registerPassword2" type="password" placeholder="Repita a senha">
+      <div id="registerMessage" class="small" role="status" aria-live="polite" style="display:none;margin-top:12px;padding:10px 12px;border-radius:10px;font-weight:700"></div>
       <div class="login-actions">
-        <button class="btn primary" onclick="registerUser()">Cadastrar e entrar</button>
+        <button id="registerSubmitBtn" class="btn primary" onclick="registerUser()">Enviar cadastro</button>
       </div>
     </div>
 
@@ -6704,22 +6705,32 @@ async function registerUser(){
   const sector=(document.getElementById('registerSector').value||'').trim();
   const password=document.getElementById('registerPassword').value||'';
   const password2=document.getElementById('registerPassword2').value||'';
-  const msg=document.getElementById('loginMessage');
+  const msg=document.getElementById('registerMessage');
+  const submitBtn=document.getElementById('registerSubmitBtn');
+  const showRegisterMessage=(text,type='error')=>{
+    if(!msg)return;
+    msg.textContent=text;
+    msg.style.display='block';
+    msg.style.background=type==='success'?'#ecfdf3':type==='info'?'#eff6ff':'#fef2f2';
+    msg.style.color=type==='success'?'#027a48':type==='info'?'#1d4ed8':'#b42318';
+    msg.style.border='1px solid '+(type==='success'?'#abefc6':type==='info'?'#bfdbfe':'#fecdca');
+  };
+  if(msg)msg.style.display='none';
 
   if(!name||!email||!unit||!sector||!password||!password2){
-    msg.textContent='Preencha nome, e-mail SETA, unidade, setor, senha e confirmação da senha.';
+    showRegisterMessage('Preencha nome, e-mail SETA, unidade, setor, senha e confirmação da senha.');
     return;
   }
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    msg.textContent='Informe um e-mail corporativo válido.';
+    showRegisterMessage('Informe um e-mail corporativo válido.');
     return;
   }
   if(password.length<4){
-    msg.textContent='A senha precisa ter pelo menos 4 caracteres neste protótipo.';
+    showRegisterMessage('A senha precisa ter pelo menos 4 caracteres.');
     return;
   }
   if(password!==password2){
-    msg.textContent='As senhas não coincidem.';
+    showRegisterMessage('As senhas não coincidem. Confira a confirmação da senha.');
     return;
   }
   const existingByEmail=getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===email);
@@ -6754,7 +6765,8 @@ async function registerUser(){
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
 
   if(portalBackendEnabled()){
-    msg.textContent='Enviando cadastro para o SGQ...';
+    showRegisterMessage('Enviando cadastro para o SGQ...','info');
+    if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Enviando...';}
     try{
       // Fluxo confirmado: a própria resposta do Apps Script informa se gravou.
       const res=await portalJsonp({
@@ -6769,13 +6781,14 @@ async function registerUser(){
       const found=Array.isArray(verify?.users) && verify.users.some(u=>String(u.email||'')===generatedId && u.approvalStatus==='pending');
       if(!found)throw new Error('O cadastro não apareceu na base central após a gravação.');
 
-      msg.textContent='Cadastro recebido pelo SGQ e aguardando aprovação.';
-      showAuthMode('login');
+      showRegisterMessage('Cadastro enviado com sucesso. Agora ele está aguardando aprovação do SGQ. Depois da aprovação, use a opção Entrar.','success');
+      if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Cadastro enviado';}
       return;
     }catch(e){
       // Não deixa um "pendente fantasma" local.
       localStorage.setItem(USERS_KEY,JSON.stringify(getOperationalUsers().filter(u=>String(u.email||'')!==generatedId)));
-      msg.textContent='Não foi possível registrar na base central: '+(e.message||e);
+      showRegisterMessage('Não foi possível concluir o cadastro: '+(e.message||e));
+      if(submitBtn){submitBtn.disabled=false;submitBtn.textContent='Tentar novamente';}
       return;
     }
   }
