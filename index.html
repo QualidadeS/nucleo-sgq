@@ -6586,6 +6586,16 @@ let loginAttemptNonce=0;
 
 async function loginUser(){
   const thisLoginAttempt=++loginAttemptNonce;
+
+  // TROCA DE CONTA: nunca autenticar usando restos da sessão anterior.
+  // A identidade anterior é removida antes de validar o novo login.
+  try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+  try{
+    const __access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
+    __access.currentUser='';
+    localStorage.setItem(ACCESS_KEY,JSON.stringify(__access));
+  }catch(e){}
+  try{currentUser=null}catch(e){window.currentUser=null}
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=(document.getElementById('loginSector')?.value||'').trim();
@@ -7121,14 +7131,12 @@ function openRoRegistrationForm(){
 }
 
 function logoutUser(){
-  // Cancela logicamente qualquer tentativa de login anterior ainda pendente.
+  // Invalida qualquer resposta assíncrona de um login anterior.
   loginAttemptNonce++;
-  // Encerra somente a sessão. Usuários, R.O.s e configurações permanecem salvos.
-  localStorage.removeItem(SESSION_KEY);
-  currentUser=null;
 
-  // Também limpa o "usuário atual" legado para ele não continuar sendo
-  // interpretado como administrador depois de sair.
+  // Remove SOMENTE a identidade/sessão. Não apaga usuários nem dados do portal.
+  try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+  try{currentUser=null}catch(e){window.currentUser=null}
   try{
     const access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
     access.currentUser='';
@@ -7137,30 +7145,13 @@ function logoutUser(){
 
   detailReturnView='ros';
 
-  // Troca de conta precisa começar com uma execução nova do aplicativo.
-  // Há muitos estados globais/cache em memória; apenas esconder o app não os zera.
-  // Limpamos a sessão e recarregamos a própria página para impedir que a conta
-  // anterior interfira no próximo login.
-  try{
-    sessionStorage.clear();
-  }catch(e){}
-  try{
-    const cleanUrl=window.location.href.split('#')[0];
-    window.location.replace(cleanUrl);
-    return;
-  }catch(e){}
-
+  // Fecha a aplicação e abre uma tela de login realmente nova, sem recarregar
+  // a página e sem reaproveitar os campos/estado da conta anterior.
   const app=document.getElementById('appShell');
   const login=document.getElementById('loginOverlay');
-
   if(app)app.classList.add('hidden');
-  if(login){
-    login.classList.remove('hidden');
-    login.style.display='flex';
-  }
+  if(login){login.classList.remove('hidden');login.style.display='flex'}
 
-  // Volta a autenticação completamente limpa para permitir trocar de conta
-  // sem reaproveitar nome, unidade, setor, senha ou estado do botão anterior.
   try{showAuthMode('login')}catch(e){}
 
   const name=document.getElementById('loginName');
@@ -7170,15 +7161,16 @@ function logoutUser(){
   const enterBtn=document.getElementById('loginEnterBtn');
   if(name)name.value='';
   if(unit)unit.value='';
-  if(sector){sector.value='';sector.disabled=true}
-  if(password)password.value='';
+  if(sector){sector.innerHTML='<option value="">Selecione primeiro a unidade...</option>';sector.value='';sector.disabled=true}
+  if(password){password.value='';password.type='password'}
   if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
-  try{refreshLoginSectorByUnit()}catch(e){}
 
   const msg=document.getElementById('loginMessage');
-  if(msg){msg.classList.remove('hidden');msg.innerHTML='Sessão encerrada. Informe os dados do outro usuário para entrar.';}
-  const panel=document.getElementById('notificationPanel');if(panel)panel.classList.add('hidden');
-  refreshNotificationBell();
+  if(msg){msg.classList.remove('hidden');msg.textContent='';}
+  const panel=document.getElementById('notificationPanel');
+  if(panel)panel.classList.add('hidden');
+  try{refreshAccessUI()}catch(e){}
+  setTimeout(()=>name?.focus(),0);
 }
 
 function closePdfPreview(){
@@ -12950,7 +12942,7 @@ function getAccessState(){
   const normalized=state.admins.map(x=>String(x).trim().toLowerCase());
   if(!normalized.includes('sgq@empresa.com')) state.admins.unshift('sgq@empresa.com');
 
-  if(!state.currentUser) state.currentUser='responsavel@empresa.com';
+  if(typeof state.currentUser!=='string') state.currentUser='';
 
   localStorage.setItem(ACCESS_KEY,JSON.stringify(state));
   return state;
@@ -12962,8 +12954,7 @@ function saveAccessState(state){
 function currentEmail(){
   const session=getSession();
   if(session?.email)return session.email.trim().toLowerCase();
-  const st=getAccessState();
-  return (st.currentUser||'').trim().toLowerCase();
+  return '';
 }
 
 function currentSector(){
