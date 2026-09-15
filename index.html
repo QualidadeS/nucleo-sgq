@@ -6541,7 +6541,17 @@ function refreshLoginSectorByUnit(){
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=document.getElementById('loginSector');
   if(!sector)return;
-  fillSectorSelect('loginSector');
+
+  // O login não pode depender da configuração local do navegador anterior.
+  // Mantém todos os setores conhecidos disponíveis, inclusive SGQ/ADM.
+  const all=normalizeSectorList([
+    ...getConfiguredSectors(),
+    'SGQ','Produção','Logística','Qualidade','Manutenção','Comercial',
+    'Comercial Interno','Comercial Externo','Faturamento','Diretoria','Processos'
+  ]);
+  const current=sector.value||'';
+  sector.innerHTML='<option value="">Selecione o setor...</option>'+all.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  if(current && all.some(s=>normalizeAnswer(s)===normalizeAnswer(current))) sector.value=all.find(s=>normalizeAnswer(s)===normalizeAnswer(current));
   sector.disabled=!unit;
   if(!unit)sector.value='';
 }
@@ -6587,15 +6597,8 @@ let loginAttemptNonce=0;
 async function loginUser(){
   const thisLoginAttempt=++loginAttemptNonce;
 
-  // TROCA DE CONTA: nunca autenticar usando restos da sessão anterior.
-  // A identidade anterior é removida antes de validar o novo login.
-  try{localStorage.removeItem(SESSION_KEY)}catch(e){}
-  try{
-    const __access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
-    __access.currentUser='';
-    localStorage.setItem(ACCESS_KEY,JSON.stringify(__access));
-  }catch(e){}
-  try{currentUser=null}catch(e){window.currentUser=null}
+  // Não destrói a sessão atual antes de o novo login ser validado.
+  // A troca da identidade acontece somente depois de autenticação bem-sucedida.
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=(document.getElementById('loginSector')?.value||'').trim();
@@ -6632,26 +6635,32 @@ async function loginUser(){
         return;
       }
 
-      const u=remote.user||{};
-      const selectedUnitKey=normalizeAnswer(unit);
-      const returnedUnitKey=normalizeAnswer(u.unit||'');
-      const selectedIsFilial=selectedUnitKey.includes('filial')||selectedUnitKey.includes('linhares');
-      const returnedIsFilial=returnedUnitKey.includes('filial')||returnedUnitKey.includes('linhares');
-      const selectedIsMatriz=selectedUnitKey.includes('matriz')||selectedUnitKey.includes('sao bento');
-      const returnedIsMatriz=returnedUnitKey.includes('matriz')||returnedUnitKey.includes('sao bento');
-      if((selectedIsFilial&&!returnedIsFilial)||(selectedIsMatriz&&!returnedIsMatriz)){
-        if(msg)msg.textContent='A unidade selecionada não corresponde ao seu cadastro.';
-        return;
+      const u=remote.user||remote.usuario||{};
+      const returnedUnit=u.unit||u.unidade||'';
+      // Só confere a unidade quando o backend realmente a devolve.
+      // Backends antigos autenticam por nome+setor+senha e podem não retornar unidade.
+      if(returnedUnit){
+        const selectedUnitKey=normalizeAnswer(unit);
+        const returnedUnitKey=normalizeAnswer(returnedUnit);
+        const selectedIsFilial=selectedUnitKey.includes('filial')||selectedUnitKey.includes('linhares');
+        const returnedIsFilial=returnedUnitKey.includes('filial')||returnedUnitKey.includes('linhares');
+        const selectedIsMatriz=selectedUnitKey.includes('matriz')||selectedUnitKey.includes('sao bento');
+        const returnedIsMatriz=returnedUnitKey.includes('matriz')||returnedUnitKey.includes('sao bento');
+        if((selectedIsFilial&&!returnedIsFilial)||(selectedIsMatriz&&!returnedIsMatriz)){
+          if(msg)msg.textContent='A unidade selecionada não corresponde ao seu cadastro.';
+          return;
+        }
       }
+      const rawRole=String(u.role||u.tipoAcesso||u.tipo_acesso||'operational').toLowerCase();
       session={
-        name:u.name||name,
-        email:u.email||'',
-        unit:u.unit||'Matriz',
-        sector:u.sector||sector,
-        role:(u.role==='admin'?'admin':u.role==='manager'?'manager':'operational'),
-        managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
-        approvalStatus:u.approvalStatus||'approved',
-        authToken:remote.authToken||''
+        name:u.name||u.nome||name,
+        email:u.email||u.e_mail||'',
+        unit:returnedUnit||unit,
+        sector:u.sector||u.setor||sector,
+        role:(rawRole==='admin'||rawRole.includes('administr')?'admin':rawRole==='manager'||rawRole.includes('gest')?'manager':'operational'),
+        managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:(Array.isArray(u.setoresGerenciados)?u.setoresGerenciados:[]),
+        approvalStatus:u.approvalStatus||u.statusAprovacao||'approved',
+        authToken:remote.authToken||remote.token||''
       };
     }else{
       // Fallback local apenas se a base central estiver indisponível/desativada.
@@ -6687,10 +6696,17 @@ async function loginUser(){
       };
     }
 
-    // Substitui de fato a sessão anterior ao trocar de usuário.
+    // A autenticação já foi concluída. Só agora descartamos qualquer identidade anterior.
+    try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+    try{
+      const previousAccess=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
+      previousAccess.currentUser='';
+      localStorage.setItem(ACCESS_KEY,JSON.stringify(previousAccess));
+    }catch(e){}
     setSession(session);
     try{currentUser=session.email||session.name||''}catch(e){window.currentUser=session.email||session.name||''}
-    const access=getAccessState();
+    const access=getAccessState()||{};
+    if(!Array.isArray(access.admins))access.admins=[];
     access.currentUser=session.email||session.name||'';
     if(session.role==='admin'){
       const adminEmail=String(session.email||'').trim().toLowerCase();
