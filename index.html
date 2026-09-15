@@ -8337,7 +8337,7 @@ function openRoReportHtml(id){
   
 
 
-\n<script id="passwordEyeScript">\n(function(){\n  function addPasswordEyes(){\n    document.querySelectorAll('input[type="password"]').forEach(function(input){\n      if(input.dataset.eyeReady==='1') return;\n      input.dataset.eyeReady='1';\n      var wrap=document.createElement('span');\n      wrap.className='password-eye-wrap';\n      input.parentNode.insertBefore(wrap,input);\n      wrap.appendChild(input);\n      var btn=document.createElement('button');\n      btn.type='button';\n      btn.className='password-eye-btn';\n      btn.setAttribute('aria-label','Mostrar senha');\n      btn.title='Mostrar senha';\n      btn.textContent='👁';\n      btn.addEventListener('click',function(){\n        var showing=input.type==='text';\n        input.type=showing?'password':'text';\n        btn.setAttribute('aria-label',showing?'Mostrar senha':'Ocultar senha');\n        btn.title=showing?'Mostrar senha':'Ocultar senha';\n        btn.textContent=showing?'👁':'🙈';\n      });\n      wrap.appendChild(btn);\n    });\n  }\n  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',addPasswordEyes);\n  else addPasswordEyes();\n  new MutationObserver(addPasswordEyes).observe(document.documentElement,{childList:true,subtree:true});\n})();\n</script>\n</body></html>`;
+</body></html>`;
 
   const blob=new Blob([page],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
@@ -17677,4 +17677,33 @@ document.addEventListener('DOMContentLoaded',()=>{
   </div>
 </div>
 
+
+<style id="v97-73-ui-fix">
+html,body{max-width:100%;overflow-x:hidden!important}
+#appShell,.app-shell,.main,.content,main{max-width:100%;min-width:0}
+.password-eye-wrap{position:relative;display:block;width:100%}
+.password-eye-wrap>input{width:100%!important;padding-right:44px!important;box-sizing:border-box}
+.password-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;cursor:pointer;padding:6px;z-index:5;font-size:17px;line-height:1}
+</style>
+<script id="passwordEyeScript">
+(function(){
+  function addPasswordEyes(root){
+    (root||document).querySelectorAll('input[type="password"]').forEach(function(input){
+      if(input.dataset.eyeReady==='1') return;
+      input.dataset.eyeReady='1';
+      var wrap=document.createElement('span');
+      wrap.className='password-eye-wrap';
+      input.parentNode.insertBefore(wrap,input);
+      wrap.appendChild(input);
+      var btn=document.createElement('button');
+      btn.type='button'; btn.className='password-eye-btn'; btn.textContent='👁';
+      btn.setAttribute('aria-label','Mostrar senha'); btn.title='Mostrar senha';
+      btn.onclick=function(e){e.preventDefault();e.stopPropagation();var show=input.type==='password';input.type=show?'text':'password';btn.textContent=show?'🙈':'👁';btn.title=show?'Ocultar senha':'Mostrar senha';};
+      wrap.appendChild(btn);
+    });
+  }
+  function init(){addPasswordEyes(document);new MutationObserver(function(){addPasswordEyes(document)}).observe(document.body,{childList:true,subtree:true});}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body></html>
