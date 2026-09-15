@@ -1007,6 +1007,7 @@ body.role-manager #moduleManagement{
 }
 
 /* v97.41 — cadastro de R.O. Externa/SAC somente para setores autorizados */
+/* v97.67 — e-mails de setor derivados dos usuários cadastrados */
 /* v97.64 — triagem pela combinação operacional da planilha: Interna Y+AD / Externa AB+AE */
 body.external-ro-denied #navNewExternalRo{
   display:none !important;
@@ -2478,14 +2479,14 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
       <div class="label">E-mail SETA</div>
       <input id="registerEmail" type="email" autocomplete="email" placeholder="seu.email@seta...">
       <div class="small" style="margin:5px 0 10px;color:#667085">Use seu e-mail corporativo. Ele será usado para identificar você nos direcionamentos do portal.</div>
-      <div class="label">Unidade</div>
-      <select id="registerUnit">
-        <option value="">Selecione a unidade...</option>
-        <option value="Unidade São Bento do Sul - Matriz">SETA SC - Matriz</option>
-        <option value="Unidade Linhares - Filial">SETA ES - Filial</option>
+      <div class="label">Você pertence à Matriz ou à Filial?</div>
+      <select id="registerUnit" onchange="refreshRegisterSectorByUnit()">
+        <option value="">Selecione...</option>
+        <option value="Unidade São Bento do Sul - Matriz">Matriz — São Bento do Sul (SC)</option>
+        <option value="Unidade Linhares - Filial">Filial — Linhares (ES)</option>
       </select>
       <div class="label">Setor</div>
-      <select id="registerSector"><option value="">Selecione o setor...</option></select>
+      <select id="registerSector" disabled><option value="">Selecione primeiro Matriz ou Filial...</option></select>
       <div class="label">Criar senha</div>
       <input id="registerPassword" type="password" placeholder="Crie uma senha">
       <div class="label">Confirmar senha</div>
@@ -4012,9 +4013,8 @@ Cancelada</textarea></label>
           <div>Comunicados</div><div><select id="channelAnnouncement"><option>Portal</option><option>Ambos</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">Público do comunicado</div>
         </div>
       </div>
-      <div id="sectorEmailMap" class="sector-email-map"></div>
+      <div class="small" style="margin-top:10px">Os destinatários dos setores são identificados automaticamente pelos usuários cadastrados e aprovados no Núcleo.</div>
       <div class="actions" style="margin-top:12px">
-        <button class="btn primary" type="button" onclick="saveSectorEmails()">Salvar setores e e-mails</button>
         <button class="btn secondary" type="button" onclick="testSectorEmail()">Testar R.O.</button><button class="btn secondary" type="button" onclick="testDirectEmailRoute()">Testar rota de e-mail</button>
         <button class="btn secondary" type="button" onclick="testContestEmail()">Testar resposta de contestação</button>
       </div>
@@ -4428,7 +4428,7 @@ function getRoTimeline(ro){
   const id=String(ro.numero||ro.id||ro.codigo||'');const out=[];
   if(ro.data)out.push({at:ro.data,title:'R.O. registrada',text:ro.registrante?('Registrada por '+ro.registrante):'Ocorrência criada.'});
   const tri=getSavedTriageMap().get(id);
-  if(tri?.triagedAt)out.push({at:tri.triagedAt,title:'Triagem do SGQ',text:tri.decision==='directed'?('Direcionada para '+(tri.responsibleSector||'setor')+(tri.responsibleUserName?' · '+tri.responsibleUserName:' · todo o setor')+' · criticidade '+(tri.criticality||'Média')):tri.decision==='record'?'Somente para registro':'R.O. cancelada'});
+  if(tri?.triagedAt)out.push({at:tri.triagedAt,title:'Triagem do SGQ',text:tri.decision==='directed'?('Direcionada para '+(tri.responsibleSector||'setor')+(tri.responsibleUserName?' · '+tri.responsibleUserName:' · todo o setor')+' · criticidade '+(tri.criticality||'Média')):tri.decision==='record'?'Somente para registro':tri.decision==='obsolete'?'R.O. obsoleta':'R.O. cancelada'});
   getContestations().filter(c=>String(c.ro)===id).forEach(c=>{out.push({at:c.createdAt,title:'Contestação enviada',text:c.reason||''});if(c.reviewedAt)out.push({at:c.reviewedAt,title:c.status==='accepted'?'Contestação aceita':'Contestação rejeitada',text:c.reviewNote||''})});
   const sac=findExternalRoControlByRo(id);
   if(sac){
@@ -5498,48 +5498,19 @@ function emailForSector(sector){
   const wanted=normalizeAnswer(String(sector||''));
   if(!wanted)return '';
 
-  // Prefer the map saved in this browser; fall back to the centrally saved config.
-  const localMap=getSectorEmailMap()||{};
-  const centralMap=getAdminConfig()?.sectorEmails||{};
-  const merged=Object.assign({},centralMap,localMap);
+  // Os e-mails dos setores vêm dos usuários cadastrados/aprovados.
+  // Se houver mais de uma pessoa no setor, todos os e-mails corporativos
+  // válidos daquele setor entram como destinatários.
+  const emails=getOperationalUsers()
+    .filter(u=>u && u.approvalStatus!=='pending' && u.approvalStatus!=='rejected')
+    .filter(u=>normalizeAnswer(String(u.sector||''))===wanted)
+    .map(u=>String(u.email||'').trim().toLowerCase())
+    .filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 
-  if(merged[sector])return String(merged[sector]||'').trim();
-
-  const hit=Object.entries(merged).find(([name,email])=>
-    normalizeAnswer(String(name||''))===wanted && String(email||'').trim()
-  );
-  return hit?String(hit[1]||'').trim():'';
+  return [...new Set(emails)].join(',');
 }
-function renderSectorEmailMap(){
-  const box=document.getElementById('sectorEmailMap');
-  if(!box)return;
-  const saved=getSectorEmailMap();
-  const sectors=getConfiguredSectors();
-  box.innerHTML=sectors.length?sectors.map((sector,i)=>`
-    <label class="sector-email-row">
-      <b>${escapeHtml(sector)}</b>
-      <input type="email" class="sector-email-input" data-sector="${escapeHtml(sector)}" value="${escapeHtml(saved[sector]||'')}" placeholder="email do setor">
-    </label>`).join(''):'<div class="small">Cadastre os setores primeiro em “Unidades, setores e planilhas”.</div>';
-}
-function saveSectorEmails(){
-  if(!isAdmin())return;
-  const map={};
-  document.querySelectorAll('.sector-email-input').forEach(input=>{
-    const sector=input.dataset.sector||'';
-    const email=(input.value||'').trim();
-    if(email)map[sector]=email;
-  });
-  saveSectorEmailMap(map);
-  const c=getAdminConfig();
-  c.sgqNotificationEmail=(document.getElementById('sgqNotificationEmail')?.value||'').trim();
-  c.directorSacEmail=(document.getElementById('directorSacEmail')?.value||'').trim();
-  c.emailNotificationsEnabled=document.getElementById('emailNotificationsEnabled')?.value||'Sim';
-  c.sectorEmails=map;
-  localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(c));
-  portalBackendSave('config','main',c);
-  const st=document.getElementById('emailNotificationStatus');
-  if(st){st.classList.remove('hidden');st.className='statusline okline';st.textContent='Setores e e-mails salvos.'}
-}
+function renderSectorEmailMap(){}
+function saveSectorEmails(){}
 
 function notificationChannel(n){
   const c=getAdminConfig();
@@ -6485,9 +6456,18 @@ function fillSectorSelect(selectId,{includeSgq=false,selectedValue=''}={}){
   if(match)sel.value=match;
 }
 
+function refreshRegisterSectorByUnit(){
+  const unit=(document.getElementById('registerUnit')?.value||'').trim();
+  const sector=document.getElementById('registerSector');
+  if(!sector)return;
+  fillSectorSelect('registerSector');
+  sector.disabled=!unit;
+  if(!unit)sector.value='';
+}
+
 function refreshSectorSelectors(){
   fillSectorSelect('loginSector',{includeSgq:true});
-  fillSectorSelect('registerSector');
+  refreshRegisterSectorByUnit();
   fillSectorSelect('newUserSector');
 
   const session=getSession();
@@ -10420,6 +10400,7 @@ function getTriageRecords(){
     if(decision==='directed')triagemStatus='directed';
     if(decision==='record')triagemStatus='record';
     if(decision==='cancelled')triagemStatus='cancelled';
+    if(decision==='obsolete')triagemStatus='obsolete';
 
     return {
       ...ro,
@@ -10472,6 +10453,7 @@ function triageDecisionLabel(status){
   if(status==='directed')return 'Direcionar para tratativa';
   if(status==='record')return 'Somente para registro';
   if(status==='cancelled')return 'Cancelar R.O.';
+  if(status==='obsolete')return 'Obsoleto';
   return 'Não analisada';
 }
 
@@ -10479,6 +10461,7 @@ function triageStatusLabel(status){
   if(status==='directed')return 'Direcionada';
   if(status==='record')return 'Somente para registro';
   if(status==='cancelled')return 'Cancelada';
+  if(status==='obsolete')return 'Obsoleta';
   return 'Aguardando triagem';
 }
 
@@ -10695,8 +10678,13 @@ function updateTriageDecisionUi(){
   const userField=document.getElementById('triageUserField');
   const title=document.getElementById('triagePdcaRuleTitle');
   const text=document.getElementById('triagePdcaRuleText');
+  const noteLabel=document.getElementById('triageNoteLabel');
+  const note=document.getElementById('triageNote');
 
   const directed=decision==='directed';
+  const motiveRequired=['record','cancelled','obsolete'].includes(decision);
+  if(noteLabel)noteLabel.textContent=motiveRequired?'Motivo *':'Observação da triagem';
+  if(note)note.placeholder=motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.';
   sectorField.style.display=directed?'block':'none';
   if(userField)userField.style.display=directed?'block':'none';
   deadlineField.style.display=directed?'block':'none';
@@ -10707,9 +10695,12 @@ function updateTriageDecisionUi(){
   }else if(decision==='record'){
     title.textContent='PDCA dispensado';
     text.textContent='R.O. marcada como “Somente para registro”. Não será exigido PDCA.';
+  }else if(decision==='cancelled'){
+    title.textContent='PDCA dispensado';
+    text.textContent='R.O. cancelada pelo SGQ. O motivo é obrigatório e não será exigido PDCA.';
   }else{
     title.textContent='PDCA dispensado';
-    text.textContent='R.O. cancelada pelo SGQ. Não será exigido PDCA.';
+    text.textContent='R.O. marcada como obsoleta pelo SGQ. O motivo é obrigatório e não será exigido PDCA.';
   }
 }
 
@@ -10745,6 +10736,11 @@ function saveTriageRecord(){
     alert('Selecione o setor responsável pela tratativa.');
     return;
   }
+  if(['record','cancelled','obsolete'].includes(decision) && !note){
+    alert('Informe o motivo desta decisão.');
+    document.getElementById('triageNote')?.focus();
+    return;
+  }
 
   const map=getSavedTriageMap();
   map.set(key,{
@@ -10772,7 +10768,7 @@ function saveTriageRecord(){
     unidade:roUnitValue,
     setor:decision==='directed'?responsibleSector:'',
     pessoa:decision==='directed'?(responsibleUserName||'Todo o setor'):'',
-    status:decision==='directed'?'Pendente':decision==='record'?'Registro':'Cancelada'
+    status:decision==='directed'?'Pendente':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
   });
 
   closeTriageModal();
@@ -11478,6 +11474,7 @@ function sgqIndicatorStatusCode(ro,triageMap){
   const status=normalizeAnswer(ro?.status||ro?.raw?.__statusOperacional||'');
 
   if(decision==='cancelled' || status.includes('cancel'))return 'cancelled';
+  if(decision==='obsolete' || status.includes('obsolet'))return 'obsolete';
   if(decision==='record' || status.includes('registro'))return 'record';
   if(status.includes('em analise') || status.includes('em análise') || status==='analise' || status==='análise')return 'analysis';
   if(status.includes('conclu') || status.includes('retorno entregue') || status.includes('apresentado ao reclamante'))return 'done';
@@ -17179,6 +17176,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <option value="directed">Direcionar para tratativa</option>
             <option value="record">Somente para registro</option>
             <option value="cancelled">Cancelar R.O.</option>
+            <option value="obsolete">Obsoleto</option>
           </select>
         </div>
 
@@ -17227,7 +17225,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
 
         <div class="field full">
-          <div class="label">Observação da triagem</div>
+          <div class="label" id="triageNoteLabel">Observação da triagem</div>
           <textarea id="triageNote" rows="4" placeholder="Informações do SGQ sobre a classificação, direcionamento ou decisão tomada."></textarea>
         </div>
       </div>
