@@ -5549,7 +5549,7 @@ function saveSectorEmails(){}
 function notificationChannel(n){
   const c=getAdminConfig();
   let value='Portal';
-  if(n?.type==='ro'&&n?.audience==='sector')value=c.channelRoSector||'Ambos';
+  if(n?.type==='ro'&&(n?.audience==='sector'||n?.audience==='user'))value=c.channelRoSector||'Ambos';
   else if(n?.type==='contest'&&n?.audience==='sector')value=c.channelContestSector||'Ambos';
   else if(n?.type==='contest'&&n?.audience==='admin')value=c.channelContestAdmin||'Ambos';
   else if(n?.type==='pdca'&&n?.audience==='admin')value=c.channelPdcaAdmin||'Ambos';
@@ -5611,7 +5611,7 @@ function dispatchNotificationEmail(n){
     cliente:n.cliente||'',
     registrante:n.registrante||'',
     eventoId:notificationEventKey(n),
-    anexarPdfRo:(n.audience==='sector'&&n.type==='ro'&&n.ro)?'1':'0'
+    anexarPdfRo:((n.audience==='sector'||n.audience==='user')&&n.type==='ro'&&n.ro)?'1':'0'
   });
 
   // JSONP permite confirmar se o Apps Script realmente enviou ou recusou o e-mail.
