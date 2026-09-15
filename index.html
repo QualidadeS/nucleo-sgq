@@ -6414,11 +6414,26 @@ function ensurePreviewSession(){
   localStorage.setItem(SESSION_KEY,JSON.stringify(previewAdmin));
 }
 
+let nucleoSessionMemory=null;
 function getSession(){
-  try{return JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){return null}
+  try{
+    const raw=localStorage.getItem(SESSION_KEY);
+    if(raw){const parsed=JSON.parse(raw);if(parsed){nucleoSessionMemory=parsed;return parsed;}}
+  }catch(e){}
+  try{
+    const raw=sessionStorage.getItem(SESSION_KEY);
+    if(raw){const parsed=JSON.parse(raw);if(parsed){nucleoSessionMemory=parsed;return parsed;}}
+  }catch(e){}
+  return nucleoSessionMemory;
 }
 function setSession(data){
-  localStorage.setItem(SESSION_KEY,JSON.stringify(data));
+  // A sessão de login nunca pode falhar só porque o localStorage está cheio/bloqueado.
+  nucleoSessionMemory=data||null;
+  const raw=JSON.stringify(data||null);
+  let saved=false;
+  try{localStorage.setItem(SESSION_KEY,raw);saved=true}catch(e){console.warn('localStorage da sessão indisponível:',e)}
+  try{sessionStorage.setItem(SESSION_KEY,raw);saved=true}catch(e){console.warn('sessionStorage da sessão indisponível:',e)}
+  return saved;
 }
 
 const DEFAULT_PORTAL_SECTORS=['Produção','Logística','Qualidade','Manutenção','Comercial','Faturamento'];
@@ -6630,9 +6645,7 @@ async function loginUser(){
       approvalStatus:u.approvalStatus||'approved',
       authToken:remote.authToken||remote.token||''
     };
-    setSession(session);
-
-    // ABRE O APP imediatamente após sucesso=true.
+    // ABRE O APP imediatamente após sucesso=true. Persistência local não pode bloquear acesso válido.
     document.body.classList.add('nucleo-authenticated');
     const login=document.getElementById('loginOverlay');
     if(login){
@@ -6652,6 +6665,7 @@ async function loginUser(){
 
     if(msg)msg.textContent='';
     try{document.activeElement?.blur()}catch(e){}
+    try{setSession(session)}catch(e){nucleoSessionMemory=session;console.warn('Sessão mantida em memória:',e)}
 
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
@@ -7078,6 +7092,8 @@ function logoutUser(){
   // dados do portal permanecem intactos para a próxima pessoa entrar.
   loginAttemptNonce++;
   try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+  try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}
+  nucleoSessionMemory=null;
   try{
     const access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
     access.currentUser='';
