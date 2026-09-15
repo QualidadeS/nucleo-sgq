@@ -4758,59 +4758,44 @@ function portalBase64EncodeJson(obj){
   const json=JSON.stringify(obj||{});
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function portalJsonp(params,timeoutMs=12000){
+function portalJsonp(params,timeoutMs=15000){
   return new Promise((resolve,reject)=>{
-    let base=portalApiBase();
+    const base=portalApiBase();
     if(!base){reject(new Error('URL do Apps Script não configurada.'));return;}
-    base=String(base).trim().replace(/\/+$/,'');
-    if(!/\/exec$/i.test(base)){reject(new Error('A URL do Apps Script precisa terminar em /exec.'));return;}
-    const cb='portalSgqCb_'+Date.now()+'_'+Math.floor(Math.random()*99999);
+
+    const cb='nucleoLoginCallback_'+Date.now()+'_'+Math.floor(Math.random()*100000);
     const script=document.createElement('script');
-    let finished=false;
-    let timer=null;
+    let done=false;
+
     function cleanup(){
-      if(timer)clearTimeout(timer);
+      try{clearTimeout(timer)}catch(e){}
       try{delete window[cb]}catch(e){window[cb]=undefined}
       try{script.remove()}catch(e){}
     }
-    function fail(message){
-      if(finished)return;
-      finished=true; cleanup(); reject(new Error(message));
+    function finish(err,data){
+      if(done)return;
+      done=true;
+      cleanup();
+      if(err)reject(err); else resolve(data);
     }
-    window[cb]=(data)=>{if(finished)return; finished=true; cleanup(); resolve(data)};
+
+    window[cb]=function(data){finish(null,data)};
+
+    const parts=[];
+    Object.entries(params||{}).forEach(([k,v])=>{
+      if(v!==undefined && v!==null)parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+    });
+    parts.push('callback='+encodeURIComponent(cb));
+    parts.push('_='+Date.now());
+
     script.async=true;
-    script.referrerPolicy='no-referrer';
-    script.onerror=()=>fail('Não foi possível conectar ao Apps Script publicado.');
-    const p=new URLSearchParams();
-    Object.entries(params||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null)p.set(k,String(v))});
-    p.set('callback',cb); p.set('_',String(Date.now()));
-    script.src=base+'?'+p.toString();
-    timer=setTimeout(()=>fail('O Apps Script não respondeu ao login em 12 segundos.'),Math.min(Number(timeoutMs)||12000,12000));
+    script.src=base+'?'+parts.join('&');
+    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar o retorno do login.'));
+    const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas o callback do login não retornou em 15 segundos.')),timeoutMs);
+
     document.head.appendChild(script);
   });
 }
-function portalAuthDirect(name,sector,password){
-  const base=portalApiBase();
-  if(!base)throw new Error('URL do Apps Script não configurada.');
-
-  const returnUrl=location.origin+location.pathname;
-  sessionStorage.setItem('nucleo-auth-direct-pending',JSON.stringify({
-    name:String(name||''),
-    sector:String(sector||''),
-    startedAt:Date.now()
-  }));
-
-  const url=new URL(base);
-  url.searchParams.set('acao','portal_login');
-  url.searchParams.set('nome',String(name||''));
-  url.searchParams.set('setor',String(sector||''));
-  url.searchParams.set('senha',String(password||''));
-  url.searchParams.set('modo','nucleo');
-  url.searchParams.set('retorno',returnUrl);
-  location.href=url.toString();
-}
-
-
 function portalPostForm(params){
   const base=portalApiBase();
   if(!base)return false;
@@ -6611,9 +6596,36 @@ async function loginUser(){
     // No celular/novo navegador o localStorage pode estar vazio.
     // Nesses casos, consulta a base central do Apps Script.
     if(portalBackendEnabled()){
-      if(msg)msg.textContent='Conectando ao Apps Script...';
-      portalAuthDirect(name,sector,password);
-      return;
+      try{
+        if(msg)msg.textContent='Validando acesso...';
+        const remote=await portalJsonp({
+          acao:'portal_login',
+          nome:name,
+          setor:sector,
+          senha:password
+        },15000);
+
+        if(!remote || remote.sucesso===false){
+          if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
+          return;
+        }
+
+        const u=remote.user||{};
+        const session={
+          name:u.name||name,
+          email:u.email||'',
+          unit:u.unit||'Matriz',
+          sector:u.sector||sector,
+          role:u.role||'operational',
+          managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
+          approvalStatus:u.approvalStatus||'approved'
+        };
+        localStorage.setItem(SESSION_KEY,JSON.stringify(session));
+        currentUser=session;
+      }catch(remoteError){
+        if(msg)msg.textContent='Falha ao consultar a base central: '+(remoteError?.message||remoteError);
+        return;
+      }
     }
 
     if(!known){
