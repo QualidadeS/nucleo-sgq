@@ -6902,8 +6902,7 @@ function saveOwnProfile(){
   const oldEmail=String(s.email||'').trim();
   const norm=v=>String(v||'').trim().toLowerCase();
 
-  // Primeiro procura pelo e-mail da sessão. Para sessões antigas @local,
-  // procura também pelo nome/setor para reencontrar o cadastro real.
+  // Localiza O MESMO cadastro. O perfil nunca cria usuário novo e nunca altera acesso.
   let idx=users.findIndex(u=>norm(u.email)===norm(oldEmail));
   if(idx<0){
     idx=users.findIndex(u=>norm(u.name)===norm(s.name) && norm(u.sector)===norm(s.sector));
@@ -6912,31 +6911,27 @@ function saveOwnProfile(){
     idx=users.findIndex(u=>norm(u.name)===norm(s.name));
   }
 
-  let updatedUser;
-  if(idx>=0){
-    const previous={...users[idx]};
-    updatedUser={
-      ...previous,
-      name,
-      email,
-      unit,
-      sector,
-      role:s.role==='admin'?'admin':(previous.role||s.role||'operational')
-    };
-    users[idx]=updatedUser;
+  if(idx<0){
+    alert('Não encontrei seu cadastro original. Nenhuma alteração foi feita para proteger seu tipo de acesso.');
+    return;
+  }
 
-    // Se o e-mail (chave da base) mudou, remove a chave antiga depois de salvar a nova.
-    if(previous.email && norm(previous.email)!==norm(email)){
-      portalBackendDelete('users',previous.email);
-    }
-  }else{
-    // Não bloqueia a edição quando a sessão veio de uma versão antiga com e-mail @local.
-    updatedUser={
-      name,email,unit,sector,
-      role:s.role||'operational',
-      managedSectors:Array.isArray(s.managedSectors)?s.managedSectors:[]
-    };
-    users.push(updatedUser);
+  const previous={...users[idx]};
+
+  // REGRA DE SEGURANÇA: role, managedSectors e demais permissões vêm SOMENTE
+  // do cadastro existente. "Meu perfil" não pode promovê-las, rebaixá-las
+  // nem recalculá-las a partir da sessão ou dos campos da tela.
+  const updatedUser={
+    ...previous,
+    name,
+    email,
+    unit,
+    sector
+  };
+  users[idx]=updatedUser;
+
+  if(previous.email && norm(previous.email)!==norm(email)){
+    portalBackendDelete('users',previous.email);
   }
 
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
@@ -6948,9 +6943,13 @@ function saveOwnProfile(){
 
   const updatedSession={
     ...s,
-    name,email,unit,sector,
-    role:updatedUser.role||s.role,
-    managedSectors:Array.isArray(updatedUser.managedSectors)?updatedUser.managedSectors:(Array.isArray(s.managedSectors)?s.managedSectors:[])
+    name,
+    email,
+    unit,
+    sector,
+    // Mantém exatamente as permissões que já estavam no cadastro.
+    role:previous.role,
+    managedSectors:Array.isArray(previous.managedSectors)?previous.managedSectors:[]
   };
   setSession(updatedSession);
 
@@ -6961,7 +6960,6 @@ function saveOwnProfile(){
   alert('Seus dados foram atualizados.');
   showProfile();
 }
-
 function changeOwnPassword(){
   const s=getSession();
   if(!s){alert('Sua sessão não está ativa. Entre novamente.');return}
