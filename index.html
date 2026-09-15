@@ -7137,6 +7137,19 @@ function logoutUser(){
 
   detailReturnView='ros';
 
+  // Troca de conta precisa começar com uma execução nova do aplicativo.
+  // Há muitos estados globais/cache em memória; apenas esconder o app não os zera.
+  // Limpamos a sessão e recarregamos a própria página para impedir que a conta
+  // anterior interfira no próximo login.
+  try{
+    sessionStorage.clear();
+  }catch(e){}
+  try{
+    const cleanUrl=window.location.href.split('#')[0];
+    window.location.replace(cleanUrl);
+    return;
+  }catch(e){}
+
   const app=document.getElementById('appShell');
   const login=document.getElementById('loginOverlay');
 
