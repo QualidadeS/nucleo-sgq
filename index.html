@@ -6607,6 +6607,7 @@ async function loginUser(){
       const remote=await portalJsonp({
         acao:'portal_login_jsonp',
         nome:name,
+        unidade:unit,
         setor:sector,
         senha:password
       },15000);
@@ -6652,6 +6653,10 @@ async function loginUser(){
         if(msg)msg.textContent='Este cadastro não foi aprovado pelo SGQ.';
         return;
       }
+      if(known.active===false || known.approvalStatus==='disabled' || known.status==='disabled'){
+        if(msg)msg.textContent='Este acesso está desativado. Procure o SGQ.';
+        return;
+      }
       if(String(known.password||'')!==password){
         if(msg)msg.textContent='Senha incorreta.';
         return;
@@ -6669,6 +6674,7 @@ async function loginUser(){
 
     // Substitui de fato a sessão anterior ao trocar de usuário.
     setSession(session);
+    try{currentUser=session.email||session.name||''}catch(e){window.currentUser=session.email||session.name||''}
     const access=getAccessState();
     access.currentUser=session.email||session.name||'';
     if(session.role==='admin'){
@@ -7133,14 +7139,24 @@ function logoutUser(){
     login.style.display='flex';
   }
 
-  // Volta a interface de autenticação para "Entrar", mas mantém os cadastros.
+  // Volta a autenticação completamente limpa para permitir trocar de conta
+  // sem reaproveitar nome, unidade, setor, senha ou estado do botão anterior.
   try{showAuthMode('login')}catch(e){}
 
+  const name=document.getElementById('loginName');
+  const unit=document.getElementById('loginUnit');
+  const sector=document.getElementById('loginSector');
   const password=document.getElementById('loginPassword');
+  const enterBtn=document.getElementById('loginEnterBtn');
+  if(name)name.value='';
+  if(unit)unit.value='';
+  if(sector){sector.value='';sector.disabled=true}
   if(password)password.value='';
+  if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
+  try{refreshLoginSectorByUnit()}catch(e){}
 
   const msg=document.getElementById('loginMessage');
-  if(msg)msg.innerHTML='Sessão encerrada. Entre com outro usuário para continuar.';
+  if(msg){msg.classList.remove('hidden');msg.innerHTML='Sessão encerrada. Informe os dados do outro usuário para entrar.';}
   const panel=document.getElementById('notificationPanel');if(panel)panel.classList.add('hidden');
   refreshNotificationBell();
 }
@@ -15214,19 +15230,82 @@ function renderAdminUsers(){
     return;
   }
   const users=getOperationalUsers();
+  const current=String(getSession()?.email||'').trim().toLowerCase();
   box.innerHTML=st.admins.map((email,i)=>{
-    const u=users.find(x=>String(x.email||'').trim().toLowerCase()===String(email||'').trim().toLowerCase());
+    const key=String(email||'').trim().toLowerCase();
+    const u=users.find(x=>String(x.email||'').trim().toLowerCase()===key);
     const displayName=u?.name||email;
     const initial=(displayName||'?').trim().charAt(0).toUpperCase();
-    const cantRemove=st.admins.length===1 || String(email).toLowerCase()==='sgq@empresa.com';
+    const active=!(u?.active===false || u?.approvalStatus==='disabled');
+    const isSelf=key===current;
+    const protectedBase=key==='sgq@empresa.com';
+    const cantDelete=st.admins.length===1 || isSelf || protectedBase;
     return `<div class="admin-user-row">
       <div class="admin-user-info">
-        <div class="admin-avatar">${initial}</div>
-        <div><div class="admin-email">${escapeHtml(displayName)}</div><div class="small">${escapeHtml(email)}</div><span class="role-tag">Administrador</span></div>
+        <div class="admin-avatar">${escapeHtml(initial)}</div>
+        <div><div class="admin-email">${escapeHtml(displayName)}</div><div class="small">${escapeHtml(email)}</div><span class="role-tag">Administrador</span> <span class="status-badge ${active?'approved':'rejected'}">${active?'Ativo':'Desativado'}</span></div>
       </div>
-      <button class="remove-admin" ${cantRemove?'disabled title="É necessário manter pelo menos um administrador"':''} onclick="removeAdmin(${i})">Remover</button>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn secondary" type="button" onclick="editAdminAccount(${i})">Editar</button>
+        <button class="btn secondary" type="button" ${isSelf?'disabled title="Você não pode desativar a conta que está usando"':''} onclick="toggleAdminAccount(${i})">${active?'Desativar':'Ativar'}</button>
+        <button class="remove-admin" type="button" ${cantDelete?'disabled title="Não é possível excluir esta conta"':''} onclick="deleteAdminAccount(${i})">Excluir</button>
+      </div>
     </div>`;
   }).join('');
+}
+function editAdminAccount(index){
+  if(!isAdmin()){alert('Acesso restrito.');return}
+  const st=getAccessState();
+  const email=String(st.admins[index]||'').trim().toLowerCase();
+  const users=getOperationalUsers();
+  const ui=users.findIndex(u=>String(u.email||'').trim().toLowerCase()===email);
+  if(ui<0){alert('Cadastro do administrador não encontrado.');return}
+  const u=users[ui];
+  const name=prompt('Nome do administrador:',u.name||'');
+  if(name===null)return;
+  const cleanName=String(name).trim();
+  if(!cleanName){alert('O nome não pode ficar vazio.');return}
+  users[ui]={...u,name:cleanName,role:'admin'};
+  saveOperationalUsers(users);
+  portalBackendSave('users',users[ui].email||users[ui].name,users[ui]);
+  renderAdminUsers();
+}
+function toggleAdminAccount(index){
+  if(!isAdmin()){alert('Acesso restrito.');return}
+  const st=getAccessState();
+  const email=String(st.admins[index]||'').trim().toLowerCase();
+  const current=String(getSession()?.email||'').trim().toLowerCase();
+  if(email===current){alert('Você não pode desativar a conta que está usando.');return}
+  const users=getOperationalUsers();
+  const ui=users.findIndex(u=>String(u.email||'').trim().toLowerCase()===email);
+  if(ui<0){alert('Cadastro do administrador não encontrado.');return}
+  const active=!(users[ui].active===false || users[ui].approvalStatus==='disabled');
+  const action=active?'desativar':'ativar';
+  if(!confirm(`Deseja ${action} o acesso de ${users[ui].name||email}?`))return;
+  users[ui]={...users[ui],role:'admin',active:!active,approvalStatus:active?'disabled':'approved',status:active?'disabled':'active',updatedAt:new Date().toISOString()};
+  saveOperationalUsers(users);
+  portalBackendSave('users',users[ui].email||users[ui].name,users[ui]);
+  renderAdminUsers();
+}
+function deleteAdminAccount(index){
+  if(!isAdmin()){alert('Acesso restrito.');return}
+  const st=getAccessState();
+  if(st.admins.length<=1){alert('É necessário manter pelo menos um administrador cadastrado.');return}
+  const email=String(st.admins[index]||'').trim().toLowerCase();
+  const current=String(getSession()?.email||'').trim().toLowerCase();
+  if(email===current){alert('Você não pode excluir a conta que está usando.');return}
+  if(email==='sgq@empresa.com'){alert('A conta administrativa principal não pode ser excluída.');return}
+  const users=getOperationalUsers();
+  const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
+  if(!confirm(`Excluir permanentemente o acesso de ${u?.name||email}?\n\nO histórico do sistema será preservado, mas esta conta não poderá mais entrar.`))return;
+  const filtered=users.filter(x=>String(x.email||'').trim().toLowerCase()!==email);
+  localStorage.setItem(USERS_KEY,JSON.stringify(filtered));
+  markDeletedUserKey(email);
+  st.admins=st.admins.filter(x=>String(x||'').trim().toLowerCase()!==email);
+  saveAccessState(st);
+  portalBackendDelete('users',email);
+  renderAdminUsers();
+  renderOperationalUsers();
 }
 async function addAdmin(){
   if(!isAdmin())return;
