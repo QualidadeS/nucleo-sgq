@@ -6620,13 +6620,27 @@ async function loginUser(){
 
     // A base central é a fonte principal do login.
     if(portalBackendEnabled()){
-      const remote=await portalJsonp({
-        acao:'portal_login_jsonp',
-        nome:name,
-        unidade:unit,
-        setor:sector,
-        senha:password
-      },15000);
+      let remote;
+      try{
+        // Compatibilidade: deployments anteriores do Núcleo autenticam por
+        // nome + setor + senha. A unidade é validada no retorno, quando existir.
+        remote=await portalJsonp({
+          acao:'portal_login_jsonp',
+          nome:name,
+          setor:sector,
+          senha:password
+        },25000);
+      }catch(firstError){
+        // Alguns deployments mais novos aceitam/esperam unidade. Só tentamos
+        // essa forma se a chamada compatível não conseguiu sequer responder.
+        remote=await portalJsonp({
+          acao:'portal_login_jsonp',
+          nome:name,
+          unidade:unit,
+          setor:sector,
+          senha:password
+        },25000);
+      }
 
       if(thisLoginAttempt!==loginAttemptNonce)return;
 
@@ -7154,9 +7168,8 @@ function openRoRegistrationForm(){
 }
 
 function logoutUser(){
-  // Encerra a identidade atual de forma definitiva.
-  // O reload é intencional: uma troca de usuário precisa iniciar uma nova
-  // execução do aplicativo, sem variáveis, timers ou estado em memória da conta anterior.
+  // Logout deve limpar SOMENTE a identidade/sessão. Configurações, usuários e
+  // dados do portal permanecem intactos para a próxima pessoa entrar.
   loginAttemptNonce++;
   try{localStorage.removeItem(SESSION_KEY)}catch(e){}
   try{
@@ -7166,18 +7179,26 @@ function logoutUser(){
   }catch(e){}
   try{window.currentUser=null}catch(e){}
 
-  // Marca somente a intenção de abrir o login depois do reload.
-  try{sessionStorage.setItem('nucleo-force-login','1')}catch(e){}
+  const login=document.getElementById('loginOverlay');
+  const app=document.getElementById('appShell');
+  if(app)app.classList.add('hidden');
+  if(login){login.classList.remove('hidden');login.style.display='flex'}
 
-  // location.reload() reinicia todo o JS. O parâmetro evita reaproveitamento
-  // agressivo de cache em hospedagens estáticas/PWA.
-  try{
-    const url=new URL(window.location.href);
-    url.searchParams.set('_login',Date.now().toString());
-    window.location.replace(url.toString());
-  }catch(e){
-    window.location.reload();
-  }
+  const name=document.getElementById('loginName');
+  const unit=document.getElementById('loginUnit');
+  const sector=document.getElementById('loginSector');
+  const password=document.getElementById('loginPassword');
+  const msg=document.getElementById('loginMessage');
+  const btn=document.getElementById('loginEnterBtn');
+  if(name)name.value='';
+  if(unit)unit.value='';
+  if(sector){sector.innerHTML='<option value="">Selecione primeiro a unidade...</option>';sector.disabled=true}
+  if(password){password.value='';password.type='password'}
+  if(msg){msg.textContent='';msg.classList.add('hidden')}
+  if(btn){btn.disabled=false;btn.textContent='Entrar'}
+  try{showAuthMode('login')}catch(e){}
+  if(unit){unit.value='';refreshLoginSectorByUnit()}
+  setTimeout(()=>name?.focus(),0);
 }
 
 function closePdfPreview(){
