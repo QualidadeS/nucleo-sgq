@@ -6602,139 +6602,65 @@ async function loginUser(){
   const msg=document.getElementById('loginMessage');
   const enterBtn=document.getElementById('loginEnterBtn');
   if(msg)msg.classList.remove('hidden');
-
   if(!name||!unit||!sector||!password){
     if(msg)msg.textContent='Informe seu nome, selecione a unidade e o setor e digite sua senha.';
     return;
   }
-
-  if(enterBtn){enterBtn.disabled=true}
+  if(enterBtn)enterBtn.disabled=true;
   if(msg)msg.textContent='Validando acesso...';
-
   try{
-    let session=null;
-
-    // A base central é a fonte principal do login.
-    if(portalBackendEnabled()){
-      const remote=await portalJsonp({
-        acao:'portal_login_jsonp',
-        nome:name,
-        setor:sector,
-        senha:password
-      },15000);
-
-      if(!remote || remote.sucesso===false){
-        if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
-        return;
-      }
-
-      const u=remote.user||{};
-      const selectedUnitKey=normalizeAnswer(unit);
-      const returnedUnitKey=normalizeAnswer(u.unit||'');
-      const selectedIsFilial=selectedUnitKey.includes('filial')||selectedUnitKey.includes('linhares');
-      const returnedIsFilial=returnedUnitKey.includes('filial')||returnedUnitKey.includes('linhares');
-      const selectedIsMatriz=selectedUnitKey.includes('matriz')||selectedUnitKey.includes('sao bento');
-      const returnedIsMatriz=returnedUnitKey.includes('matriz')||returnedUnitKey.includes('sao bento');
-      if((selectedIsFilial&&!returnedIsFilial)||(selectedIsMatriz&&!returnedIsMatriz)){
-        if(msg)msg.textContent='A unidade selecionada não corresponde ao seu cadastro.';
-        return;
-      }
-      session={
-        name:u.name||name,
-        email:u.email||'',
-        unit:u.unit||'Matriz',
-        sector:u.sector||sector,
-        role:(u.role==='admin'?'admin':u.role==='manager'?'manager':'operational'),
-        managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
-        approvalStatus:u.approvalStatus||'approved',
-        authToken:remote.authToken||''
-      };
-    }else{
-      // Fallback local apenas se a base central estiver indisponível/desativada.
-      const known=findKnownUserByNameSector(name,sector);
-      if(!known){
-        if(msg)msg.textContent='Usuário não encontrado.';
-        return;
-      }
-      if(known.approvalStatus==='pending'){
-        if(msg)msg.textContent='Seu cadastro ainda está aguardando aprovação do SGQ.';
-        return;
-      }
-      if(known.approvalStatus==='rejected'){
-        if(msg)msg.textContent='Este cadastro não foi aprovado pelo SGQ.';
-        return;
-      }
-      if(String(known.password||'')!==password){
-        if(msg)msg.textContent='Senha incorreta.';
-        return;
-      }
-      session={
-        name:known.name,
-        email:known.email||'',
-        unit:known.unit||'Matriz',
-        sector:known.sector,
-        role:(known.role==='admin'?'admin':known.role==='manager'?'manager':'operational'),
-        managedSectors:Array.isArray(known.managedSectors)?known.managedSectors:[],
-        approvalStatus:known.approvalStatus||'approved'
-      };
+    const remote=await portalJsonp({
+      acao:'portal_login_jsonp', nome:name, unidade:unit, setor:sector, senha:password
+    },20000);
+    if(!remote || remote.sucesso!==true){
+      if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
+      return;
     }
 
-    // Substitui de fato a sessão anterior ao trocar de usuário.
-    // O backend já autorizou. Grave a sessão e abra o aplicativo ANTES de qualquer
-    // manutenção auxiliar de permissões locais. Assim uma configuração local antiga
-    // nunca consegue bloquear um login válido.
+    // A partir daqui o servidor JÁ autorizou. Nada do estado local pode cancelar o acesso.
+    const u=remote.user||remote.usuario||{};
+    const rawRole=String(u.role||u.perfil||u.tipoAcesso||'operational').toLowerCase();
+    const session={
+      name:u.name||u.nome||name,
+      email:u.email||u.e_mail||'',
+      unit:u.unit||u.unidade||unit,
+      sector:u.sector||u.setor||sector,
+      role:(rawRole==='admin'||rawRole.includes('admin'))?'admin':((rawRole==='manager'||rawRole.includes('gest'))?'manager':'operational'),
+      managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
+      approvalStatus:u.approvalStatus||'approved',
+      authToken:remote.authToken||remote.token||''
+    };
     setSession(session);
 
-    if(msg)msg.textContent='Acesso autorizado. Abrindo Núcleo...';
-    const loginOverlay=document.getElementById('loginOverlay');
-    if(loginOverlay){
-      loginOverlay.classList.add('hidden');
-      loginOverlay.style.setProperty('display','none','important');
-      loginOverlay.setAttribute('aria-hidden','true');
-    }
-
-    // Compatibilidade com versões que tinham ou não um wrapper #appShell.
-    const appShell=document.getElementById('appShell');
-    if(appShell){
-      appShell.classList.remove('hidden');
-      appShell.style.removeProperty('display');
-    }
+    // ABRE O APP imediatamente após sucesso=true.
     document.body.classList.add('nucleo-authenticated');
-
-    // Atualiza o estado auxiliar sem assumir que `admins` já exista no navegador.
-    try{
-      const access=getAccessState()||{};
-      access.currentUser=session.email||session.name||'';
-      if(!Array.isArray(access.admins))access.admins=[];
-      if(session.role==='admin'){
-        const adminEmail=String(session.email||'').trim().toLowerCase();
-        const adminsLower=access.admins.map(x=>String(x||'').trim().toLowerCase());
-        if(adminEmail && !adminsLower.includes(adminEmail))access.admins.push(session.email);
-      }
-      localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
-    }catch(accessError){
-      console.warn('Estado auxiliar de acesso não impediu o login:',accessError);
+    const login=document.getElementById('loginOverlay');
+    if(login){
+      login.classList.add('hidden');
+      login.style.setProperty('display','none','important');
+      login.style.setProperty('visibility','hidden','important');
+      login.style.setProperty('pointer-events','none','important');
+      login.setAttribute('aria-hidden','true');
     }
+    const loading=document.getElementById('nucleoLoadingOverlay');
+    if(loading){loading.classList.remove('show');loading.style.display='none';loading.setAttribute('aria-busy','false');}
+    nucleoLoadingDepth=0;
 
+    // O arquivo atual não possui #appShell; mantém compatibilidade se ele existir futuramente.
+    const appShell=document.getElementById('appShell');
+    if(appShell){appShell.classList.remove('hidden');appShell.style.removeProperty('display');}
+
+    if(msg)msg.textContent='';
     try{document.activeElement?.blur()}catch(e){}
 
-    [
-      ()=>refreshAccessUI(),
-      ()=>enforceAdminVisibility(),
-      ()=>refreshRoRegistrationAccess(),
-      ()=>showList(),
-      ()=>refreshNotificationBell(),
-      ()=>refreshContestPendingBadge(),
-      ()=>refreshPdcaSidebarBadge(),
-      ()=>schedulePendingAnnouncementCheck()
-    ].forEach(step=>{
-      try{step()}catch(err){console.error('Núcleo pós-login:',err)}
-    });
-  }catch(loginError){
-    console.error('Falha no login do Núcleo:',loginError);
-    if(msg)msg.textContent='Erro ao entrar: '+(loginError?.message||loginError);
+    // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
+    const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
+    steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
+  }catch(e){
+    console.error('Falha no login do Núcleo:',e);
+    if(msg)msg.textContent='Erro ao entrar: '+(e?.message||e);
   }finally{
-    if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
+    if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar';}
   }
 }
 async function registerUser(){
