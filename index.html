@@ -6528,10 +6528,12 @@ function showAuthMode(mode){
   document.getElementById('loginTabBtn').className='btn '+(isLogin?'primary':'secondary');
   document.getElementById('registerTabBtn').className='btn '+(!isLogin?'primary':'secondary');
   const loginMsg=document.getElementById('loginMessage');
-  if(loginMsg)loginMsg.classList.toggle('hidden',isLogin);
-  document.getElementById('loginMessage').innerHTML=isLogin
-    ? ''
-    : 'O cadastro cria apenas acesso operacional. Permissão de administrador só pode ser concedida por um ADM.';
+  if(loginMsg){
+    loginMsg.classList.remove('hidden');
+    loginMsg.innerHTML=isLogin
+      ? ''
+      : 'O cadastro cria apenas acesso operacional. Permissão de administrador só pode ser concedida por um ADM.';
+  }
 }
 
 function enableMobileLoginKeyboard(){
@@ -6558,6 +6560,7 @@ async function loginUser(){
   const password=(document.getElementById('loginPassword')?.value||'');
   const msg=document.getElementById('loginMessage');
   const enterBtn=document.getElementById('loginEnterBtn');
+  if(msg)msg.classList.remove('hidden');
 
   if(!name||!sector||!password){
     if(msg)msg.textContent='Informe nome, setor e senha para entrar.';
@@ -6591,7 +6594,7 @@ async function loginUser(){
           else users.push(cached);
           localStorage.setItem(USERS_KEY,JSON.stringify(users));
           known=cached;
-        }else if(remote?.erro){
+        }else if(remote?.erro && !known){
           if(msg)msg.textContent=remote.erro;
           return;
         }
