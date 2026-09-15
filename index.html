@@ -1007,7 +1007,7 @@ body.role-manager #moduleManagement{
 }
 
 /* v97.41 — cadastro de R.O. Externa/SAC somente para setores autorizados */
-/* v97.71 — login carrega usuários aprovados da base central */
+/* v97.72 — login como antes + seleção de unidade */
 /* v97.70 — escopo ADM por unidade + suporte a setores unificados */
 /* v97.69 — unidade exibida automaticamente no login */
 /* v97.68 — seletor de usuário no login para troca real de conta */
@@ -2465,15 +2465,16 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 
     <div id="loginMode">
       <p>Informe seus dados para entrar.</p>
-      <div class="label">Usuário</div>
-      <select id="loginUserSelect" onchange="selectLoginUser()">
-        <option value="">Selecione seu usuário...</option>
-      </select>
-      <input id="loginName" autocomplete="username" type="hidden">
+      <div class="label">Nome</div>
+      <input id="loginName" autocomplete="name" autocapitalize="words" placeholder="Seu nome">
       <div class="label">Unidade</div>
-      <input id="loginUnit" type="text" disabled placeholder="Selecione o usuário...">
+      <select id="loginUnit">
+        <option value="">Selecione a unidade...</option>
+        <option value="Unidade São Bento do Sul - Matriz">Matriz — São Bento do Sul (SC)</option>
+        <option value="Unidade Linhares - Filial">Filial — Linhares (ES)</option>
+      </select>
       <div class="label">Setor</div>
-      <select id="loginSector" disabled><option value="">Selecione o usuário...</option></select>
+      <select id="loginSector"><option value="">Selecione o setor...</option></select>
       <div class="label">Senha</div>
       <input id="loginPassword" autocomplete="current-password" type="password" placeholder="Sua senha">
       <div class="login-actions">
@@ -6481,6 +6482,7 @@ function refreshRegisterSectorByUnit(){
 }
 
 function refreshSectorSelectors(){
+  fillSectorSelect('loginSector',{includeSgq:true});
   refreshRegisterSectorByUnit();
   fillSectorSelect('newUserSector');
 
@@ -6531,95 +6533,8 @@ function findKnownUserByNameSector(name,sector){
   const s=(sector||'').trim().toLowerCase();
   return getOperationalUsers().find(u=>(u.name||'').trim().toLowerCase()===n && (u.sector||'').trim().toLowerCase()===s) || null;
 }
-async function populateLoginUsers(){
-  const sel=document.getElementById('loginUserSelect');
-  if(!sel)return;
-  const previous=sel.value||'';
-  sel.innerHTML='<option value="">Carregando usuários...</option>';
-  sel.disabled=true;
-
-  let users=[];
-  try{
-    if(portalBackendEnabled()){
-      const res=await portalJsonp({acao:'portal_login_users'},15000);
-      if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível carregar os usuários.');
-      users=Array.isArray(res.users)?res.users:[];
-    }else{
-      users=getOperationalUsers()
-        .filter(u=>u && u.approvalStatus!=='pending' && u.approvalStatus!=='rejected')
-        .map(u=>({name:u.name||'',email:u.email||'',unit:u.unit||'',sector:u.sector||''}));
-    }
-  }catch(e){
-    console.error('Falha ao carregar usuários do login:',e);
-    sel.innerHTML='<option value="">Não foi possível carregar os usuários</option>';
-    sel.disabled=false;
-    return;
-  }
-
-  // Mantém uma cópia pública e sem senha somente para preencher Unidade/Setor.
-  window.NUCLEO_LOGIN_USERS=users.slice();
-  sel.innerHTML='<option value="">Selecione seu usuário...</option>'+
-    users.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).map(u=>{
-      const key=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
-      const unit=String(u.unit||'').replace('Unidade São Bento do Sul - Matriz','Matriz').replace('Unidade Linhares - Filial','Filial');
-      const extra=[u.sector,unit].filter(Boolean).join(' · ');
-      return `<option value="${escapeHtml(key)}">${escapeHtml(u.name||'Usuário')}${extra?' — '+escapeHtml(extra):''}</option>`;
-    }).join('');
-  sel.disabled=false;
-  if([...sel.options].some(o=>o.value===previous)){sel.value=previous;selectLoginUser();}
-}
-
-function selectLoginUserByIdentity(name,sector,email){
-  void populateLoginUsers();
-  const sel=document.getElementById('loginUserSelect');
-  if(!sel)return false;
-  const wanted=getOperationalUsers().find(u=>
-    (email && String(u.email||'').trim().toLowerCase()===String(email).trim().toLowerCase()) ||
-    (normalizeAnswer(u.name||'')===normalizeAnswer(name||'') && normalizeAnswer(u.sector||'')===normalizeAnswer(sector||''))
-  );
-  if(!wanted)return false;
-  sel.value=String(wanted.email||'').trim() || [wanted.name,wanted.sector,wanted.unit].join('||');
-  selectLoginUser();
-  return true;
-}
-
-function selectLoginUser(){
-  const sel=document.getElementById('loginUserSelect');
-  const nameField=document.getElementById('loginName');
-  const sectorField=document.getElementById('loginSector');
-  const password=document.getElementById('loginPassword');
-  const key=String(sel?.value||'');
-  const loginUsers=Array.isArray(window.NUCLEO_LOGIN_USERS)?window.NUCLEO_LOGIN_USERS:getOperationalUsers();
-  const user=loginUsers.find(u=>{
-    const userKey=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
-    return userKey===key;
-  });
-  if(!user){
-    if(nameField)nameField.value='';
-    const unitField=document.getElementById('loginUnit');
-    if(unitField)unitField.value='';
-    if(sectorField){sectorField.innerHTML='<option value="">Selecione o usuário...</option>';sectorField.value='';}
-    if(password)password.value='';
-    return;
-  }
-  if(nameField)nameField.value=user.name||'';
-  const unitField=document.getElementById('loginUnit');
-  if(unitField){
-    const rawUnit=String(user.unit||'');
-    unitField.value=rawUnit.includes('Linhares')||normalizeAnswer(rawUnit).includes('filial')
-      ? 'Filial — Linhares (ES)'
-      : rawUnit==='Todas' ? 'Todas' : 'Matriz — São Bento do Sul (SC)';
-  }
-  if(sectorField){
-    sectorField.innerHTML=`<option value="${escapeHtml(user.sector||'')}">${escapeHtml(user.sector||'')}</option>`;
-    sectorField.value=user.sector||'';
-  }
-  if(password){password.value='';password.focus();}
-}
-
 function showAuthMode(mode){
   refreshSectorSelectors();
-  populateLoginUsers();
   const isLogin=mode==='login';
   document.getElementById('loginMode').classList.toggle('hidden',!isLogin);
   document.getElementById('registerMode').classList.toggle('hidden',isLogin);
@@ -6654,14 +6569,15 @@ function enableMobileLoginKeyboard(){
 
 async function loginUser(){
   const name=(document.getElementById('loginName')?.value||'').trim();
+  const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=(document.getElementById('loginSector')?.value||'').trim();
   const password=(document.getElementById('loginPassword')?.value||'');
   const msg=document.getElementById('loginMessage');
   const enterBtn=document.getElementById('loginEnterBtn');
   if(msg)msg.classList.remove('hidden');
 
-  if(!name||!sector||!password){
-    if(msg)msg.textContent='Selecione seu usuário e informe a senha para entrar.';
+  if(!name||!unit||!sector||!password){
+    if(msg)msg.textContent='Informe nome, unidade, setor e senha para entrar.';
     return;
   }
 
@@ -6676,6 +6592,7 @@ async function loginUser(){
       const remote=await portalJsonp({
         acao:'portal_login_jsonp',
         nome:name,
+        unidade:unit,
         setor:sector,
         senha:password
       },15000);
@@ -6699,7 +6616,11 @@ async function loginUser(){
     }else{
       // Fallback local apenas se a base central estiver indisponível/desativada.
       const known=findKnownUserByNameSector(name,sector);
-      if(!known){
+      if(!known || canonicalUnit(known.unit)!==canonicalUnit(unit)){
+        if(known && canonicalUnit(known.unit)!==canonicalUnit(unit)){
+          if(msg)msg.textContent='A unidade informada não corresponde ao cadastro deste usuário.';
+          return;
+        }
         if(msg)msg.textContent='Usuário não encontrado.';
         return;
       }
