@@ -1007,6 +1007,7 @@ body.role-manager #moduleManagement{
 }
 
 /* v97.41 — cadastro de R.O. Externa/SAC somente para setores autorizados */
+/* v97.64 — triagem pela combinação operacional da planilha: Interna Y+AD / Externa AB+AE */
 body.external-ro-denied #navNewExternalRo{
   display:none !important;
 }
@@ -10356,15 +10357,24 @@ function getSavedTriageMap(){
 
       const setor=String(ro.setorResponsavelPlanilha||'').trim();
       const pessoa=String(ro.pessoaResponsavel||'').trim();
-      const status=normalizeAnswer(ro.raw?.__statusOperacional||ro.status||'');
+      // A planilha é a fonte de verdade para saber se a R.O. já foi triada.
+      // Interna: Y = setor e AD = status. Externa: AB = setor e AE = status.
+      // Os dois marcadores chegam normalizados pelo Apps Script em
+      // __setorResponsavel e __statusOperacional.
+      const status=normalizeAnswer(ro.raw?.__statusOperacional||'');
       const setorNorm=normalizeAnswer(setor);
-      const temDirecionamento=!!setor &&
+      const temSetor=!!setor &&
         !['nao direcionado','nao informado','sem setor','-'].includes(setorNorm);
+      const temStatusPlanilha=!!status &&
+        !status.includes('nenhum email encontrado');
 
       let decision='';
-      if(status.includes('cancel'))decision='cancelled';
-      else if(status.includes('registro') || status.includes('somente'))decision='record';
-      else if(temDirecionamento)decision='directed';
+      // Estados finais/especiais também comprovam que a R.O. já passou pela triagem.
+      if(temStatusPlanilha && status.includes('cancel'))decision='cancelled';
+      else if(temStatusPlanilha && (status.includes('registro') || status.includes('somente')))decision='record';
+      // Direcionamento normal só existe quando o combo da base está completo:
+      // setor + status operacional (Y+AD na Interna / AB+AE na Externa).
+      else if(temSetor && temStatusPlanilha)decision='directed';
 
       if(!decision)return;
 
