@@ -6582,7 +6582,10 @@ function enableMobileLoginKeyboard(){
   });
 }
 
+let loginAttemptNonce=0;
+
 async function loginUser(){
+  const thisLoginAttempt=++loginAttemptNonce;
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
   const sector=(document.getElementById('loginSector')?.value||'').trim();
@@ -6611,6 +6614,8 @@ async function loginUser(){
         setor:sector,
         senha:password
       },15000);
+
+      if(thisLoginAttempt!==loginAttemptNonce)return;
 
       if(!remote || remote.sucesso===false){
         if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
@@ -6707,9 +6712,9 @@ async function loginUser(){
     });
   }catch(loginError){
     console.error('Falha no login do Núcleo:',loginError);
-    if(msg)msg.textContent='Erro ao entrar: '+(loginError?.message||loginError);
+    if(thisLoginAttempt===loginAttemptNonce && msg)msg.textContent='Erro ao entrar: '+(loginError?.message||loginError);
   }finally{
-    if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
+    if(thisLoginAttempt===loginAttemptNonce && enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
   }
 }
 async function registerUser(){
@@ -7116,6 +7121,8 @@ function openRoRegistrationForm(){
 }
 
 function logoutUser(){
+  // Cancela logicamente qualquer tentativa de login anterior ainda pendente.
+  loginAttemptNonce++;
   // Encerra somente a sessão. Usuários, R.O.s e configurações permanecem salvos.
   localStorage.removeItem(SESSION_KEY);
   currentUser=null;
