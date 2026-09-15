@@ -1007,6 +1007,9 @@ body.role-manager #moduleManagement{
 }
 
 /* v97.41 — cadastro de R.O. Externa/SAC somente para setores autorizados */
+/* v97.70 — escopo ADM por unidade + suporte a setores unificados */
+/* v97.69 — unidade exibida automaticamente no login */
+/* v97.68 — seletor de usuário no login para troca real de conta */
 /* v97.67 — e-mails de setor derivados dos usuários cadastrados */
 /* v97.64 — triagem pela combinação operacional da planilha: Interna Y+AD / Externa AB+AE */
 body.external-ro-denied #navNewExternalRo{
@@ -2461,10 +2464,15 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 
     <div id="loginMode">
       <p>Informe seus dados para entrar.</p>
-      <div class="label">Nome</div>
-      <input id="loginName" autocomplete="name" autocapitalize="words" placeholder="Seu nome">
+      <div class="label">Usuário</div>
+      <select id="loginUserSelect" onchange="selectLoginUser()">
+        <option value="">Selecione seu usuário...</option>
+      </select>
+      <input id="loginName" autocomplete="username" type="hidden">
+      <div class="label">Unidade</div>
+      <input id="loginUnit" type="text" disabled placeholder="Selecione o usuário...">
       <div class="label">Setor</div>
-      <select id="loginSector"><option value="">Selecione o setor...</option></select>
+      <select id="loginSector" disabled><option value="">Selecione o usuário...</option></select>
       <div class="label">Senha</div>
       <input id="loginPassword" autocomplete="current-password" type="password" placeholder="Sua senha">
       <div class="login-actions">
@@ -4779,7 +4787,13 @@ function portalJsonp(params,timeoutMs=15000){
     window[cb]=function(data){finish(null,data)};
 
     const parts=[];
-    Object.entries(params||{}).forEach(([k,v])=>{
+    const requestParams={...(params||{})};
+    const actionName=String(requestParams.acao||'').toLowerCase();
+    const sessionToken=String(getSession()?.authToken||'').trim();
+    if(sessionToken && !requestParams.token && !['portal_login','portal_login_jsonp','portal_register_user'].includes(actionName)){
+      requestParams.token=sessionToken;
+    }
+    Object.entries(requestParams).forEach(([k,v])=>{
       if(v!==undefined && v!==null)parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
     });
     parts.push('callback='+encodeURIComponent(cb));
@@ -6466,7 +6480,6 @@ function refreshRegisterSectorByUnit(){
 }
 
 function refreshSectorSelectors(){
-  fillSectorSelect('loginSector',{includeSgq:true});
   refreshRegisterSectorByUnit();
   fillSectorSelect('newUserSector');
 
@@ -6517,8 +6530,74 @@ function findKnownUserByNameSector(name,sector){
   const s=(sector||'').trim().toLowerCase();
   return getOperationalUsers().find(u=>(u.name||'').trim().toLowerCase()===n && (u.sector||'').trim().toLowerCase()===s) || null;
 }
+function populateLoginUsers(){
+  const sel=document.getElementById('loginUserSelect');
+  if(!sel)return;
+  const previous=sel.value||'';
+  const users=getOperationalUsers()
+    .filter(u=>u && u.approvalStatus!=='rejected')
+    .slice()
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  sel.innerHTML='<option value="">Selecione seu usuário...</option>'+
+    users.map(u=>{
+      const key=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
+      const unit=String(u.unit||'').replace('Unidade São Bento do Sul - Matriz','Matriz').replace('Unidade Linhares - Filial','Filial');
+      const extra=[u.sector,unit].filter(Boolean).join(' · ');
+      return `<option value="${escapeHtml(key)}">${escapeHtml(u.name||'Usuário')}${extra?' — '+escapeHtml(extra):''}</option>`;
+    }).join('');
+  if([...sel.options].some(o=>o.value===previous))sel.value=previous;
+}
+
+function selectLoginUserByIdentity(name,sector,email){
+  populateLoginUsers();
+  const sel=document.getElementById('loginUserSelect');
+  if(!sel)return false;
+  const wanted=getOperationalUsers().find(u=>
+    (email && String(u.email||'').trim().toLowerCase()===String(email).trim().toLowerCase()) ||
+    (normalizeAnswer(u.name||'')===normalizeAnswer(name||'') && normalizeAnswer(u.sector||'')===normalizeAnswer(sector||''))
+  );
+  if(!wanted)return false;
+  sel.value=String(wanted.email||'').trim() || [wanted.name,wanted.sector,wanted.unit].join('||');
+  selectLoginUser();
+  return true;
+}
+
+function selectLoginUser(){
+  const sel=document.getElementById('loginUserSelect');
+  const nameField=document.getElementById('loginName');
+  const sectorField=document.getElementById('loginSector');
+  const password=document.getElementById('loginPassword');
+  const key=String(sel?.value||'');
+  const user=getOperationalUsers().find(u=>{
+    const userKey=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
+    return userKey===key;
+  });
+  if(!user){
+    if(nameField)nameField.value='';
+    const unitField=document.getElementById('loginUnit');
+    if(unitField)unitField.value='';
+    if(sectorField){sectorField.innerHTML='<option value="">Selecione o usuário...</option>';sectorField.value='';}
+    if(password)password.value='';
+    return;
+  }
+  if(nameField)nameField.value=user.name||'';
+  const unitField=document.getElementById('loginUnit');
+  if(unitField){
+    const rawUnit=String(user.unit||'');
+    unitField.value=rawUnit.includes('Linhares')||normalizeAnswer(rawUnit).includes('filial')
+      ? 'Filial — Linhares (ES)'
+      : rawUnit==='Todas' ? 'Todas' : 'Matriz — São Bento do Sul (SC)';
+  }
+  if(sectorField){
+    sectorField.innerHTML=`<option value="${escapeHtml(user.sector||'')}">${escapeHtml(user.sector||'')}</option>`;
+    sectorField.value=user.sector||'';
+  }
+  if(password){password.value='';password.focus();}
+}
+
 function showAuthMode(mode){
   refreshSectorSelectors();
+  populateLoginUsers();
   const isLogin=mode==='login';
   document.getElementById('loginMode').classList.toggle('hidden',!isLogin);
   document.getElementById('registerMode').classList.toggle('hidden',isLogin);
@@ -6560,7 +6639,7 @@ async function loginUser(){
   if(msg)msg.classList.remove('hidden');
 
   if(!name||!sector||!password){
-    if(msg)msg.textContent='Informe nome, setor e senha para entrar.';
+    if(msg)msg.textContent='Selecione seu usuário e informe a senha para entrar.';
     return;
   }
 
@@ -6592,7 +6671,8 @@ async function loginUser(){
         sector:u.sector||sector,
         role:(u.role==='admin'?'admin':u.role==='manager'?'manager':'operational'),
         managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
-        approvalStatus:u.approvalStatus||'approved'
+        approvalStatus:u.approvalStatus||'approved',
+        authToken:remote.authToken||''
       };
     }else{
       // Fallback local apenas se a base central estiver indisponível/desativada.
@@ -6691,15 +6771,13 @@ async function registerUser(){
   const existingByEmail=getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===email);
   if(existingByEmail){
     showAuthMode('login');
-    document.getElementById('loginName').value=existingByEmail.name||name;
-    document.getElementById('loginSector').value=existingByEmail.sector||sector;
+    selectLoginUserByIdentity(existingByEmail.name||name,existingByEmail.sector||sector,existingByEmail.email||email);
     document.getElementById('loginMessage').innerHTML='Já existe um cadastro com esse e-mail. Use a opção <b>Entrar</b>.';
     return;
   }
   if(findKnownUserByNameSector(name,sector)){
     showAuthMode('login');
-    document.getElementById('loginName').value=name;
-    document.getElementById('loginSector').value=sector;
+    selectLoginUserByIdentity(name,sector,'');
     document.getElementById('loginMessage').innerHTML='Já existe um cadastro com esse nome e setor. Use a opção <b>Entrar</b>.';
     return;
   }
@@ -12951,13 +13029,32 @@ function roUnit(ro){
     ''
   );
 }
+function adminScopeUnit(){
+  const s=getSession()||{};
+  if(s.role!=='admin')return currentUserUnit();
+  const raw=normalizeAnswer(String(s.unit||''));
+  if(raw==='todas' || raw.includes('geral'))return 'todas';
+  return currentUserUnit();
+}
+function isGeneralAdmin(){
+  return isAdmin() && adminScopeUnit()==='todas';
+}
+function getUnifiedSectors(){
+  const cfg=getAdminConfig()||{};
+  const list=Array.isArray(cfg.unifiedSectors)?cfg.unifiedSectors:[];
+  return list.map(x=>String(x||'').trim()).filter(Boolean);
+}
+function isUnifiedSector(sector){
+  const wanted=normalizeAnswer(String(sector||''));
+  return !!wanted && getUnifiedSectors().some(s=>normalizeAnswer(s)===wanted);
+}
 function sameUnitAsCurrentUser(ro){
-  if(isAdmin())return true;
+  if(isGeneralAdmin())return true;
   return currentUserUnit()===roUnit(ro);
 }
 
 function canAdminSeeAllPortalRecords(){
-  return isAdmin();
+  return isGeneralAdmin();
 }
 
 function isManager(){
@@ -13056,16 +13153,20 @@ function notifyManagersOfDirectedRo(roKey,sector,triageRo,responsibleUserName){
 }
 
 function canViewRO(ro){
-  if(isAdmin())return true;
-
-  // Primeiro filtro: a R.O. precisa pertencer à mesma unidade
-  // cadastrada para o usuário (Matriz ou Filial).
-  if(!sameUnitAsCurrentUser(ro))return false;
+  // ADM Geral vê as duas unidades. ADM Matriz/Filial fica restrito à sua unidade.
+  if(isAdmin())return isGeneralAdmin() || sameUnitAsCurrentUser(ro);
 
   const tri=getRoTriageRecord(ro);
-
-  // Segundo filtro: dentro da unidade, a R.O. precisa estar direcionada ao setor.
   if(!tri || tri.decision!=='directed')return false;
+
+  // Regra de unidade:
+  // usuário comum vê a própria unidade; setor explicitamente unificado também
+  // recebe R.O.s direcionadas a ele vindas da outra unidade como uma R.O. normal.
+  const crossUnitUnified=isUnifiedSector(tri.responsibleSector) &&
+    (sameSector(tri.responsibleSector) || (isManager() && managesSector(tri.responsibleSector)));
+  if(!sameUnitAsCurrentUser(ro) && !crossUnitUnified)return false;
+
+  // Dentro do escopo permitido, a R.O. precisa estar direcionada ao setor.
   // Gestor vinculado ao setor sempre acompanha, mesmo quando existe
   // uma pessoa específica responsável.
   if(isManager() && managesSector(tri.responsibleSector))return true;
