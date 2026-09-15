@@ -5292,7 +5292,16 @@ function isNotificationForCurrentUser(n){
   return false;
 }
 function visibleNotifications(){
-  const merged=[...getNotifications(),...getCentralRepresentativeNotifications()];
+  // Cadastros pendentes também são notificações reais para o SGQ.
+  const registrationNotifications=isAdmin()?pendingRegistrationItems().map(u=>({
+    id:'registration:'+String(u.email||u.name||''),
+    type:'registration',audience:'admin',
+    title:'Novo cadastro aguardando aprovação',
+    message:(u.name||'Novo usuário')+' · '+(u.sector||'Setor não informado'),
+    createdAt:u.createdAt||new Date().toISOString(),
+    userKey:u.email||u.name||''
+  })):[];
+  const merged=[...getNotifications(),...getCentralRepresentativeNotifications(),...registrationNotifications];
   const seen=new Set();
   return merged.filter(n=>{
     if(!n?.id||seen.has(String(n.id)))return false;
@@ -5315,6 +5324,9 @@ function notificationMenuId(n){
 
   if(n?.type==='contest'){
     return admin?'navContests':'navRos';
+  }
+  if(n?.type==='registration'){
+    return admin?'navAdmin':'navPendingHub';
   }
 
   if(n?.type==='pdca'){
@@ -6670,6 +6682,14 @@ async function loginUser(){
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
+    // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
+    if(session.role==='admin'){
+      setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
+      try{clearInterval(window.__nucleoPendingUsersTimer)}catch(e){}
+      window.__nucleoPendingUsersTimer=setInterval(()=>{
+        try{if(isAdmin())refreshPendingRegistrations(false)}catch(e){}
+      },30000);
+    }
   }catch(e){
     console.error('Falha no login do Núcleo:',e);
     if(msg)msg.textContent='Erro ao entrar: '+(e?.message||e);
@@ -7280,6 +7300,10 @@ async function refreshPendingRegistrations(showMessage=false){
 
     const pending=merged.filter(u=>u.role!=='admin'&&u.approvalStatus==='pending').length;
     if(status)status.textContent=pending?pending+' cadastro(s) aguardando aprovação.':'Nenhum cadastro pendente.';
+    // Atualiza imediatamente os avisos do SGQ após sincronizar a base central.
+    try{refreshNotificationBell()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+    try{renderPendingHubNotifications()}catch(e){}
     if(showMessage&&!pending)alert('Nenhum cadastro pendente foi encontrado na base central.');
     return true;
   }catch(e){
