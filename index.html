@@ -6776,11 +6776,10 @@ async function registerUser(){
 
       if(!res?.sucesso)throw new Error(res?.erro||'O Apps Script não confirmou a gravação.');
 
-      // Leitura de volta para garantir que o registro existe na base central.
-      const verify=await portalJsonp({acao:'portal_pending_users'},25000);
-      const found=Array.isArray(verify?.users) && verify.users.some(u=>String(u.email||'')===generatedId && u.approvalStatus==='pending');
-      if(!found)throw new Error('O cadastro não apareceu na base central após a gravação.');
-
+      // A confirmação válida é a própria resposta de portal_register_user.
+      // Não consultar portal_pending_users aqui: essa ação é administrativa e o novo
+      // usuário ainda não possui sessão/token, então a verificação podia falhar mesmo
+      // depois de o cadastro ter sido gravado corretamente.
       showRegisterMessage('Cadastro enviado com sucesso. Agora ele está aguardando aprovação do SGQ. Depois da aprovação, use a opção Entrar.','success');
       if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Cadastro enviado';}
       return;
