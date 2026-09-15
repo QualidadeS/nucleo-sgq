@@ -2652,7 +2652,14 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <span class="small">Visualização da operação</span>
   <label class="small"><input id="showArchivedToggle" type="checkbox" onchange="render()"> Mostrar arquivadas</label>
 </div>
-<div class="toolbar"><input id="search" placeholder="Buscar por número, cliente ou assunto"><select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><table><thead><tr><th>R.O.</th><th>Unidade</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table>
+<div class="toolbar">
+<input id="search" placeholder="Buscar por número, cliente ou assunto">
+<div id="assignedExtraFilters" style="display:none;gap:10px;flex-wrap:wrap;flex:1 1 100%">
+  <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
+  <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
+  <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
+</div>
+<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><table><thead><tr><th>R.O.</th><th>Unidade</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table>
 </section>
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -3027,16 +3034,6 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 
   <div class="triage-box">
     <div class="triage-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));">
-      <div class="field">
-        <div class="label">Situação</div>
-        <select id="triageStatusFilter" onchange="renderTriage()">
-          <option value="all">Todas</option>
-          <option value="new">Aguardando triagem</option>
-          <option value="directed">Direcionadas</option>
-          <option value="record">Somente para registro</option>
-          <option value="cancelled">Canceladas</option>
-        </select>
-      </div>
       <div class="field">
         <div class="label">Setor</div>
         <select id="triageSectorFilter" onchange="renderTriage()">
@@ -10492,7 +10489,9 @@ function renderTriage(){
   const q=normalizeAnswer(document.getElementById('triageSearch')?.value||'');
 
   let rows=getTriageRecords().filter(r=>{
-    if(status!=='all'&&r.triagemStatus!==status)return false;
+    // Esta tela é exclusivamente a fila de trabalho da triagem.
+    // Qualquer R.O. já decidida sai daqui e passa para R.O.s atribuídas.
+    if(r.triagemStatus!=='new')return false;
     const sec=r.setorDirecionado||'';
     if(sector!=='all'&&sec!==sector)return false;
     const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
@@ -15385,19 +15384,35 @@ let selected=ros[0],activeStage=0;let answers={};function badgeClass(status){if(
   if(!searchEl||!filterEl||!rowsEl)return;
   const q=searchEl.value.toLowerCase(),f=filterEl.value;
   const admin=isAdmin();
+  const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
+  const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
+  const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
 
   const showArchived=Boolean(document.getElementById('showArchivedToggle')?.checked);
   const list=ros
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
       const tri=getRoTriageRecord(r);
-      if(!tri || tri.decision!=='directed')return false;
-      // ADM vê todas as R.O.s direcionadas; usuário/gestor vê somente as atribuídas a ele.
+      // R.O.s atribuídas concentra tudo o que já saiu da fila de triagem:
+      // direcionadas, somente para registro e canceladas.
+      const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
+      const stillNeedsTriage=!tri || ['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
+      if(stillNeedsTriage)return false;
+      // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
     .filter(r=>showArchived||!isArchivedRo(r.numero||r.id||r.codigo))
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
+      if(roListMode==='assigned'){
+        const tri=getRoTriageRecord(r);
+        const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
+        const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
+        const rowUnit=String(r.unidade||'').trim();
+        if(assignedSector!=='all'&&rowSector!==assignedSector)return false;
+        if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
+        if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
+      }
       const text=(r.numero+" "+r.cliente+" "+r.assunto+" "+(r.origemBase||'')).toLowerCase().includes(q);
       const filt=f==="todas"||(f==="ativas"&&!['Cancelada','Somente para registro'].includes(r.status))||(f==="contestacao"&&r.status==="Em contestação")||(f==="encerradas"&&['Cancelada','Somente para registro'].includes(r.status));
       return text&&filt;
@@ -16171,13 +16186,41 @@ function showList(){
   view('listView');
   setNav('ros');
   renderCurrentOverview();
-  try{refreshNotificationBell()}catch(e){console.warn('Falha ao atualizar notificações:',e)}
+  try{refreshNotificationBell()
+  const extra=document.getElementById('assignedExtraFilters');if(extra)extra.style.display='none';
+}catch(e){console.warn('Falha ao atualizar notificações:',e)}
+}
+
+function populateAssignedRoFilters(){
+  const sectorEl=document.getElementById('assignedSectorFilter');
+  const unitEl=document.getElementById('assignedUnitFilter');
+  if(sectorEl){
+    const current=sectorEl.value||'all';
+    const sectors=[...new Set(getTriageRecords()
+      .filter(r=>r.triagemStatus!=='new')
+      .map(r=>String(r.setorDirecionado||'').trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    sectorEl.innerHTML='<option value="all">Todos os setores</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
+  }
+  if(unitEl){
+    const current=unitEl.value||'all';
+    const units=[...new Set(getTriageRecords()
+      .filter(r=>r.triagemStatus!=='new')
+      .map(r=>String(r.unidade||'').trim()).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,'pt-BR'));
+    unitEl.innerHTML='<option value="all">Todas as unidades</option>'+units.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+    if([...unitEl.options].some(o=>o.value===current))unitEl.value=current;
+  }
 }
 
 function showAssignedRos(){
   roListMode='assigned';
   view('roListView');
   setNav('assigned');
+  const extra=document.getElementById('assignedExtraFilters');
+  if(extra)extra.style.display='flex';
+  populateAssignedRoFilters();
   render();
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
