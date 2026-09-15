@@ -7088,11 +7088,12 @@ function openRoRegistrationForm(){
 }
 
 function logoutUser(){
-  // Logout deve limpar SOMENTE a identidade/sessão. Configurações, usuários e
-  // dados do portal permanecem intactos para a próxima pessoa entrar.
+  // Logout robusto: apaga todas as formas de sessão e recarrega o app.
+  // O reload evita depender de elementos antigos como #appShell.
   loginAttemptNonce++;
   try{localStorage.removeItem(SESSION_KEY)}catch(e){}
   try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}
+  try{sessionStorage.setItem('nucleo-force-login','1')}catch(e){}
   nucleoSessionMemory=null;
   try{
     const access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
@@ -7100,27 +7101,7 @@ function logoutUser(){
     localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
   }catch(e){}
   try{window.currentUser=null}catch(e){}
-
-  const login=document.getElementById('loginOverlay');
-  const app=document.getElementById('appShell');
-  if(app)app.classList.add('hidden');
-  if(login){login.classList.remove('hidden');login.style.display='flex'}
-
-  const name=document.getElementById('loginName');
-  const unit=document.getElementById('loginUnit');
-  const sector=document.getElementById('loginSector');
-  const password=document.getElementById('loginPassword');
-  const msg=document.getElementById('loginMessage');
-  const btn=document.getElementById('loginEnterBtn');
-  if(name)name.value='';
-  if(unit)unit.value='';
-  if(sector){sector.innerHTML='<option value="">Selecione primeiro a unidade...</option>';sector.disabled=true}
-  if(password){password.value='';password.type='password'}
-  if(msg){msg.textContent='';msg.classList.add('hidden')}
-  if(btn){btn.disabled=false;btn.textContent='Entrar'}
-  try{showAuthMode('login')}catch(e){}
-  if(unit){unit.value='';refreshLoginSectorByUnit()}
-  setTimeout(()=>name?.focus(),0);
+  window.location.reload();
 }
 
 function closePdfPreview(){
@@ -15188,36 +15169,88 @@ function openAdmin(){
 }
 function renderAdminUsers(){
   const box=document.getElementById('adminUsersList');
-  if(!box) return;
+  if(!box)return;
   const st=getAccessState();
-  if(!st.admins.length){
+  const users=getOperationalUsers();
+  const current=String(getSession()?.email||'').trim().toLowerCase();
+
+  // A fonte principal é a coleção de usuários: qualquer cadastro role=admin
+  // precisa aparecer aqui, mesmo que a lista local access.admins esteja antiga.
+  const emails=[];
+  const addEmail=v=>{const e=String(v||'').trim().toLowerCase();if(e&&!emails.includes(e))emails.push(e)};
+  users.filter(u=>String(u.role||'').toLowerCase()==='admin').forEach(u=>addEmail(u.email));
+  (Array.isArray(st.admins)?st.admins:[]).forEach(addEmail);
+
+  if(!emails.length){
     box.innerHTML='<div class="small">Nenhum administrador cadastrado.</div>';
     return;
   }
-  const users=getOperationalUsers();
-  const current=String(getSession()?.email||'').trim().toLowerCase();
-  box.innerHTML=st.admins.map((email,i)=>{
-    const key=String(email||'').trim().toLowerCase();
-    const u=users.find(x=>String(x.email||'').trim().toLowerCase()===key);
+
+  box.innerHTML=emails.map(email=>{
+    const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
     const displayName=u?.name||email;
     const initial=(displayName||'?').trim().charAt(0).toUpperCase();
     const active=!(u?.active===false || u?.approvalStatus==='disabled');
-    const isSelf=key===current;
-    const protectedBase=key==='sgq@empresa.com';
-    const cantDelete=st.admins.length===1 || isSelf || protectedBase;
+    const isSelf=email===current;
+    const protectedBase=email==='sgq@empresa.com';
+    const realAdmins=emails.filter(e=>e!=='sgq@empresa.com'||users.some(u=>String(u.email||'').trim().toLowerCase()===e));
+    const cantDelete=realAdmins.length<=1 || isSelf || protectedBase;
+    const safeEmail=encodeURIComponent(email);
     return `<div class="admin-user-row">
       <div class="admin-user-info">
         <div class="admin-avatar">${escapeHtml(initial)}</div>
         <div><div class="admin-email">${escapeHtml(displayName)}</div><div class="small">${escapeHtml(email)}</div><span class="role-tag">Administrador</span> <span class="status-badge ${active?'approved':'rejected'}">${active?'Ativo':'Desativado'}</span></div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
-        <button class="btn secondary" type="button" onclick="editAdminAccount(${i})">Editar</button>
-        <button class="btn secondary" type="button" ${isSelf?'disabled title="Você não pode desativar a conta que está usando"':''} onclick="toggleAdminAccount(${i})">${active?'Desativar':'Ativar'}</button>
-        <button class="remove-admin" type="button" ${cantDelete?'disabled title="Não é possível excluir esta conta"':''} onclick="deleteAdminAccount(${i})">Excluir</button>
+        <button class="btn secondary" type="button" onclick="editAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Editar</button>
+        <button class="btn secondary" type="button" ${isSelf?'disabled title="Você não pode desativar a conta que está usando"':''} onclick="toggleAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">${active?'Desativar':'Ativar'}</button>
+        <button class="remove-admin" type="button" ${cantDelete?'disabled title="Não é possível excluir esta conta"':''} onclick="deleteAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Excluir</button>
       </div>
     </div>`;
   }).join('');
 }
+
+function adminIndexByEmail(email){
+  const st=getAccessState();
+  return st.admins.findIndex(x=>String(x||'').trim().toLowerCase()===String(email||'').trim().toLowerCase());
+}
+function editAdminAccountByEmail(email){
+  const st=getAccessState();
+  let i=adminIndexByEmail(email);
+  if(i<0){st.admins.push(String(email||'').trim().toLowerCase());saveAccessState(st);i=adminIndexByEmail(email)}
+  editAdminAccount(i);
+}
+function toggleAdminAccountByEmail(email){
+  const st=getAccessState();
+  let i=adminIndexByEmail(email);
+  if(i<0){st.admins.push(String(email||'').trim().toLowerCase());saveAccessState(st);i=adminIndexByEmail(email)}
+  toggleAdminAccount(i);
+}
+function deleteAdminAccountByEmail(email){
+  if(!isAdmin()){alert('Acesso restrito.');return}
+  email=String(email||'').trim().toLowerCase();
+  const current=String(getSession()?.email||'').trim().toLowerCase();
+  if(email===current){alert('Você não pode excluir a conta que está usando.');return}
+  if(email==='sgq@empresa.com'){alert('A conta administrativa principal não pode ser excluída.');return}
+
+  const users=getOperationalUsers();
+  const admins=users.filter(u=>String(u.role||'').toLowerCase()==='admin' && String(u.email||'').trim().toLowerCase()!==email);
+  if(admins.length<1){alert('É necessário manter pelo menos um administrador cadastrado.');return}
+  const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
+  if(!u){alert('Cadastro do administrador não encontrado.');return}
+  if(!confirm(`Excluir permanentemente o acesso de ${u.name||email}?\n\nO histórico do sistema será preservado, mas esta conta não poderá mais entrar.`))return;
+
+  saveOperationalUsers(users.filter(x=>String(x.email||'').trim().toLowerCase()!==email));
+  markDeletedUserKey(email);
+  const st=getAccessState();
+  st.admins=(st.admins||[]).filter(x=>String(x||'').trim().toLowerCase()!==email);
+  saveAccessState(st);
+  portalBackendDelete('users',email);
+  renderAdminUsers();
+  renderOperationalUsers();
+  alert('Administrador excluído.');
+}
+
 function editAdminAccount(index){
   if(!isAdmin()){alert('Acesso restrito.');return}
   const st=getAccessState();
