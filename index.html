@@ -1007,6 +1007,7 @@ body.role-manager #moduleManagement{
 }
 
 /* v97.41 — cadastro de R.O. Externa/SAC somente para setores autorizados */
+/* v97.71 — login carrega usuários aprovados da base central */
 /* v97.70 — escopo ADM por unidade + suporte a setores unificados */
 /* v97.69 — unidade exibida automaticamente no login */
 /* v97.68 — seletor de usuário no login para troca real de conta */
@@ -6530,26 +6531,46 @@ function findKnownUserByNameSector(name,sector){
   const s=(sector||'').trim().toLowerCase();
   return getOperationalUsers().find(u=>(u.name||'').trim().toLowerCase()===n && (u.sector||'').trim().toLowerCase()===s) || null;
 }
-function populateLoginUsers(){
+async function populateLoginUsers(){
   const sel=document.getElementById('loginUserSelect');
   if(!sel)return;
   const previous=sel.value||'';
-  const users=getOperationalUsers()
-    .filter(u=>u && u.approvalStatus!=='rejected')
-    .slice()
-    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  sel.innerHTML='<option value="">Carregando usuários...</option>';
+  sel.disabled=true;
+
+  let users=[];
+  try{
+    if(portalBackendEnabled()){
+      const res=await portalJsonp({acao:'portal_login_users'},15000);
+      if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível carregar os usuários.');
+      users=Array.isArray(res.users)?res.users:[];
+    }else{
+      users=getOperationalUsers()
+        .filter(u=>u && u.approvalStatus!=='pending' && u.approvalStatus!=='rejected')
+        .map(u=>({name:u.name||'',email:u.email||'',unit:u.unit||'',sector:u.sector||''}));
+    }
+  }catch(e){
+    console.error('Falha ao carregar usuários do login:',e);
+    sel.innerHTML='<option value="">Não foi possível carregar os usuários</option>';
+    sel.disabled=false;
+    return;
+  }
+
+  // Mantém uma cópia pública e sem senha somente para preencher Unidade/Setor.
+  window.NUCLEO_LOGIN_USERS=users.slice();
   sel.innerHTML='<option value="">Selecione seu usuário...</option>'+
-    users.map(u=>{
+    users.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR')).map(u=>{
       const key=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
       const unit=String(u.unit||'').replace('Unidade São Bento do Sul - Matriz','Matriz').replace('Unidade Linhares - Filial','Filial');
       const extra=[u.sector,unit].filter(Boolean).join(' · ');
       return `<option value="${escapeHtml(key)}">${escapeHtml(u.name||'Usuário')}${extra?' — '+escapeHtml(extra):''}</option>`;
     }).join('');
-  if([...sel.options].some(o=>o.value===previous))sel.value=previous;
+  sel.disabled=false;
+  if([...sel.options].some(o=>o.value===previous)){sel.value=previous;selectLoginUser();}
 }
 
 function selectLoginUserByIdentity(name,sector,email){
-  populateLoginUsers();
+  void populateLoginUsers();
   const sel=document.getElementById('loginUserSelect');
   if(!sel)return false;
   const wanted=getOperationalUsers().find(u=>
@@ -6568,7 +6589,8 @@ function selectLoginUser(){
   const sectorField=document.getElementById('loginSector');
   const password=document.getElementById('loginPassword');
   const key=String(sel?.value||'');
-  const user=getOperationalUsers().find(u=>{
+  const loginUsers=Array.isArray(window.NUCLEO_LOGIN_USERS)?window.NUCLEO_LOGIN_USERS:getOperationalUsers();
+  const user=loginUsers.find(u=>{
     const userKey=String(u.email||'').trim() || [u.name,u.sector,u.unit].join('||');
     return userKey===key;
   });
