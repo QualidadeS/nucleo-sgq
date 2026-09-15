@@ -6599,7 +6599,7 @@ async function loginUser(){
       try{
         if(msg)msg.textContent='Validando acesso...';
         const remote=await portalJsonp({
-          acao:'portal_login',
+          acao:'portal_login_jsonp',
           nome:name,
           setor:sector,
           senha:password
