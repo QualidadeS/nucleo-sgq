@@ -4754,7 +4754,7 @@ function processDeadlineAlerts(showMessage=false){
   });
   localStorage.setItem(DEADLINE_ALERTS_KEY,JSON.stringify(state));if(showMessage)alert(created?created+' alerta(s) atualizado(s).':'Nenhum novo alerta de prazo.');refreshNotificationBell();
 }
-const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbzSS4z1wNKjhOej13Nl-JXx9hu7wq-lScZdk2SGt0uxvM4Wp981GDy1oMkThbul6deoUw/exec';
+const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyUG0UtKvvb8cNyqs7K8VmuADRp0x0m7wDwMsg0XEaj_b32t20HPBWEV6Hkh-BE6AY_Sw/exec';
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
@@ -6839,6 +6839,13 @@ async function registerUser(){
   showList();refreshNotificationBell();refreshContestPendingBadge();refreshPdcaSidebarBadge();schedulePendingAnnouncementCheck();
 }
 function initLogin(){
+  // Se viemos de um logout, garanta novamente que nenhuma sessão antiga seja restaurada.
+  try{
+    if(sessionStorage.getItem('nucleo-force-login')==='1'){
+      localStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('nucleo-force-login');
+    }
+  }catch(e){}
   refreshSectorSelectors();
   setTimeout(enableMobileLoginKeyboard,0);
   if(SKIP_LOGIN_PREVIEW){
@@ -7147,46 +7154,30 @@ function openRoRegistrationForm(){
 }
 
 function logoutUser(){
-  // Invalida qualquer resposta assíncrona de um login anterior.
+  // Encerra a identidade atual de forma definitiva.
+  // O reload é intencional: uma troca de usuário precisa iniciar uma nova
+  // execução do aplicativo, sem variáveis, timers ou estado em memória da conta anterior.
   loginAttemptNonce++;
-
-  // Remove SOMENTE a identidade/sessão. Não apaga usuários nem dados do portal.
   try{localStorage.removeItem(SESSION_KEY)}catch(e){}
-  try{currentUser=null}catch(e){window.currentUser=null}
   try{
     const access=JSON.parse(localStorage.getItem(ACCESS_KEY)||'{}')||{};
     access.currentUser='';
     localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
   }catch(e){}
+  try{window.currentUser=null}catch(e){}
 
-  detailReturnView='ros';
+  // Marca somente a intenção de abrir o login depois do reload.
+  try{sessionStorage.setItem('nucleo-force-login','1')}catch(e){}
 
-  // Fecha a aplicação e abre uma tela de login realmente nova, sem recarregar
-  // a página e sem reaproveitar os campos/estado da conta anterior.
-  const app=document.getElementById('appShell');
-  const login=document.getElementById('loginOverlay');
-  if(app)app.classList.add('hidden');
-  if(login){login.classList.remove('hidden');login.style.display='flex'}
-
-  try{showAuthMode('login')}catch(e){}
-
-  const name=document.getElementById('loginName');
-  const unit=document.getElementById('loginUnit');
-  const sector=document.getElementById('loginSector');
-  const password=document.getElementById('loginPassword');
-  const enterBtn=document.getElementById('loginEnterBtn');
-  if(name)name.value='';
-  if(unit)unit.value='';
-  if(sector){sector.innerHTML='<option value="">Selecione primeiro a unidade...</option>';sector.value='';sector.disabled=true}
-  if(password){password.value='';password.type='password'}
-  if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
-
-  const msg=document.getElementById('loginMessage');
-  if(msg){msg.classList.remove('hidden');msg.textContent='';}
-  const panel=document.getElementById('notificationPanel');
-  if(panel)panel.classList.add('hidden');
-  try{refreshAccessUI()}catch(e){}
-  setTimeout(()=>name?.focus(),0);
+  // location.reload() reinicia todo o JS. O parâmetro evita reaproveitamento
+  // agressivo de cache em hospedagens estáticas/PWA.
+  try{
+    const url=new URL(window.location.href);
+    url.searchParams.set('_login',Date.now().toString());
+    window.location.replace(url.toString());
+  }catch(e){
+    window.location.reload();
+  }
 }
 
 function closePdfPreview(){
