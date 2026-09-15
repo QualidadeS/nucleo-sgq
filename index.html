@@ -5564,7 +5564,7 @@ function notificationEventKey(n){
 }
 function isPriorityEmailNotification(n){
   if(!n||!channelAllowsEmail(n))return false;
-  if(n.audience==='sector'&&n.type==='ro')return getRuleYes('ruleEmailDirectedRo');
+  if((n.audience==='sector'||n.audience==='user')&&n.type==='ro')return getRuleYes('ruleEmailDirectedRo');
   if(n.audience==='sector'&&n.type==='contest')return getRuleYes('ruleEmailContestSector');
   if(n.audience==='admin'&&n.type==='contest')return getRuleYes('ruleEmailContestAdmin');
   if(n.audience==='admin'&&n.type==='pdca')return getRuleYes('ruleEmailPdcaAdmin');
@@ -5614,27 +5614,17 @@ function dispatchNotificationEmail(n){
     anexarPdfRo:(n.audience==='sector'&&n.type==='ro'&&n.ro)?'1':'0'
   });
 
-  const url=sync.apiUrl+(sync.apiUrl.includes('?')?'&':'?')+params.toString();
-
-  try{
-    const frame=document.createElement('iframe');
-    frame.setAttribute('aria-hidden','true');
-    frame.tabIndex=-1;
-    frame.style.position='fixed';
-    frame.style.width='1px';
-    frame.style.height='1px';
-    frame.style.opacity='0';
-    frame.style.pointerEvents='none';
-    frame.style.left='-10000px';
-    frame.src=url;
-    document.body.appendChild(frame);
-    setTimeout(()=>{try{frame.remove()}catch(e){}},20000);
-    console.info('Portal SGQ: solicitação direta de e-mail enviada.',{tipo:n.type,email:target,ro:n.ro});
-    return true;
-  }catch(e){
-    console.error('Portal SGQ: erro ao solicitar e-mail.',e);
-    return false;
-  }
+  // JSONP permite confirmar se o Apps Script realmente enviou ou recusou o e-mail.
+  portalJsonp(Object.fromEntries(params.entries()),20000)
+    .then(res=>{
+      if(!res||res.sucesso!==true){
+        console.error('Portal SGQ: Apps Script recusou o e-mail.',res);
+        return;
+      }
+      console.info('Portal SGQ: e-mail confirmado pelo Apps Script.',{tipo:n.type,email:target,ro:n.ro,enviado:res.enviado});
+    })
+    .catch(e=>console.error('Portal SGQ: falha ao enviar e-mail.',e));
+  return true;
 }
 function isInAppNotificationEnabled(data){
   if(!data)return true;
@@ -10704,8 +10694,6 @@ function openTriageRecord(id){
   sectorSel.value=validTriSector?triSector:'';
   refreshTriageResponsibleUsers(tri.responsibleUserEmail||'');
 
-  const crit=document.getElementById('triageCriticality');if(crit)crit.value=tri.criticality||'Média';
-  document.getElementById('triagePdcaDeadline').value=tri.pdcaDeadline||'';
   document.getElementById('triageNote').value=tri.note||'';
 
   updateTriageDecisionUi();
@@ -10720,7 +10708,6 @@ function openTriageRecord(id){
 function updateTriageDecisionUi(){
   const decision=document.getElementById('triageDecision')?.value||'directed';
   const sectorField=document.getElementById('triageSectorField');
-  const deadlineField=document.getElementById('triageDeadlineField');
   const userField=document.getElementById('triageUserField');
   const title=document.getElementById('triagePdcaRuleTitle');
   const text=document.getElementById('triagePdcaRuleText');
@@ -10733,7 +10720,6 @@ function updateTriageDecisionUi(){
   if(note)note.placeholder=motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.';
   sectorField.style.display=directed?'block':'none';
   if(userField)userField.style.display=directed?'block':'none';
-  deadlineField.style.display=directed?'block':'none';
 
   if(directed){
     title.textContent='PDCA obrigatório';
@@ -10757,6 +10743,16 @@ function closeTriageModal(){
   currentTriageRoId='';
 }
 
+function nextTuesdayIsoDate(fromDate=new Date()){
+  const d=new Date(fromDate.getFullYear(),fromDate.getMonth(),fromDate.getDate());
+  const days=(2-d.getDay()+7)%7 || 7;
+  d.setDate(d.getDate()+days);
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
 function saveTriageRecord(){
   const key=currentTriageRoId;
   if(!key)return;
@@ -10770,8 +10766,8 @@ function saveTriageRecord(){
     ? getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===responsibleUserEmail)
     : null;
   const responsibleUserName=responsibleUser?.name||'';
-  const pdcaDeadline=document.getElementById('triagePdcaDeadline').value;
-  const criticality=document.getElementById('triageCriticality')?.value||'Média';
+  const pdcaDeadline=decision==='directed'?nextTuesdayIsoDate():'';
+  const criticality='Média';
   const note=document.getElementById('triageNote').value.trim();
 
   if(!roUnitValue){
@@ -17388,19 +17384,6 @@ document.addEventListener('DOMContentLoaded',()=>{
           <div class="small" style="margin-top:5px">Opcional. Se deixar “Todo o setor”, todos os usuários cadastrados nesse setor recebem.</div>
         </div>
 
-        <div class="field">
-          <div class="label">Criticidade</div>
-          <select id="triageCriticality">
-            <option value="Baixa">Baixa</option>
-            <option value="Média" selected>Média</option>
-            <option value="Alta">Alta</option>
-            <option value="Crítica">Crítica</option>
-          </select>
-        </div>
-        <div class="field" id="triageDeadlineField">
-          <div class="label">Prazo para envio do PDCA</div>
-          <input id="triagePdcaDeadline" type="date">
-        </div>
 
         <div class="full triage-pdca-box">
           <strong id="triagePdcaRuleTitle">PDCA obrigatório</strong>
