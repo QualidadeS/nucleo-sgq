@@ -4789,118 +4789,25 @@ function portalJsonp(params,timeoutMs=12000){
     document.head.appendChild(script);
   });
 }
-function portalAuthV3(name,sector,password){
+function portalAuthDirect(name,sector,password){
   const base=portalApiBase();
   if(!base)throw new Error('URL do Apps Script não configurada.');
 
-  const nonce='auth_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-  sessionStorage.setItem('nucleo-auth-pending-v3',JSON.stringify({
-    nonce,
+  const returnUrl=location.origin+location.pathname;
+  sessionStorage.setItem('nucleo-auth-direct-pending',JSON.stringify({
     name:String(name||''),
     sector:String(sector||''),
     startedAt:Date.now()
   }));
 
-  const form=document.createElement('form');
-  form.method='POST';
-  form.action=base;
-  form.target='_self';
-  form.style.display='none';
-
-  const fields={acao:'portal_auth_v2',nome:name,setor:sector,senha:password,nonce};
-  Object.entries(fields).forEach(([k,v])=>{
-    const input=document.createElement('input');
-    input.type='hidden'; input.name=k; input.value=String(v??'');
-    form.appendChild(input);
-  });
-
-  document.body.appendChild(form);
-  form.submit();
-}
-
-function nucleoDecodeAuthPayload_(raw){
-  const normalized=String(raw||'').replace(/-/g,'+').replace(/_/g,'/');
-  const padded=normalized+'='.repeat((4-normalized.length%4)%4);
-  const bytes=atob(padded);
-  let encoded='';
-  for(let i=0;i<bytes.length;i++)encoded+='%'+bytes.charCodeAt(i).toString(16).padStart(2,'0');
-  return JSON.parse(decodeURIComponent(encoded));
-}
-
-function consumePortalAuthV3Return(){
-  if(!location.search.includes('auth_return=1'))return false;
-  const msg=document.getElementById('loginMessage');
-  const enterBtn=document.getElementById('loginEnterBtn');
-
-  try{
-    const pending=JSON.parse(sessionStorage.getItem('nucleo-auth-pending-v3')||'null');
-    const parts=String(window.name||'').split('|');
-    if(parts.length<3 || parts[0]!=='NUCLEO_AUTH_V3'){
-      throw new Error('O Apps Script retornou sem os dados de autenticação.');
-    }
-    const nonce=parts[1];
-    const payload=parts.slice(2).join('|');
-    if(!pending || pending.nonce!==nonce){
-      throw new Error('A resposta de autenticação não corresponde à tentativa atual.');
-    }
-
-    const remote=nucleoDecodeAuthPayload_(payload);
-    window.name='';
-    sessionStorage.removeItem('nucleo-auth-pending-v3');
-    history.replaceState(null,'',location.pathname);
-
-    if(!remote || remote.sucesso===false){
-      showAuthMode('login');
-      if(msg){
-        msg.classList.remove('hidden');
-        msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
-      }
-      if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
-      return true;
-    }
-
-    const remoteUser=remote.user||{};
-    const normalized={
-      name:remoteUser.name||pending.name,
-      email:remoteUser.email||'',
-      unit:remoteUser.unit||'Matriz',
-      sector:remoteUser.sector||pending.sector,
-      role:remoteUser.role||'operational',
-      managedSectors:Array.isArray(remoteUser.managedSectors)?remoteUser.managedSectors:[],
-      approvalStatus:remoteUser.approvalStatus||'approved'
-    };
-    localStorage.setItem(SESSION_KEY,JSON.stringify(normalized));
-    currentUser=normalized;
-
-    const loginOverlay=document.getElementById('loginOverlay');
-    const appShell=document.getElementById('appShell');
-    if(loginOverlay){loginOverlay.classList.add('hidden');loginOverlay.style.display='none'}
-    if(appShell)appShell.classList.remove('hidden');
-
-    [
-      ()=>refreshAccessUI(),
-      ()=>enforceAdminVisibility(),
-      ()=>refreshRoRegistrationAccess(),
-      ()=>showList(),
-      ()=>refreshNotificationBell(),
-      ()=>refreshContestPendingBadge(),
-      ()=>refreshPdcaSidebarBadge(),
-      ()=>schedulePendingAnnouncementCheck()
-    ].forEach(step=>{try{step()}catch(err){console.error('Núcleo pós-login:',err)}});
-
-    return true;
-  }catch(err){
-    window.name='';
-    sessionStorage.removeItem('nucleo-auth-pending-v3');
-    history.replaceState(null,'',location.pathname);
-    showAuthMode('login');
-    if(msg){
-      msg.classList.remove('hidden');
-      msg.textContent='Falha no retorno do Apps Script: '+(err?.message||err);
-    }
-    if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
-    return true;
-  }
+  const url=new URL(base);
+  url.searchParams.set('acao','portal_login');
+  url.searchParams.set('nome',String(name||''));
+  url.searchParams.set('setor',String(sector||''));
+  url.searchParams.set('senha',String(password||''));
+  url.searchParams.set('modo','nucleo');
+  url.searchParams.set('retorno',returnUrl);
+  location.href=url.toString();
 }
 
 
@@ -6705,7 +6612,7 @@ async function loginUser(){
     // Nesses casos, consulta a base central do Apps Script.
     if(portalBackendEnabled()){
       if(msg)msg.textContent='Conectando ao Apps Script...';
-      portalAuthV3(name,sector,password);
+      portalAuthDirect(name,sector,password);
       return;
     }
 
@@ -6848,7 +6755,7 @@ async function registerUser(){
       if(!found)throw new Error('O cadastro não apareceu na base central após a gravação.');
 
       msg.textContent='Cadastro recebido pelo SGQ e aguardando aprovação.';
-      if(!consumePortalAuthV3Return())showAuthMode('login');
+      showAuthMode('login');
       return;
     }catch(e){
       // Não deixa um "pendente fantasma" local.
