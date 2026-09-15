@@ -6648,18 +6648,29 @@ async function loginUser(){
     }
     localStorage.setItem(ACCESS_KEY,JSON.stringify(access));
 
+    if(msg)msg.textContent='Acesso autorizado. Abrindo Núcleo...';
     const loginOverlay=document.getElementById('loginOverlay');
     const appShell=document.getElementById('appShell');
     if(loginOverlay){loginOverlay.classList.add('hidden');loginOverlay.style.display='none'}
     if(appShell)appShell.classList.remove('hidden');
 
     try{document.activeElement?.blur()}catch(e){}
-    refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
-    showList();
-    refreshNotificationBell();
-    refreshContestPendingBadge();
-    refreshPdcaSidebarBadge();
-    schedulePendingAnnouncementCheck();
+
+    // A entrada não pode ficar presa por erro em módulos secundários.
+    // Primeiro libera a interface; depois inicializa cada módulo isoladamente.
+    const postLoginSteps=[
+      ()=>refreshAccessUI(),
+      ()=>enforceAdminVisibility(),
+      ()=>refreshRoRegistrationAccess(),
+      ()=>showList(),
+      ()=>refreshNotificationBell(),
+      ()=>refreshContestPendingBadge(),
+      ()=>refreshPdcaSidebarBadge(),
+      ()=>schedulePendingAnnouncementCheck()
+    ];
+    postLoginSteps.forEach(step=>{
+      try{step()}catch(err){console.error('Núcleo pós-login:',err)}
+    });
   }finally{
     if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar'}
   }
