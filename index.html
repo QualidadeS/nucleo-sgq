@@ -4817,6 +4817,19 @@ function portalBackendSave(collection,id,data){
   if(!ok)queueOfflineOperation({kind:'save',params});
   return ok;
 }
+async function portalBackendSaveConfirmed(collection,id,data){
+  if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+  const res=await portalJsonp({
+    acao:'portal_save',
+    colecao:String(collection||''),
+    id:String(id||''),
+    dados:JSON.stringify(data||{}),
+    ator:getSession()?.name||'Sistema'
+  },30000);
+  if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou o salvamento.');
+  return res;
+}
+
 function portalBackendDelete(collection,id){
   if(!portalBackendEnabled())return false;
   const params={acao:'portal_delete',colecao:collection,id:String(id||''),ator:getSession()?.name||'Sistema'};
@@ -7374,7 +7387,7 @@ function closeUserRegistrationEditor(){
   document.getElementById('userRegistrationEditOverlay')?.classList.remove('open');
   document.body.style.overflow='';
 }
-function saveUserRegistrationEditor(){
+async function saveUserRegistrationEditor(){
   if(!isAdmin())return;
   const key=String(document.getElementById('userRegistrationEditKey')?.value||'');
   const unit=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
@@ -7386,7 +7399,7 @@ function saveUserRegistrationEditor(){
   const idx=users.findIndex(u=>String(u.email||u.name)===key);
   if(idx<0){alert('Usuário não encontrado.');return}
   const before={unit:users[idx].unit||'',sector:users[idx].sector||''};
-  users[idx]={
+  const updated={
     ...users[idx],
     unit:canonicalPortalUnit(unit),
     sector,
@@ -7394,26 +7407,33 @@ function saveUserRegistrationEditor(){
     updatedBy:getSession()?.name||'SGQ'
   };
 
-  localStorage.setItem(USERS_KEY,JSON.stringify(users));
-  portalBackendSave('users',users[idx].email||users[idx].name,users[idx]);
-  addPortalAuditEvent('editar_cadastro_usuario',users[idx].email||users[idx].name,{
-    name:users[idx].name,
-    oldUnit:before.unit,newUnit:users[idx].unit,
-    oldSector:before.sector,newSector:users[idx].sector
-  });
+  await showNucleoLoading('Salvando alteração na base central...','Atualizando cadastro');
+  try{
+    await portalBackendSaveConfirmed('users',updated.email||updated.name,updated);
+    users[idx]=updated;
+    localStorage.setItem(USERS_KEY,JSON.stringify(users));
+    addPortalAuditEvent('editar_cadastro_usuario',updated.email||updated.name,{
+      name:updated.name,
+      oldUnit:before.unit,newUnit:updated.unit,
+      oldSector:before.sector,newSector:updated.sector
+    });
 
-  const session=getSession();
-  if(session && String(session.email||'').toLowerCase()===String(users[idx].email||'').toLowerCase()){
-    setSession({...session,unit:users[idx].unit,sector:users[idx].sector});
+    const session=getSession();
+    if(session && String(session.email||'').toLowerCase()===String(updated.email||'').toLowerCase()){
+      setSession({...session,unit:updated.unit,sector:updated.sector});
+    }
+
+    closeUserRegistrationEditor();
+    renderOperationalUsers();
+    try{renderPendingHub()}catch(e){}
+    try{refreshSectorSelectors()}catch(e){}
+    alert('Cadastro salvo na base central: '+portalUnitDisplay(updated.unit)+' · '+updated.sector+'.');
+  }catch(e){
+    alert('Não foi possível salvar a alteração. O cadastro local não foi alterado.\n\n'+(e?.message||e));
+  }finally{
+    hideNucleoLoading(true);
   }
-
-  closeUserRegistrationEditor();
-  renderOperationalUsers();
-  try{renderPendingHub()}catch(e){}
-  try{refreshSectorSelectors()}catch(e){}
-  alert('Cadastro atualizado: '+portalUnitDisplay(users[idx].unit)+' · '+users[idx].sector+'.');
 }
-
 
 function openAdminResetPassword(key){
   if(!isAdmin())return;
@@ -11355,6 +11375,20 @@ function updateNetworkState(){
   pill.classList.toggle('offline',!online||q>0);
 }
 window.addEventListener('online',()=>{updateNetworkState();flushOfflineQueue();setTimeout(()=>syncPortalBackend(false),500)});
+
+// Mantém todas as máquinas atualizadas pela fonte oficial.
+let __nucleoCentralRefreshTimer=null;
+function startNucleoCentralRefresh(){
+  try{clearInterval(__nucleoCentralRefreshTimer)}catch(e){}
+  __nucleoCentralRefreshTimer=setInterval(()=>{
+    try{if(getSession()?.authToken && document.visibilityState!=='hidden')syncPortalBackend(false)}catch(e){}
+  },15000);
+}
+document.addEventListener('visibilitychange',()=>{
+  try{if(document.visibilityState==='visible'&&getSession()?.authToken)syncPortalBackend(false)}catch(e){}
+});
+window.addEventListener('focus',()=>{try{if(getSession()?.authToken)syncPortalBackend(false)}catch(e){}});
+startNucleoCentralRefresh();
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
 const ARCHIVED_RO_KEY='portal-sgq-archived-ro-v1';
