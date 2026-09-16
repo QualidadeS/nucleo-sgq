@@ -7038,7 +7038,7 @@ async function changeOwnPassword(){
   if(next!==next2){alert('A confirmação da nova senha não coincide.');return}
   if(current===next){alert('A nova senha precisa ser diferente da senha atual.');return}
 
-  nucleoLoadingShow('Alterando sua senha...');
+  await showNucleoLoading('Alterando sua senha...','Segurança da conta');
   try{
     const remote=await portalJsonp({
       acao:'portal_change_own_password',
@@ -7073,7 +7073,7 @@ async function changeOwnPassword(){
   }catch(err){
     alert('Não foi possível alterar a senha. Motivo: '+(err&&err.message?err.message:String(err)));
   }finally{
-    nucleoLoadingHide();
+    hideNucleoLoading(true);
   }
 }
 
@@ -16000,11 +16000,11 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
       <td>${escapeHtml(r.unidade||'')}</td>
-      <td><div style="display:flex;align-items:center;gap:7px"><span>${escapeHtml(responsibleSector)}</span>${admin&&tri?.roKey?`<button class="ro-eye-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa" style="font-size:14px">✎</button><button class="ro-eye-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento" style="font-size:14px">🗑</button>`:''}</div></td>
+      <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r))}</td>
       <td>${statusControl}</td>
-      <td class="ro-eye-cell"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button></td>
+      <td class="ro-eye-cell"><div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -18260,6 +18260,8 @@ window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>syncPublicPortalC
 .ro-control-table th:nth-child(7),.ro-control-table td:nth-child(7){width:6%;text-align:center}
 .ro-eye-btn{border:0;background:transparent;cursor:pointer;font-size:20px;line-height:1;padding:7px 9px;border-radius:8px}
 .ro-eye-btn:hover{background:#eef4f8}
+.ro-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:2px;white-space:nowrap}
+.ro-row-actions .ro-eye-btn{font-size:18px;padding:6px 7px}
 .pdca-source-control{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 </style>
 </body></html>
