@@ -5609,7 +5609,7 @@ function createNotification(data){
     registrante:data.registrante||''
   };
   // O e-mail prioritário é independente da exibição na central do aplicativo.
-  try{dispatchNotificationEmail(n)}catch(e){console.error('Portal SGQ: falha ao preparar e-mail.',e)}
+  if(!data.skipEmail){try{dispatchNotificationEmail(n)}catch(e){console.error('Portal SGQ: falha ao preparar e-mail.',e)}}
   if(!isInAppNotificationEnabled(n))return n;
 
   const list=getNotifications();
@@ -10709,7 +10709,7 @@ function nextTuesdayIsoDate(fromDate=new Date()){
   return `${y}-${m}-${day}`;
 }
 
-function saveTriageRecord(){
+async function saveTriageRecord(){
   const key=currentTriageRoId;
   if(!key)return;
 
@@ -10787,9 +10787,29 @@ function saveTriageRecord(){
 
   if(decision==='directed'){
     const triageRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'')===String(key))||{};
+    let emailResult=null;
+    try{
+      emailResult=await portalJsonp({
+        acao:'portal_send_directed_ro_email',
+        ro:key,
+        setor:responsibleSector,
+        email:responsibleUserEmail||'',
+        unidade:triageRo.unidade||roUnitValue||'',
+        tipoRO:triageRo.tipoRO||triageRo.tipo||'',
+        cliente:triageRo.cliente||'',
+        registrante:triageRo.registrante||'',
+        mensagem:responsibleUserEmail
+          ? ('A '+key+' foi direcionada para '+(responsibleUserName||responsibleUserEmail)+' em '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.')
+          : ('A '+key+' foi direcionada para '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.')
+      },45000);
+      try{await refreshEmailHistory()}catch(_){ }
+    }catch(emailErr){
+      emailResult={sucesso:false,erro:emailErr?.message||String(emailErr)};
+    }
     if(responsibleUserEmail){
       createNotification({
         type:'ro',
+        skipEmail:true,
         audience:'user',
         userKey:responsibleUserEmail,
         sector:responsibleSector,
@@ -10801,10 +10821,11 @@ function saveTriageRecord(){
         title:'R.O. direcionada para você',
         message:'A '+key+' foi direcionada para você em '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.'
       });
-      alert('Triagem salva. A R.O. foi direcionada para '+responsibleUserName+' ('+responsibleSector+').');
+      alert(emailResult?.sucesso ? ('Triagem salva e e-mail enviado para '+(emailResult.enviados||[]).join(', ')+'.') : ('Triagem salva, mas o e-mail NÃO foi enviado. Motivo: '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado')));
     }else{
       createNotification({
         type:'ro',
+        skipEmail:true,
         audience:'sector',
         sector:responsibleSector,
         ro:key,
@@ -10815,7 +10836,7 @@ function saveTriageRecord(){
         title:'R.O. direcionada para tratativa',
         message:'A '+key+' foi direcionada para '+responsibleSector+'. Todos os usuários cadastrados no setor recebem esta pendência.'
       });
-      alert('Triagem salva. A R.O. foi disponibilizada para todos os usuários de '+responsibleSector+'.');
+      alert(emailResult?.sucesso ? ('Triagem salva e e-mail enviado para '+(emailResult.enviados||[]).length+' destinatário(s) de '+responsibleSector+'.') : ('Triagem salva, mas o e-mail NÃO foi enviado. Motivo: '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado')));
     }
     if(responsibleUserEmail)notifyManagersOfDirectedRo(key,responsibleSector,triageRo,responsibleUserName);
   }
