@@ -10690,23 +10690,40 @@ function usersBySector(sector){
     .filter(u=>normalizeAnswer(u.sector||'')===wanted)
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
-function selectedTriageSectors(){
-  return [...document.querySelectorAll('#triageResponsibleSectors input[type="checkbox"]:checked')].map(x=>x.value).filter(Boolean);
+function getTriageAssignmentsFromUi(){
+  return [...document.querySelectorAll('#triageAssignments .triage-assignment-row')].map(row=>({
+    sector:String(row.dataset.sector||'').trim(),
+    responsibleUserEmail:String(row.querySelector('.triage-assignment-user')?.value||'').trim().toLowerCase()
+  })).filter(x=>x.sector);
 }
-function refreshTriageResponsibleUsers(selectedEmail){
-  const sectors=selectedTriageSectors();
-  const sel=document.getElementById('triageResponsibleUser');
-  if(!sel)return;
-  if(sectors.length!==1){
-    sel.innerHTML='<option value="">Todo o setor</option>';
-    sel.disabled=true;
+function selectedTriageSectors(){
+  return getTriageAssignmentsFromUi().map(x=>x.sector);
+}
+function triageAssignmentUserOptions(sector,selectedEmail=''){
+  const users=usersBySector(sector);
+  return '<option value="">Todo o setor</option>'+users.map(u=>`<option value="${escapeHtml(u.email)}" ${String(u.email||'').toLowerCase()===String(selectedEmail||'').toLowerCase()?'selected':''}>${escapeHtml(u.name)} · ${escapeHtml(u.email)}</option>`).join('');
+}
+function addTriageAssignment(sector='',selectedEmail=''){
+  const picker=document.getElementById('triageSectorPicker');
+  const chosen=String(sector||picker?.value||'').trim();
+  if(!chosen)return;
+  const box=document.getElementById('triageAssignments');
+  if(!box)return;
+  const existing=[...box.querySelectorAll('.triage-assignment-row')].find(r=>normalizeAnswer(r.dataset.sector||'')===normalizeAnswer(chosen));
+  if(existing){
+    existing.querySelector('.triage-assignment-user')?.focus();
+    if(picker)picker.value='';
     return;
   }
-  sel.disabled=false;
-  const users=usersBySector(sectors[0]);
-  sel.innerHTML='<option value="">Todo o setor</option>'+users.map(u=>`<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</option>`).join('');
-  if(selectedEmail && [...sel.options].some(o=>o.value===selectedEmail))sel.value=selectedEmail;
+  const row=document.createElement('div');
+  row.className='triage-assignment-row';
+  row.dataset.sector=chosen;
+  row.style.cssText='display:grid;grid-template-columns:minmax(150px,.8fr) minmax(220px,1.2fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef';
+  row.innerHTML=`<div style="font-weight:700;font-size:13px">${escapeHtml(chosen)}</div><select class="triage-assignment-user">${triageAssignmentUserOptions(chosen,selectedEmail)}</select><button class="btn secondary" type="button" onclick="this.closest('.triage-assignment-row').remove()" style="padding:8px 10px">Remover</button>`;
+  box.appendChild(row);
+  if(picker)picker.value='';
 }
+function refreshTriageResponsibleUsers(){ /* compatibilidade: responsáveis agora são definidos por setor, na própria linha */ }
 
 function userMatchesDirectedPerson(tri){
   const email=String(tri?.responsibleUserEmail||'').trim().toLowerCase();
@@ -10783,12 +10800,14 @@ function openTriageRecord(id){
   document.getElementById('triageClassification').value=tri.classification||'';
   populateTriageRoUnit(ro.unidade||'');
 
-  const sectorBox=document.getElementById('triageResponsibleSectors');
   const sectors=getConfiguredSectorsForTriage();
+  const picker=document.getElementById('triageSectorPicker');
+  if(picker)picker.innerHTML='<option value="">Selecione um setor...</option>'+sectors.map(sec=>`<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`).join('');
+  const assignmentsBox=document.getElementById('triageAssignments');
+  if(assignmentsBox)assignmentsBox.innerHTML='';
   const existingForRo=getTriageRecordsForRoNumber(wanted);
-  const selectedSectors=new Set((existingForRo.length?existingForRo.map(x=>x.responsibleSector):[tri.responsibleSector]).filter(Boolean));
-  sectorBox.innerHTML=sectors.map(sec=>`<label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" value="${escapeHtml(sec)}" ${selectedSectors.has(sec)?'checked':''} onchange="refreshTriageResponsibleUsers()"> <span>${escapeHtml(sec)}</span></label>`).join('');
-  refreshTriageResponsibleUsers(existingForRo.length===1?existingForRo[0].responsibleUserEmail||'':'');
+  const existingAssignments=existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]);
+  existingAssignments.forEach(x=>addTriageAssignment(x.responsibleSector,x.responsibleUserEmail||''));
 
   document.getElementById('triageNote').value=tri.note||'';
 
@@ -10804,7 +10823,6 @@ function openTriageRecord(id){
 function updateTriageDecisionUi(){
   const decision=document.getElementById('triageDecision')?.value||'directed';
   const sectorField=document.getElementById('triageSectorField');
-  const userField=document.getElementById('triageUserField');
   const title=document.getElementById('triagePdcaRuleTitle');
   const text=document.getElementById('triagePdcaRuleText');
   const noteLabel=document.getElementById('triageNoteLabel');
@@ -10815,7 +10833,6 @@ function updateTriageDecisionUi(){
   if(noteLabel)noteLabel.textContent=motiveRequired?'Motivo *':'Observação da triagem';
   if(note)note.placeholder=motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.';
   sectorField.style.display=directed?'block':'none';
-  if(userField)userField.style.display=directed?'block':'none';
 
   if(directed){
     title.textContent='PDCA obrigatório';
@@ -10858,13 +10875,9 @@ async function saveTriageRecord(){
   const decision=document.getElementById('triageDecision').value;
   const classification=document.getElementById('triageClassification').value.trim();
   const roUnitValue=canonicalUnitName(document.getElementById('triageRoUnit')?.value||'');
-  const responsibleSectors=selectedTriageSectors();
+  const assignments=getTriageAssignmentsFromUi();
+  const responsibleSectors=assignments.map(x=>x.sector);
   const responsibleSector=responsibleSectors[0]||'';
-  const responsibleUserEmail=(responsibleSectors.length===1?(document.getElementById('triageResponsibleUser')?.value||''):'').trim().toLowerCase();
-  const responsibleUser=responsibleUserEmail
-    ? getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===responsibleUserEmail)
-    : null;
-  const responsibleUserName=responsibleUser?.name||'';
   const pdcaDeadline=decision==='directed'?nextTuesdayIsoDate():'';
   const criticality='Média';
   const note=document.getElementById('triageNote').value.trim();
@@ -10890,13 +10903,16 @@ async function saveTriageRecord(){
   const targetSectors=decision==='directed'?responsibleSectors:[''];
   const savedRecords=[];
   for(const sec of targetSectors){
+    const assignment=assignments.find(x=>normalizeAnswer(x.sector)===normalizeAnswer(sec))||{};
+    const assignmentEmail=String(assignment.responsibleUserEmail||'').trim().toLowerCase();
+    const assignmentUser=assignmentEmail?getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===assignmentEmail):null;
     const recordKey=decision==='directed'?triageCompositeKey(roNumber,sec):roNumber;
     const record={
       roKey:recordKey,roNumber,
       decision,classification,
       responsibleSector:decision==='directed'?sec:'',
-      responsibleUserEmail:decision==='directed'&&responsibleSectors.length===1?responsibleUserEmail:'',
-      responsibleUserName:decision==='directed'&&responsibleSectors.length===1?responsibleUserName:'',
+      responsibleUserEmail:decision==='directed'?assignmentEmail:'',
+      responsibleUserName:decision==='directed'?(assignmentUser?.name||''):'',
       pdcaRequired:decision==='directed',pdcaDeadline:decision==='directed'?pdcaDeadline:'',criticality,note,
       triagedAt:new Date().toISOString(),triagedBy:getSession()?.name||'SGQ'
     };
@@ -10913,7 +10929,7 @@ async function saveTriageRecord(){
   portalUpdateRoSheet(key,{
     unidade:roUnitValue,
     setor:decision==='directed'?responsibleSector:'',
-    pessoa:decision==='directed'?(responsibleUserName||'Todo o setor'):'',
+    pessoa:decision==='directed'?(assignments.length===1?(savedRecords[0]?.responsibleUserName||'Todo o setor'):(assignments.length+' direcionamentos')):'',
     status:decision==='directed'?'Pendente':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
   });
 
@@ -10934,60 +10950,40 @@ async function saveTriageRecord(){
   }
 
   if(decision==='directed'){
-    const triageRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'')===String(key))||{};
-    let emailResult=null;
-    try{
-      updateNucleoLoading('Enviando e-mail e registrando no histórico...','Processando');
-      emailResult=await portalJsonp({
-        acao:'portal_send_directed_ro_email',
-        ro:key,
-        setor:responsibleSectors.join(' | '),
-        email:responsibleUserEmail||'',
-        unidade:triageRo.unidade||roUnitValue||'',
-        tipoRO:triageRo.tipoRO||triageRo.tipo||'',
-        cliente:triageRo.cliente||'',
-        registrante:triageRo.registrante||'',
-        mensagem:responsibleUserEmail
-          ? ('A '+key+' foi direcionada para '+(responsibleUserName||responsibleUserEmail)+' em '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.')
-          : ('A '+key+' foi direcionada para '+responsibleSectors.join(', ')+'. É necessário analisar a ocorrência e responder o PDCA.')
-      },45000);
-      try{await refreshEmailHistory()}catch(_){ }
-    }catch(emailErr){
-      emailResult={sucesso:false,erro:emailErr?.message||String(emailErr)};
-    }
-    if(responsibleUserEmail){
+    const triageRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').split('::')[0]===roNumber)||{};
+    const emailErrors=[];
+    let totalSent=0;
+    for(const record of savedRecords){
+      const sec=record.responsibleSector;
+      const email=record.responsibleUserEmail||'';
+      const person=record.responsibleUserName||'';
+      let emailResult=null;
+      try{
+        updateNucleoLoading('Enviando R.O. para '+sec+'...','Processando');
+        emailResult=await portalJsonp({
+          acao:'portal_send_directed_ro_email', ro:roNumber, setor:sec, email,
+          unidade:triageRo.unidade||roUnitValue||'', tipoRO:triageRo.tipoRO||triageRo.tipo||'',
+          cliente:triageRo.cliente||'', registrante:triageRo.registrante||'',
+          mensagem:email
+            ? ('A '+roNumber+' foi direcionada para '+(person||email)+' em '+sec+'. É necessário analisar a ocorrência e responder o PDCA.')
+            : ('A '+roNumber+' foi direcionada para '+sec+'. É necessário analisar a ocorrência e responder o PDCA.')
+        },45000);
+        totalSent+=(emailResult?.enviados||[]).length;
+        if(!emailResult?.sucesso)emailErrors.push(sec+': '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado'));
+      }catch(emailErr){ emailErrors.push(sec+': '+(emailErr?.message||String(emailErr))); }
       createNotification({
-        type:'ro',
-        skipEmail:true,
-        audience:'user',
-        userKey:responsibleUserEmail,
-        sector:responsibleSector,
-        ro:key,
-        unidade:triageRo.unidade||'',
-        tipoRO:triageRo.tipoRO||triageRo.tipo||'',
-        cliente:triageRo.cliente||'',
-        registrante:triageRo.registrante||'',
-        title:'R.O. direcionada para você',
-        message:'A '+key+' foi direcionada para você em '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.'
+        type:'ro',skipEmail:true,audience:email?'user':'sector',userKey:email,sector:sec,ro:roNumber,
+        unidade:triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',
+        title:email?'R.O. direcionada para você':'R.O. direcionada para tratativa',
+        message:email?('A '+roNumber+' foi direcionada para você em '+sec+'. É necessário analisar a ocorrência e responder o PDCA.'):
+          ('A '+roNumber+' foi direcionada para '+sec+'. Todos os usuários cadastrados no setor recebem esta pendência.')
       });
-      alert(emailResult?.sucesso ? ('Triagem salva e e-mail enviado para '+(emailResult.enviados||[]).join(', ')+'.') : ('Triagem salva, mas o e-mail NÃO foi enviado. Motivo: '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado')));
-    }else{
-      createNotification({
-        type:'ro',
-        skipEmail:true,
-        audience:'sector',
-        sector:responsibleSector,
-        ro:key,
-        unidade:triageRo.unidade||'',
-        tipoRO:triageRo.tipoRO||triageRo.tipo||'',
-        cliente:triageRo.cliente||'',
-        registrante:triageRo.registrante||'',
-        title:'R.O. direcionada para tratativa',
-        message:'A '+key+' foi direcionada para '+responsibleSector+'. Todos os usuários cadastrados no setor recebem esta pendência.'
-      });
-      alert(emailResult?.sucesso ? ('Triagem salva e e-mail enviado para '+(emailResult.enviados||[]).length+' destinatário(s) de '+responsibleSector+'.') : ('Triagem salva, mas o e-mail NÃO foi enviado. Motivo: '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado')));
+      if(email)notifyManagersOfDirectedRo(roNumber,sec,triageRo,person);
     }
-    if(responsibleUserEmail)notifyManagersOfDirectedRo(key,responsibleSector,triageRo,responsibleUserName);
+    try{await refreshEmailHistory()}catch(_){ }
+    alert(emailErrors.length
+      ? ('Triagem salva, mas houve falha em alguns e-mails: '+emailErrors.join(' | '))
+      : ('Triagem salva. '+savedRecords.length+' setor(es) direcionado(s) e '+totalSent+' e-mail(s) enviado(s).'));
   }
   } finally {
     hideNucleoLoading();
@@ -17617,18 +17613,16 @@ document.addEventListener('DOMContentLoaded',()=>{
           <div class="small" style="margin-top:5px">O SGQ/ADM pode corrigir a unidade quando ela foi informada incorretamente no cadastro.</div>
         </div>
 
-        <div class="field" id="triageSectorField">
-          <div class="label">Setores responsáveis *</div>
-          <div id="triageResponsibleSectors" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;border:1px solid #dfe7e4;border-radius:10px;padding:10px;max-height:190px;overflow:auto"></div>
-          <div class="small" style="margin-top:5px">Pode selecionar um ou mais setores. Cada setor vira um direcionamento independente da mesma R.O.</div>
-        </div>
-
-        <div class="field" id="triageUserField">
-          <div class="label">Pessoa responsável</div>
-          <select id="triageResponsibleUser">
-            <option value="">Todo o setor</option>
-          </select>
-          <div class="small" style="margin-top:5px">Opcional. Se deixar “Todo o setor”, todos os usuários cadastrados nesse setor recebem.</div>
+        <div class="field full" id="triageSectorField">
+          <div class="label">Direcionamento *</div>
+          <div style="display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:8px;align-items:end">
+            <select id="triageSectorPicker" onchange="if(this.value)addTriageAssignment()">
+              <option value="">Selecione um setor...</option>
+            </select>
+            <button class="btn secondary" type="button" onclick="addTriageAssignment()">Adicionar</button>
+          </div>
+          <div id="triageAssignments" style="margin-top:8px"></div>
+          <div class="small" style="margin-top:5px">Adicione apenas os setores responsáveis. Em cada linha, escolha uma pessoa específica ou mantenha “Todo o setor”.</div>
         </div>
 
 
