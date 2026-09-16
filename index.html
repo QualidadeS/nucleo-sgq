@@ -10822,15 +10822,20 @@ function updateRoUnitLocal(roKey,newUnit){
 
 function openTriageRecord(id){
   const wanted=String(id||'').trim();
-  const ro=getAllRoRecords().find(r=>triageKeyOf(r)===wanted);
+  // O lápis das R.O.s atribuídas envia a chave interna RO::SETOR.
+  // A R.O. importada, porém, continua identificada somente pelo número.
+  // Portanto a chave composta nunca deve ser usada para procurar a R.O. física.
+  const roNumber=triageRoNumberPart(wanted)||String(wanted).split('::')[0];
+  const ro=getAllRoRecords().find(r=>triageRoNumberPart(triageKeyOf(r))===roNumber);
   if(!ro){alert('R.O. não encontrada.');return}
 
-  currentTriageRoId=wanted;
-  const tri=getSavedTriageMap().get(wanted)||{};
+  currentTriageRoId=roNumber;
+  const savedMap=getSavedTriageMap();
+  const tri=savedMap.get(wanted)||savedMap.get(roNumber)||{};
 
   const summary=document.getElementById('triageRoSummary');
   summary.innerHTML=[
-    ['R.O.',wanted],
+    ['R.O.',roNumber],
     ['Unidade',ro.unidade||'-'],
     ['Cliente',ro.cliente||'Não informado'],
     ['Tipo de ocorrência',ro.tipoRO||ro.assunto||ro.tipo||'-'],
@@ -10847,7 +10852,7 @@ function openTriageRecord(id){
   if(picker)picker.innerHTML='<option value="">Selecione um setor...</option>'+sectors.map(sec=>`<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`).join('');
   const assignmentsBox=document.getElementById('triageAssignments');
   if(assignmentsBox)assignmentsBox.innerHTML='';
-  const existingForRo=getTriageRecordsForRoNumber(wanted);
+  const existingForRo=getTriageRecordsForRoNumber(roNumber);
   const existingAssignments=existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]);
   existingAssignments.forEach(x=>addTriageAssignment(x.responsibleSector,x.responsibleUserEmail||'',x.assignmentReason||x.reason||'',x.responsibleSector));
 
