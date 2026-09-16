@@ -4970,6 +4970,7 @@ function applyPortalBackendSnapshot(snapshot){
     }catch(e){}
   }
   if(Array.isArray(data.triage))localStorage.setItem(TRIAGE_KEY,JSON.stringify(data.triage));
+  if(Array.isArray(data.triageDeletedKeys))localStorage.setItem(DELETED_TRIAGE_KEYS_KEY,JSON.stringify(data.triageDeletedKeys));
   if(Array.isArray(data.externalRoControls))saveExternalRoControlsLocal(data.externalRoControls);
   if(Array.isArray(data.adminModules))localStorage.setItem(ADMIN_MODULES_KEY,JSON.stringify(data.adminModules));
   if(Array.isArray(data.standardDocuments))localStorage.setItem(STANDARD_DOCUMENTS_KEY,JSON.stringify(data.standardDocuments));
@@ -10375,6 +10376,7 @@ function finishExternalTreatment(id){
 
 
 const TRIAGE_KEY='ro-pdca-triage-v2';
+const DELETED_TRIAGE_KEYS_KEY='nucleo-deleted-triage-keys-v1';
 let currentTriageRoId='';
 
 
@@ -10434,6 +10436,13 @@ function getTriageRecordsForRoNumber(roNumber,map=getSavedTriageMap()){
 function getTriageRecordForRoSector(roNumber,sector,map=getSavedTriageMap()){
   const composite=triageCompositeKey(roNumber,sector);
   return map.get(composite)||map.get(String(roNumber||'').trim())||null;
+}
+
+function getDeletedTriageKeys(){
+  try{return new Set(JSON.parse(localStorage.getItem(DELETED_TRIAGE_KEYS_KEY)||'[]').map(String))}catch(e){return new Set()}
+}
+function saveDeletedTriageKeys(set){
+  try{localStorage.setItem(DELETED_TRIAGE_KEYS_KEY,JSON.stringify([...set]))}catch(e){}
 }
 
 function getSavedTriageMap(){
@@ -10498,7 +10507,8 @@ function getSavedTriageMap(){
   try{
     getAllRoRecords().forEach(ro=>{
       const key=triageKeyOf(ro);
-      if(!key || map.has(key))return;
+      const deletedKeys=getDeletedTriageKeys();
+      if(!key || map.has(key) || deletedKeys.has(String(key)))return;
 
       const setor=String(ro.setorResponsavelPlanilha||'').trim();
       const pessoa=String(ro.pessoaResponsavel||'').trim();
@@ -11000,6 +11010,8 @@ async function saveTriageRecord(){
         status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
       });
       await portalBackendSaveConfirmed('triage',record.roKey,record);
+      const deletedKeys=getDeletedTriageKeys();
+      if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
     }
   }
 
@@ -11014,6 +11026,9 @@ async function saveTriageRecord(){
     if(portalBackendEnabled()){
       updateNucleoLoading('Removendo o direcionamento anterior da base central...','Processando');
       await portalBackendDeleteConfirmed('triage',oldKey);
+      const deletedKeys=getDeletedTriageKeys();
+      deletedKeys.add(String(oldKey));
+      saveDeletedTriageKeys(deletedKeys);
     }
   }
 
@@ -13688,6 +13703,7 @@ function saveIntegrationSettings(silent=false){
     roSyncDateTo,
     savedAt:new Date().toISOString()
   };
+  const periodChanged=currentRoSyncPeriodSignature(current)!==currentRoSyncPeriodSignature(sync);
 
   // A integração fica em uma chave exclusiva para não ser apagada
   // quando a configuração central é sincronizada.
@@ -13703,6 +13719,17 @@ function saveIntegrationSettings(silent=false){
   c.roSyncDateTo=roSyncDateTo;
   c.__savedAt=new Date().toLocaleString('pt-BR');
   localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(c));
+
+  if(periodChanged){
+    // O período faz parte da identidade do cache. Nunca reutiliza dados de outro intervalo.
+    importedRoCacheNeedsRefresh=true;
+    clearImportedRosDurable().catch(()=>{});
+    try{
+      localStorage.removeItem(IMPORTED_ROS_INTERNA_KEY);
+      localStorage.removeItem(IMPORTED_ROS_EXTERNA_KEY);
+      localStorage.removeItem(IMPORTED_ROS_KEY);
+    }catch(e){}
+  }
 
   if(!silent){
     const st=document.getElementById('configSavedState');
@@ -14231,6 +14258,15 @@ function openNucleoRoDb(){
   });
 }
 
+function currentRoSyncPeriodSignature(settings){
+  const s=settings||getSavedIntegrationSettings();
+  return JSON.stringify({
+    period:String(s.roSyncPeriod||'all'),
+    from:String(s.roSyncDateFrom||''),
+    to:String(s.roSyncDateTo||'')
+  });
+}
+
 async function saveImportedRosDurable(internas,externas){
   const db=await openNucleoRoDb();
   return new Promise((resolve,reject)=>{
@@ -14238,6 +14274,7 @@ async function saveImportedRosDurable(internas,externas){
     tx.objectStore(NUCLEO_RO_DB_STORE).put({
       internas:Array.isArray(internas)?internas:[],
       externas:Array.isArray(externas)?externas:[],
+      periodSignature:currentRoSyncPeriodSignature(),
       savedAt:Date.now()
     },NUCLEO_RO_DB_KEY);
     tx.oncomplete=()=>{try{db.close()}catch(e){};resolve(true)};
@@ -14257,6 +14294,7 @@ async function readImportedRosDurable(){
       resolve({
         internas:Array.isArray(value.internas)?value.internas:[],
         externas:Array.isArray(value.externas)?value.externas:[],
+        periodSignature:String(value.periodSignature||''),
         savedAt:value.savedAt||0
       });
     };
@@ -14304,6 +14342,18 @@ function normalizeRestoredRoRecord(r){
 async function restoreImportedRosDurable(){
   try{
     const split=await readImportedRosDurable();
+    const expectedSignature=currentRoSyncPeriodSignature();
+    // Cache de outro período nunca pode reaparecer depois de atualizar/reabrir o app.
+    if(split.periodSignature && split.periodSignature!==expectedSignature){
+      console.info('NÚCLEO: cache de R.O.s ignorado porque pertence a outro período.');
+      await clearImportedRosDurable().catch(()=>{});
+      return 0;
+    }
+    // Cache legado sem assinatura só é seguro para "Todo o período".
+    if(!split.periodSignature && String(getSavedIntegrationSettings().roSyncPeriod||'all')!=='all'){
+      await clearImportedRosDurable().catch(()=>{});
+      return 0;
+    }
     const saved=[...split.internas,...split.externas];
     if(!saved.length)return 0;
 
@@ -15675,8 +15725,9 @@ function refreshAccessUI(){
 
   const syncBtn=[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Sincronizar') && b.closest('.topbar'));
   if(syncBtn){
-    syncBtn.disabled=!admin;
-    syncBtn.title=admin?'Sincronizar':'Somente administradores podem sincronizar manualmente';
+    // Sincronizar é operacional e não altera links/regras/período.
+    syncBtn.disabled=false;
+    syncBtn.title='Sincronizar agora';
   }
 }
 
@@ -16028,6 +16079,9 @@ async function deleteAssignedDirection(triageKey){
   try{
     await withNucleoLoading('Excluindo direcionamento...',async()=>{
       if(portalBackendEnabled())await portalBackendDeleteConfirmed('triage',key);
+      const deletedKeys=getDeletedTriageKeys();
+      deletedKeys.add(key);
+      saveDeletedTriageKeys(deletedKeys);
       map.delete(key);
       try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
       render();
@@ -17544,6 +17598,9 @@ async function syncNow(){
     updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
     await new Promise(resolve=>requestAnimationFrame(resolve));
     const qty=applyImportedRos(data.dados,data);
+    updateNucleoLoading('Atualizando triagens, usuários e demais dados centrais...','Sincronizando');
+    await syncPortalBackend(false,{foreground:false});
+    try{render();renderCurrentOverview();refreshRoSummary();}catch(e){}
     const bases=(typeof data.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
     syncMsg.textContent='Sincronização concluída: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
     syncMsg.className='statusline okline';
