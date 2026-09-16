@@ -4856,10 +4856,67 @@ async function portalUpdateRoSheetConfirmed(ro,campos){
   return res;
 }
 
+// ===== NÚCLEO: estado compartilhado central =====
+// Dados operacionais nunca dependem apenas deste navegador. O localStorage abaixo
+// funciona somente como cache; a cópia oficial fica em SGQ_ESTADO_COMPARTILHADO.
+const NUCLEO_SHARED_GLOBAL_KEYS=new Set([
+  'ro-pdca-access-v2',
+  'portal-sgq-deadline-alerts-v1',
+  'ro-pdca-sector-emails-v1',
+  'ro-pdca-deleted-users-v1',
+  'nucleo-sector-aliases-v1',
+  'ro-pdca-presentations-v1',
+  'nucleo-ro-origin-registry-v1'
+]);
+const NUCLEO_SHARED_USER_KEYS=new Set([
+  'ro-pdca-notifications-v1',
+  'ro-pdca-notification-read-v1',
+  'portal-sgq-pdca-started-v1'
+]);
+let nucleoApplyingCentralState=false;
+const nucleoNativeStorageSetItem=Storage.prototype.setItem;
+function nucleoSharedStateUserKey(){
+  try{return String(notificationUserKey?.()||getSession?.()?.email||getSession?.()?.name||'anon').trim().toLowerCase()||'anon'}catch(e){return 'anon'}
+}
+function nucleoSharedStateId(key){
+  return NUCLEO_SHARED_USER_KEYS.has(String(key)) ? ('user:'+nucleoSharedStateUserKey()+':'+String(key)) : ('global:'+String(key));
+}
+function nucleoPersistSharedState(key,value){
+  if(nucleoApplyingCentralState||!portalBackendEnabled?.())return;
+  const k=String(key||'');
+  if(!NUCLEO_SHARED_GLOBAL_KEYS.has(k)&&!NUCLEO_SHARED_USER_KEYS.has(k))return;
+  portalBackendSave('shared_state',nucleoSharedStateId(k),{
+    id:nucleoSharedStateId(k),key:k,value:String(value??''),
+    scope:NUCLEO_SHARED_USER_KEYS.has(k)?'user':'global',
+    userKey:NUCLEO_SHARED_USER_KEYS.has(k)?nucleoSharedStateUserKey():'',
+    updatedAt:new Date().toISOString(),updatedBy:getSession?.()?.name||'Sistema'
+  });
+}
+Storage.prototype.setItem=function(key,value){
+  const result=nucleoNativeStorageSetItem.call(this,key,value);
+  if(this===localStorage)try{nucleoPersistSharedState(String(key),String(value))}catch(e){console.warn('Falha ao persistir estado compartilhado:',e)}
+  return result;
+};
+function nucleoApplySharedState(list){
+  if(!Array.isArray(list))return;
+  const userKey=nucleoSharedStateUserKey();
+  nucleoApplyingCentralState=true;
+  try{
+    list.forEach(x=>{
+      if(!x?.key)return;
+      if(x.scope==='user'&&String(x.userKey||'')!==userKey)return;
+      if(!NUCLEO_SHARED_GLOBAL_KEYS.has(String(x.key))&&!NUCLEO_SHARED_USER_KEYS.has(String(x.key)))return;
+      nucleoNativeStorageSetItem.call(localStorage,String(x.key),String(x.value??''));
+    });
+  }finally{nucleoApplyingCentralState=false;}
+}
+
 function applyPortalBackendSnapshot(snapshot){
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
+  // A base central vence qualquer cache antigo deste navegador.
+  nucleoApplySharedState(data.sharedState);
   if(data.config && typeof data.config==='object'){
     const localIntegration=getSavedIntegrationSettings();
     const mergedConfig={
@@ -6479,7 +6536,7 @@ function refreshSectorSelectors(){
   });
 }
 
-function saveSectorConfiguration(){
+async function saveSectorConfiguration(){
   if(!isAdmin()){
     alert('Configuração indisponível.');
     return;
@@ -6487,31 +6544,52 @@ function saveSectorConfiguration(){
 
   const field=document.getElementById('sectorList');
   const sectors=normalizeSectorList(field?.value||'');
-
   if(!sectors.length){
     alert('Cadastre pelo menos um setor.');
     return;
   }
 
   field.value=sectors.join('\n');
+  const cfg={...getAdminConfig(),sectorList:field.value,__savedAt:new Date().toISOString()};
 
-  const cfg=getAdminConfig();
-  cfg.sectorList=field.value;
-  cfg.__savedAt=new Date().toLocaleString('pt-BR');
-  localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(cfg));
+  await showNucleoLoading('Salvando setores na base central...','Atualizando NÚCLEO');
+  try{
+    const res=await portalJsonp({
+      acao:'portal_save_config',
+      dados:JSON.stringify(cfg),
+      ator:getSession()?.name||'SGQ'
+    },25000);
+    if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a alteração.');
 
-  refreshSectorSelectors();
-  try{populateTriageSectors()}catch(e){}
-  try{renderSectorEmailMap()}catch(e){}
-  try{renderOperationalUsers()}catch(e){}
-
-  const st=document.getElementById('configSavedState');
-  if(st){
-    st.classList.remove('hidden');
-    st.textContent='Configurações salvas em '+cfg.__savedAt;
+    localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(cfg));
+    refreshSectorSelectors();
+    try{populateTriageSectors()}catch(e){}
+    try{renderSectorEmailMap()}catch(e){}
+    try{renderOperationalUsers()}catch(e){}
+    const st=document.getElementById('configSavedState');
+    if(st){st.classList.remove('hidden');st.textContent='Setores salvos na base central.'}
+    alert('Setores atualizados para todos os usuários.');
+  }catch(e){
+    alert('Não foi possível salvar os setores na base central. Nada foi confirmado.\n\n'+(e?.message||e));
+  }finally{
+    hideNucleoLoading(true);
   }
+}
 
-  alert('Setores salvos. As listas de cadastro, login e triagem foram atualizadas.');
+async function syncPublicPortalConfig(){
+  try{
+    const res=await portalJsonp({acao:'portal_public_config'},12000);
+    if(!res?.sucesso||!res.config)return false;
+    const local=getAdminConfig();
+    const merged={...local,...res.config};
+    localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(merged));
+    refreshSectorSelectors();
+    try{refreshLoginSectorByUnit()}catch(e){}
+    return true;
+  }catch(e){
+    console.warn('Não foi possível carregar a configuração central antes do login.',e);
+    return false;
+  }
 }
 
 function findKnownUserByNameSector(name,sector){
@@ -6637,6 +6715,15 @@ async function loginUser(){
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
+    // Fonte oficial compartilhada: após autenticar, sempre atualiza este navegador pela base central.
+    setTimeout(async()=>{
+      try{
+        await syncPortalBackend(false);
+        refreshSectorSelectors();
+        try{populateTriageSectors()}catch(e){}
+        try{render()}catch(e){}
+      }catch(e){console.warn('Sincronização pós-login falhou:',e)}
+    },250);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
     if(session.role==='admin'){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
@@ -17862,6 +17949,10 @@ html,body{max-width:100%;overflow-x:hidden!important}
   function init(){addPasswordEyes(document);new MutationObserver(function(){addPasswordEyes(document)}).observe(document.body,{childList:true,subtree:true});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+// Carrega a configuração compartilhada antes do login para que setores novos/renomeados
+// apareçam também em navegadores que nunca abriram o NÚCLEO antes.
+window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>syncPublicPortalConfig(),50)});
 </script>
 
 <style id="assigned-ro-cleanup-v2">
