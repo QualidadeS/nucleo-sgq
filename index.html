@@ -10367,8 +10367,32 @@ function findRoByAnyNumber(value,originHint){
   return matches.length===1?matches[0]:null;
 }
 
-function triageKeyOf(ro){
+function triageBaseRoNumber(ro){
   return String(ro?.numero||ro?.id||ro?.codigo||'').trim();
+}
+function triageSectorPart(value){
+  return String(value||'').trim().replace(/::/g,'-');
+}
+function triageCompositeKey(roNumber,sector){
+  const base=String(roNumber||'').trim();
+  const sec=triageSectorPart(sector);
+  return sec ? `${base}::${sec}` : base;
+}
+function triageKeyOf(ro){
+  const base=triageBaseRoNumber(ro);
+  const explicit=String(ro?.__triageKey||ro?.triageKey||'').trim();
+  if(explicit)return explicit;
+  // Linhas duplicadas vindas da planilha passam a ser independentes por setor causa.
+  const sector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
+  return sector ? triageCompositeKey(base,sector) : base;
+}
+function getTriageRecordsForRoNumber(roNumber,map=getSavedTriageMap()){
+  const base=String(roNumber||'').trim();
+  return [...map.values()].filter(t=>String(t?.roNumber||String(t?.roKey||'').split('::')[0]||'').trim()===base);
+}
+function getTriageRecordForRoSector(roNumber,sector,map=getSavedTriageMap()){
+  const composite=triageCompositeKey(roNumber,sector);
+  return map.get(composite)||map.get(String(roNumber||'').trim())||null;
 }
 
 function getSavedTriageMap(){
@@ -10661,15 +10685,24 @@ function usersBySector(sector){
     .filter(u=>normalizeAnswer(u.sector||'')===wanted)
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
+function selectedTriageSectors(){
+  return [...document.querySelectorAll('#triageResponsibleSectors input[type="checkbox"]:checked')].map(x=>x.value).filter(Boolean);
+}
 function refreshTriageResponsibleUsers(selectedEmail){
-  const sector=document.getElementById('triageResponsibleSector')?.value||'';
+  const sectors=selectedTriageSectors();
   const sel=document.getElementById('triageResponsibleUser');
   if(!sel)return;
-  const users=usersBySector(sector);
-  sel.innerHTML='<option value="">Todo o setor</option>'+
-    users.map(u=>`<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</option>`).join('');
+  if(sectors.length!==1){
+    sel.innerHTML='<option value="">Todo o setor</option>';
+    sel.disabled=true;
+    return;
+  }
+  sel.disabled=false;
+  const users=usersBySector(sectors[0]);
+  sel.innerHTML='<option value="">Todo o setor</option>'+users.map(u=>`<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} · ${escapeHtml(u.email)}</option>`).join('');
   if(selectedEmail && [...sel.options].some(o=>o.value===selectedEmail))sel.value=selectedEmail;
 }
+
 function userMatchesDirectedPerson(tri){
   const email=String(tri?.responsibleUserEmail||'').trim().toLowerCase();
   const name=normalizeAnswer(tri?.responsibleUserName||'');
@@ -10745,18 +10778,12 @@ function openTriageRecord(id){
   document.getElementById('triageClassification').value=tri.classification||'';
   populateTriageRoUnit(ro.unidade||'');
 
-  const sectorSel=document.getElementById('triageResponsibleSector');
+  const sectorBox=document.getElementById('triageResponsibleSectors');
   const sectors=getConfiguredSectorsForTriage();
-  sectorSel.innerHTML='<option value="">Selecione...</option>'+
-    sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  const triSector=String(tri.responsibleSector||'').trim();
-  const triSectorNorm=normalizeAnswer(triSector);
-  const validTriSector=triSector && !['nao direcionado','nao informado','sem setor','-'].includes(triSectorNorm);
-  if(validTriSector && !sectors.includes(triSector)){
-    sectorSel.innerHTML+=`<option value="${escapeHtml(triSector)}">${escapeHtml(triSector)}</option>`;
-  }
-  sectorSel.value=validTriSector?triSector:'';
-  refreshTriageResponsibleUsers(tri.responsibleUserEmail||'');
+  const existingForRo=getTriageRecordsForRoNumber(wanted);
+  const selectedSectors=new Set((existingForRo.length?existingForRo.map(x=>x.responsibleSector):[tri.responsibleSector]).filter(Boolean));
+  sectorBox.innerHTML=sectors.map(sec=>`<label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" value="${escapeHtml(sec)}" ${selectedSectors.has(sec)?'checked':''} onchange="refreshTriageResponsibleUsers()"> <span>${escapeHtml(sec)}</span></label>`).join('');
+  refreshTriageResponsibleUsers(existingForRo.length===1?existingForRo[0].responsibleUserEmail||'':'');
 
   document.getElementById('triageNote').value=tri.note||'';
 
@@ -10826,8 +10853,9 @@ async function saveTriageRecord(){
   const decision=document.getElementById('triageDecision').value;
   const classification=document.getElementById('triageClassification').value.trim();
   const roUnitValue=canonicalUnitName(document.getElementById('triageRoUnit')?.value||'');
-  const responsibleSector=document.getElementById('triageResponsibleSector').value.trim();
-  const responsibleUserEmail=(document.getElementById('triageResponsibleUser')?.value||'').trim().toLowerCase();
+  const responsibleSectors=selectedTriageSectors();
+  const responsibleSector=responsibleSectors[0]||'';
+  const responsibleUserEmail=(responsibleSectors.length===1?(document.getElementById('triageResponsibleUser')?.value||''):'').trim().toLowerCase();
   const responsibleUser=responsibleUserEmail
     ? getOperationalUsers().find(u=>String(u.email||'').trim().toLowerCase()===responsibleUserEmail)
     : null;
@@ -10840,8 +10868,8 @@ async function saveTriageRecord(){
     alert('Selecione a unidade da R.O.');
     return;
   }
-  if(decision==='directed'&&!responsibleSector){
-    alert('Selecione o setor responsável pela tratativa.');
+  if(decision==='directed'&&!responsibleSectors.length){
+    alert('Selecione pelo menos um setor responsável pela tratativa.');
     return;
   }
   if(['record','cancelled','obsolete'].includes(decision) && !note){
@@ -10851,24 +10879,29 @@ async function saveTriageRecord(){
   }
 
   const map=getSavedTriageMap();
-  map.set(key,{
-    roKey:key,
-    decision,
-    classification,
-    responsibleSector:decision==='directed'?responsibleSector:'',
-    responsibleUserEmail:decision==='directed'?responsibleUserEmail:'',
-    responsibleUserName:decision==='directed'?responsibleUserName:'',
-    pdcaRequired:decision==='directed',
-    pdcaDeadline:decision==='directed'?pdcaDeadline:'',
-    criticality,
-    note,
-    triagedAt:new Date().toISOString(),
-    triagedBy:getSession()?.name||'SGQ'
-  });
-
+  const roNumber=String(key).split('::')[0];
+  // Remove direcionamentos anteriores desta mesma R.O.; a seleção atual passa a ser a fonte de verdade.
+  getTriageRecordsForRoNumber(roNumber,map).forEach(old=>map.delete(String(old.roKey||'')));
+  const targetSectors=decision==='directed'?responsibleSectors:[''];
+  const savedRecords=[];
+  for(const sec of targetSectors){
+    const recordKey=decision==='directed'?triageCompositeKey(roNumber,sec):roNumber;
+    const record={
+      roKey:recordKey,roNumber,
+      decision,classification,
+      responsibleSector:decision==='directed'?sec:'',
+      responsibleUserEmail:decision==='directed'&&responsibleSectors.length===1?responsibleUserEmail:'',
+      responsibleUserName:decision==='directed'&&responsibleSectors.length===1?responsibleUserName:'',
+      pdcaRequired:decision==='directed',pdcaDeadline:decision==='directed'?pdcaDeadline:'',criticality,note,
+      triagedAt:new Date().toISOString(),triagedBy:getSession()?.name||'SGQ'
+    };
+    map.set(recordKey,record);savedRecords.push(record);
+  }
+  // Só confirma visualmente depois que a base central aceitar todos os vínculos.
+  for(const record of savedRecords){
+    if(portalBackendEnabled()) await portalBackendSaveConfirmed('triage',record.roKey,record);
+  }
   localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
-  const savedTriageRecord=map.get(key);
-  if(savedTriageRecord)portalBackendSave('triage',key,savedTriageRecord);
 
   updateRoUnitLocal(key,roUnitValue);
 
@@ -10903,7 +10936,7 @@ async function saveTriageRecord(){
       emailResult=await portalJsonp({
         acao:'portal_send_directed_ro_email',
         ro:key,
-        setor:responsibleSector,
+        setor:responsibleSectors.join(' | '),
         email:responsibleUserEmail||'',
         unidade:triageRo.unidade||roUnitValue||'',
         tipoRO:triageRo.tipoRO||triageRo.tipo||'',
@@ -10911,7 +10944,7 @@ async function saveTriageRecord(){
         registrante:triageRo.registrante||'',
         mensagem:responsibleUserEmail
           ? ('A '+key+' foi direcionada para '+(responsibleUserName||responsibleUserEmail)+' em '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.')
-          : ('A '+key+' foi direcionada para '+responsibleSector+'. É necessário analisar a ocorrência e responder o PDCA.')
+          : ('A '+key+' foi direcionada para '+responsibleSectors.join(', ')+'. É necessário analisar a ocorrência e responder o PDCA.')
       },45000);
       try{await refreshEmailHistory()}catch(_){ }
     }catch(emailErr){
@@ -13016,9 +13049,12 @@ function sameSector(sector){
 
 function getRoTriageRecord(ro){
   try{
-    const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
-    if(!key)return null;
-    return getSavedTriageMap().get(key)||null;
+    if(ro?.__triageRecord)return ro.__triageRecord;
+    const base=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
+    if(!base)return null;
+    const map=getSavedTriageMap();
+    const sector=String(ro?.__assignedSector||ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
+    return getTriageRecordForRoSector(base,sector,map)||getTriageRecordsForRoNumber(base,map)[0]||null;
   }catch(e){return null}
 }
 
@@ -15688,8 +15724,9 @@ function pdcaSituationLabel(ro){
   if(['Cancelada','Somente para registro'].includes(status))return 'Não se aplica';
   return 'PDCA necessário';
 }
-async function setExternalPdca(numero,hasExternal){
-  const ro=ros.find(r=>String(r.numero||r.id||r.codigo||'')===String(numero));
+async function setExternalPdca(numero,hasExternal,sector=''){
+  const base=ros.find(r=>String(r.numero||r.id||r.codigo||'')===String(numero));
+  const ro=base?{...base,__assignedSector:sector,__triageRecord:getTriageRecordForRoSector(numero,sector)}:null;
   if(!ro){alert('R.O. não encontrada.');return;}
   if(!isAdmin()){alert('Somente o SGQ pode alterar a situação do PDCA.');return;}
 
@@ -15768,7 +15805,13 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
 
-  const list=ros
+  const assignedSource = roListMode==='assigned' ? ros.flatMap(r=>{
+    const base=String(r.numero||r.id||r.codigo||'').trim();
+    const records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='');
+    if(!records.length)return [r];
+    return records.map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
+  }) : ros;
+  const list=assignedSource
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
       const tri=getRoTriageRecord(r);
@@ -15836,7 +15879,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     }
 
     const statusControl = admin && !noPdca && displayStatus==='Pendente'
-      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)">✓ Temos PDCA</button></div>`
+      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">✓ Temos PDCA</button></div>`
       : `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span>`;
 
     return `<tr>
@@ -17570,9 +17613,9 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
 
         <div class="field" id="triageSectorField">
-          <div class="label">Setor responsável *</div>
-          <select id="triageResponsibleSector" onchange="refreshTriageResponsibleUsers()"></select>
-          <div class="small" style="margin-top:5px">O setor sempre fica vinculado à R.O.</div>
+          <div class="label">Setores responsáveis *</div>
+          <div id="triageResponsibleSectors" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;border:1px solid #dfe7e4;border-radius:10px;padding:10px;max-height:190px;overflow:auto"></div>
+          <div class="small" style="margin-top:5px">Pode selecionar um ou mais setores. Cada setor vira um direcionamento independente da mesma R.O.</div>
         </div>
 
         <div class="field" id="triageUserField">
