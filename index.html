@@ -4830,6 +4830,18 @@ async function portalBackendSaveConfirmed(collection,id,data){
   return res;
 }
 
+async function portalBackendDeleteConfirmed(collection,id){
+  if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+  const res=await portalJsonp({
+    acao:'portal_delete',
+    colecao:String(collection||''),
+    id:String(id||''),
+    ator:getSession()?.name||'Sistema'
+  },30000);
+  if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a exclusão do registro anterior.');
+  return res;
+}
+
 function portalBackendDelete(collection,id){
   if(!portalBackendEnabled())return false;
   const params={acao:'portal_delete',colecao:collection,id:String(id||''),ator:getSession()?.name||'Sistema'};
@@ -10973,6 +10985,21 @@ async function saveTriageRecord(){
       await portalBackendSaveConfirmed('triage',record.roKey,record);
     }
   }
+
+  // Se um setor foi alterado pelo lápis, a chave antiga (RO::setor-antigo)
+  // também precisa sair da base central. Caso contrário o próximo portal_load
+  // traz o direcionamento antigo de volta e a tela parece "se desatualizar".
+  const newKeys=new Set(savedRecords.map(r=>String(r.roKey||'')));
+  const obsoleteKeys=previousRecords
+    .map(r=>String(r.roKey||''))
+    .filter(oldKey=>oldKey && !newKeys.has(oldKey));
+  for(const oldKey of obsoleteKeys){
+    if(portalBackendEnabled()){
+      updateNucleoLoading('Removendo o direcionamento anterior da base central...','Processando');
+      await portalBackendDeleteConfirmed('triage',oldKey);
+    }
+  }
+
   localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
 
   updateRoUnitLocal(key,roUnitValue);
@@ -11464,14 +11491,14 @@ function nucleoAutoSyncIfDue(force=false){
   try{
     if(!getSession()?.authToken||document.visibilityState==='hidden'||portalBackendSyncInProgress)return;
     const now=Date.now();
-    if(!force && now-__nucleoLastAutoSyncAttempt<45000)return;
+    if(!force && now-__nucleoLastAutoSyncAttempt<300000)return;
     __nucleoLastAutoSyncAttempt=now;
     syncPortalBackend(false);
   }catch(e){}
 }
 function startNucleoCentralRefresh(){
   try{clearInterval(__nucleoCentralRefreshTimer)}catch(e){}
-  __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),60000);
+  __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),300000);
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoAutoSyncIfDue(false)});
 window.addEventListener('focus',()=>nucleoAutoSyncIfDue(false));
