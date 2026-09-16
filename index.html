@@ -17320,14 +17320,11 @@ async function finishPDCA(){
   }
 }
 async function syncNow(){
-  if(!isAdmin()){
-    alert('A sincronização manual é restrita aos administradores.');
-    return;
-  }
+  // Sincronizar é uma ação operacional: qualquer usuário autenticado pode executar.
+  // Links, chave, regras e período continuam protegidos na Administração.
+  const s=getSavedIntegrationSettings();
+  await showNucleoLoading('Buscando '+integrationPeriodLabel(s)+' nas abas Interna e Externa...','Sincronizando com a planilha');
 
-  await showNucleoLoading('Buscando '+integrationPeriodLabel(getSavedIntegrationSettings())+' nas abas Interna e Externa...','Sincronizando com a planilha');
-
-  const s=saveIntegrationSettings(true);
   if(!s.apiUrl){
     syncMsg.textContent='Configure primeiro a URL do Web App/API em Administração.';
     syncMsg.className='statusline';
@@ -18001,6 +17998,64 @@ html,body{max-width:100%;overflow-x:hidden!important}
 // Carrega a configuração compartilhada antes do login para que setores novos/renomeados
 // apareçam também em navegadores que nunca abriram o NÚCLEO antes.
 window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>syncPublicPortalConfig(),50)});
+
+
+/* NÚCLEO UX — feedback automático para esperas iniciadas pelo usuário.
+   Não interfere nas sincronizações silenciosas/background. */
+(function installUserActionLoadingFeedback(){
+  if(window.__nucleoUserActionLoadingInstalled)return;
+  window.__nucleoUserActionLoadingInstalled=true;
+
+  function userStartedThis(){
+    try{return !!(navigator.userActivation && navigator.userActivation.isActive)}catch(e){return false}
+  }
+  function begin(label){
+    if(!userStartedThis())return false;
+    try{showNucleoLoading(label||'Processando sua solicitação...','Aguarde');return true}catch(e){return false}
+  }
+  function end(active){
+    if(!active)return;
+    try{hideNucleoLoading()}catch(e){}
+  }
+
+  // Requisições HTTP disparadas por clique/ação do usuário.
+  if(typeof window.fetch==='function' && !window.fetch.__nucleoWrapped){
+    const nativeFetch=window.fetch.bind(window);
+    const wrapped=function(){
+      const active=begin('Comunicando com a base central...');
+      let result;
+      try{result=nativeFetch.apply(null,arguments)}catch(err){end(active);throw err}
+      return Promise.resolve(result).finally(()=>end(active));
+    };
+    wrapped.__nucleoWrapped=true;
+    window.fetch=wrapped;
+  }
+
+  // JSONP do portal (login, cadastro e ações da base central).
+  if(typeof window.portalJsonp==='function' && !window.portalJsonp.__nucleoWrapped){
+    const nativePortalJsonp=window.portalJsonp;
+    const wrappedPortal=function(){
+      const active=begin('Processando na base central...');
+      let result;
+      try{result=nativePortalJsonp.apply(this,arguments)}catch(err){end(active);throw err}
+      return Promise.resolve(result).finally(()=>end(active));
+    };
+    wrappedPortal.__nucleoWrapped=true;
+    window.portalJsonp=wrappedPortal;
+  }
+
+  if(typeof window.jsonpRequest==='function' && !window.jsonpRequest.__nucleoWrapped){
+    const nativeJsonp=window.jsonpRequest;
+    const wrappedJsonp=function(){
+      const active=begin('Sincronizando dados...');
+      let result;
+      try{result=nativeJsonp.apply(this,arguments)}catch(err){end(active);throw err}
+      return Promise.resolve(result).finally(()=>end(active));
+    };
+    wrappedJsonp.__nucleoWrapped=true;
+    window.jsonpRequest=wrappedJsonp;
+  }
+})();
 </script>
 
 <style id="assigned-ro-cleanup-v2">
