@@ -10710,6 +10710,8 @@ function nextTuesdayIsoDate(fromDate=new Date()){
 }
 
 async function saveTriageRecord(){
+  await showNucleoLoading('Salvando triagem e processando ações...','Processando');
+  try{
   const key=currentTriageRoId;
   if(!key)return;
 
@@ -10789,6 +10791,7 @@ async function saveTriageRecord(){
     const triageRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'')===String(key))||{};
     let emailResult=null;
     try{
+      updateNucleoLoading('Enviando e-mail e registrando no histórico...','Processando');
       emailResult=await portalJsonp({
         acao:'portal_send_directed_ro_email',
         ro:key,
@@ -10839,6 +10842,9 @@ async function saveTriageRecord(){
       alert(emailResult?.sucesso ? ('Triagem salva e e-mail enviado para '+(emailResult.enviados||[]).length+' destinatário(s) de '+responsibleSector+'.') : ('Triagem salva, mas o e-mail NÃO foi enviado. Motivo: '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado')));
     }
     if(responsibleUserEmail)notifyManagersOfDirectedRo(key,responsibleSector,triageRo,responsibleUserName);
+  }
+  } finally {
+    hideNucleoLoading();
   }
 }
 
