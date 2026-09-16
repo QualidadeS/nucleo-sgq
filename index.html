@@ -10378,6 +10378,11 @@ function triageCompositeKey(roNumber,sector){
   const sec=triageSectorPart(sector);
   return sec ? `${base}::${sec}` : base;
 }
+function triageDisplayRoNumber(value){
+  // A parte após :: é uma chave técnica para diferenciar a mesma R.O. por setor.
+  // Nunca deve aparecer na interface.
+  return String(value||'').trim().split('::')[0];
+}
 function triageKeyOf(ro){
   const base=triageBaseRoNumber(ro);
   const explicit=String(ro?.__triageKey||ro?.triageKey||'').trim();
@@ -10641,7 +10646,7 @@ function renderTriage(){
     const decision=triageDecisionLabel(r.triagemStatus);
 
     return `<tr>
-      <td><b>${escapeHtml(key||'-')}</b></td>
+      <td><b>${escapeHtml(triageDisplayRoNumber(key)||'-')}</b></td>
       <td>${escapeHtml(r.cliente||r.origem||'-')}</td>
       <td>${escapeHtml(r.tipoRO||r.assunto||r.tipo||'-')}</td>
       <td>${escapeHtml(decision)}</td>
