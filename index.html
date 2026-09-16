@@ -4771,7 +4771,7 @@ function portalJsonp(params,timeoutMs=15000){
     script.async=true;
     script.src=base+'?'+parts.join('&');
     script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar o retorno do login.'));
-    const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas o callback do login não retornou em 15 segundos.')),timeoutMs);
+    const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas não devolveu a confirmação ao aplicativo dentro do tempo limite.')),timeoutMs);
 
     document.head.appendChild(script);
   });
@@ -4825,7 +4825,7 @@ async function portalBackendSaveConfirmed(collection,id,data){
     id:String(id||''),
     dados:JSON.stringify(data||{}),
     ator:getSession()?.name||'Sistema'
-  },30000);
+  },60000);
   if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou o salvamento.');
   return res;
 }
@@ -10409,6 +10409,9 @@ function triageCompositeKey(roNumber,sector){
   const sec=triageSectorPart(sector);
   return sec ? `${base}::${sec}` : base;
 }
+function triageRoNumberPart(value){
+  return String(value||'').trim().split('::')[0];
+}
 function triageDisplayRoNumber(value){
   // A parte após :: é uma chave técnica para diferenciar a mesma R.O. por setor.
   // Nunca deve aparecer na interface.
@@ -15907,7 +15910,21 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const base=String(r.numero||r.id||r.codigo||'').trim();
     const records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='');
     if(!records.length)return [r];
-    return records.map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
+    // Uma linha visual por R.O. + setor. Registros legados/duplicados não podem
+    // reaparecer como uma segunda linha após atualizar o PDCA.
+    const bySector=new Map();
+    records.forEach(t=>{
+      const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
+      const visualKey=triageCompositeKey(base,sector||'__sem_setor__');
+      const prev=bySector.get(visualKey);
+      const score=x=>{
+        const composite=String(x?.roKey||'').includes('::')?10000000000000:0;
+        const ts=Date.parse(x?.pdcaExternalUpdatedAt||x?.updatedAt||x?.triagedAt||x?.createdAt||'')||0;
+        return composite+ts;
+      };
+      if(!prev||score(t)>=score(prev))bySector.set(visualKey,t);
+    });
+    return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
   }) : ros;
   const list=assignedSource
     .filter(r=>{
@@ -15983,7 +16000,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
       <td>${escapeHtml(r.unidade||'')}</td>
-      <td><div style="display:flex;align-items:center;gap:7px"><span>${escapeHtml(responsibleSector)}</span>${admin&&tri?.roKey?`<button class="ro-eye-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa" style="font-size:14px">✎</button>`:''}</div></td>
+      <td><div style="display:flex;align-items:center;gap:7px"><span>${escapeHtml(responsibleSector)}</span>${admin&&tri?.roKey?`<button class="ro-eye-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa" style="font-size:14px">✎</button><button class="ro-eye-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento" style="font-size:14px">🗑</button>`:''}</div></td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r))}</td>
       <td>${statusControl}</td>
@@ -15996,6 +16013,31 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   document.querySelectorAll('.operational-action-col').forEach(el=>{
     el.style.display=admin?'none':'';
   });
+}
+
+async function deleteAssignedDirection(triageKey){
+  if(!isAdmin()){alert('Somente o SGQ pode excluir direcionamentos.');return;}
+  const key=String(triageKey||'').trim();
+  if(!key)return;
+  const map=getSavedTriageMap();
+  const tri=map.get(key);
+  if(!tri){alert('Este direcionamento não foi encontrado. Sincronize e tente novamente.');return;}
+  const ro=triageRoNumberPart(key);
+  const sector=String(tri.responsibleSector||tri.setorDirecionado||'').trim();
+  if(!confirm(`Excluir o direcionamento ${ro}${sector?' • '+sector:''}?\n\nUse esta opção para remover linhas duplicadas ou direcionamentos criados por engano.`))return;
+  try{
+    await withNucleoLoading('Excluindo direcionamento...',async()=>{
+      if(portalBackendEnabled())await portalBackendDeleteConfirmed('triage',key);
+      map.delete(key);
+      try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
+      render();
+      try{renderCurrentOverview()}catch(e){}
+    },'Excluindo direcionamento');
+    alert('Direcionamento excluído.');
+  }catch(err){
+    console.error('[NUCLEO EXCLUIR DIRECIONAMENTO]',err);
+    alert('Não foi possível excluir o direcionamento. '+(err?.message||err||''));
+  }
 }
 
 function openAssignedSectorEdit(triageKey){
