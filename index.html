@@ -2683,9 +2683,9 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
     <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
     <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
-    <select id="filter" onchange="render()"><option value="todas">Todos os status</option><option value="ro_enviada">R.O. enviada</option><option value="pdca_respondido">PDCA respondido</option><option value="pdca_apresentado">PDCA apresentado</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
+    <select id="filter" onchange="render()"><option value="todas">Todos os status</option><option value="pendente">Pendente</option><option value="pdca_externo">PDCA externo</option><option value="pdca_respondido">PDCA respondido</option><option value="pdca_apresentado">PDCA apresentado</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
   </div>
-  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th aria-label="Visualizar R.O."></th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
 </section>
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -15610,12 +15610,16 @@ async function setExternalPdca(numero,hasExternal){
 function assignedRoStatus(r){
   const raw=String(r?.status||'').trim().toLowerCase();
   const pdca=String(r?.pdca||'').trim().toLowerCase();
+  const tri=getRoTriageRecord(r)||{};
   if(raw.includes('cancel')) return 'Cancelada';
   if(raw.includes('obsolet')) return 'Obsoleto';
   if(raw.includes('registro') || raw.includes('somente para registro')) return 'Registro';
   if(raw.includes('apresent')) return 'PDCA apresentado';
-  if(raw.includes('pdca enviado') || pdca==='enviado' || pdca.includes('respond')) return 'PDCA respondido';
-  return 'R.O. enviada';
+  if(tri.pdcaExternal===true) return 'PDCA externo';
+  // Só considera respondido quando a triagem já registrou que o PDCA era necessário
+  // e houve envio pelo portal. Registros antigos não são promovidos automaticamente.
+  if(tri.pdcaRequired===true && (raw.includes('pdca enviado') || pdca==='enviado' || pdca.includes('respond'))) return 'PDCA respondido';
+  return 'Pendente';
 }
 
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
@@ -15654,7 +15658,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       }
       const text=(r.numero+" "+r.cliente+" "+(r.origemBase||'')).toLowerCase().includes(q);
       const displayStatus=assignedRoStatus(r);
-      const statusKey={'R.O. enviada':'ro_enviada','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'ro_enviada';
+      const statusKey={'Pendente':'pendente','PDCA externo':'pdca_externo','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'pendente';
       const filt=f==='todas'||f===statusKey;
       return text&&filt;
     });
@@ -15696,11 +15700,9 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       operationalActions='<td class="operational-action-col" style="display:none"></td>';
     }
 
-    const adminPdcaControl=admin && !noPdca ? `<div class="pdca-source-control">
-      <span class="${externalPdca?'badge ok':alreadySent?'badge ok':'badge warn'}">${escapeHtml(pdcaSituation)}</span>
-      <button class="btn secondary ${externalPdca?'is-selected':''}" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)" ${externalPdca?'disabled':''}>Temos PDCA externo</button>
-      <button class="btn secondary ${!externalPdca&&!alreadySent?'is-selected':''}" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',false)" ${!externalPdca&&!alreadySent?'disabled':''}>Não temos PDCA</button>
-    </div>` : `<span class="${externalPdca?'badge ok':alreadySent?'badge ok':noPdca?'badge off':'badge warn'}">${escapeHtml(pdcaSituation)}</span>`;
+    const statusControl = admin && !noPdca && displayStatus==='Pendente'
+      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)">✓ Temos PDCA</button></div>`
+      : `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span>`;
 
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
@@ -15708,10 +15710,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(r.prazo||'—')}</td>
-      <td><span class="${badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span></td>
-      <td>${adminPdcaControl}</td>
-      <td><span class="${externalPdca?'badge ok':r.pdca==='Obrigatório'?'badge':r.pdca==='Suspenso'?'badge warn':r.pdca==='Enviado'?'badge ok':'badge off'}">${escapeHtml(externalPdca?'PDCA externo':(r.pdca||''))}</span></td>
-      <td><button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')">Visualizar R.O.</button></td>
+      <td>${statusControl}</td>
+      <td class="ro-eye-cell"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button></td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -17863,4 +17863,19 @@ html,body{max-width:100%;overflow-x:hidden!important}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 </script>
+
+<style id="assigned-ro-cleanup-v2">
+.ro-control-table{width:100%;table-layout:auto}
+.ro-control-table th,.ro-control-table td{vertical-align:middle}
+.ro-control-table th:nth-child(1),.ro-control-table td:nth-child(1){white-space:nowrap;width:9%}
+.ro-control-table th:nth-child(2),.ro-control-table td:nth-child(2){width:18%}
+.ro-control-table th:nth-child(3),.ro-control-table td:nth-child(3){width:20%}
+.ro-control-table th:nth-child(4),.ro-control-table td:nth-child(4){white-space:nowrap;width:9%}
+.ro-control-table th:nth-child(5),.ro-control-table td:nth-child(5){white-space:nowrap;width:8%}
+.ro-control-table th:nth-child(6),.ro-control-table td:nth-child(6){width:30%}
+.ro-control-table th:nth-child(7),.ro-control-table td:nth-child(7){width:6%;text-align:center}
+.ro-eye-btn{border:0;background:transparent;cursor:pointer;font-size:20px;line-height:1;padding:7px 9px;border-radius:8px}
+.ro-eye-btn:hover{background:#eef4f8}
+.pdca-source-control{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+</style>
 </body></html>
