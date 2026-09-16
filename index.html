@@ -10984,6 +10984,7 @@ async function saveTriageRecord(){
     const recordKey=decision==='directed'?triageCompositeKey(roNumber,sec):roNumber;
     const record={
       roKey:recordKey,roNumber,
+      unidade:roUnitValue,unit:roUnitValue,roUnit:roUnitValue,
       decision,classification,
       responsibleSector:decision==='directed'?sec:'',
       responsibleUserEmail:decision==='directed'?assignmentEmail:'',
@@ -11035,6 +11036,16 @@ async function saveTriageRecord(){
   localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
 
   updateRoUnitLocal(key,roUnitValue);
+
+  // Atualiza imediatamente a fonte importada depois de editar setor. Sem isso,
+  // a tela ainda podia usar o setor antigo mantido no cache até a próxima
+  // sincronização manual/automática.
+  try{
+    updateNucleoLoading('Atualizando a visualização com os dados gravados...','Processando');
+    await syncImportedRosFromConfiguredSources({silent:true,force:true});
+  }catch(syncErr){
+    console.warn('[NUCLEO TRIAGEM] setor foi salvo, mas a releitura imediata falhou',syncErr);
+  }
 
   closeTriageModal();
   populateTriageSectors();
@@ -16075,10 +16086,16 @@ async function deleteAssignedDirection(triageKey){
   if(!tri){alert('Este direcionamento não foi encontrado. Sincronize e tente novamente.');return;}
   const ro=triageRoNumberPart(key);
   const sector=String(tri.responsibleSector||tri.setorDirecionado||'').trim();
-  if(!confirm(`Excluir o direcionamento ${ro}${sector?' • '+sector:''}?\n\nUse esta opção para remover linhas duplicadas ou direcionamentos criados por engano.`))return;
+  if(!confirm(`Remover esta linha duplicada da visualização?\n\n${ro}${sector?' • '+sector:''}\n\nO direcionamento e a planilha original serão preservados.`))return;
   try{
-    await withNucleoLoading('Excluindo direcionamento...',async()=>{
-      if(portalBackendEnabled())await portalBackendDeleteConfirmed('triage',key);
+    await withNucleoLoading('Removendo duplicata da visualização...',async()=>{
+      if(portalBackendEnabled()){
+        // A lixeira desta tela serve apenas para limpar uma duplicata visual.
+        // NUNCA altere a planilha original nem apague o direcionamento operacional.
+        // Removemos somente o registro duplicado da coleção de triagens; a chave
+        // fica marcada para que a importação da planilha não o recrie automaticamente.
+        await portalBackendDeleteConfirmed('triage',key);
+      }
       const deletedKeys=getDeletedTriageKeys();
       deletedKeys.add(key);
       saveDeletedTriageKeys(deletedKeys);
@@ -16086,11 +16103,11 @@ async function deleteAssignedDirection(triageKey){
       try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
       render();
       try{renderCurrentOverview()}catch(e){}
-    },'Excluindo direcionamento');
-    alert('Direcionamento excluído.');
+    },'Removendo duplicata');
+    alert('Duplicata removida da visualização. O direcionamento foi preservado.');
   }catch(err){
     console.error('[NUCLEO EXCLUIR DIRECIONAMENTO]',err);
-    alert('Não foi possível excluir o direcionamento. '+(err?.message||err||''));
+    alert('Não foi possível remover a duplicata da visualização. '+(err?.message||err||''));
   }
 }
 
