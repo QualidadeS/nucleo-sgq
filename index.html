@@ -2677,7 +2677,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
   <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
 </div>
-<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><table><thead><tr><th>R.O.</th><th>Unidade</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table>
+<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><table><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table>
 </section>
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -6893,7 +6893,7 @@ function saveOwnProfile(){
   alert('Seus dados foram atualizados.');
   showProfile();
 }
-function changeOwnPassword(){
+async function changeOwnPassword(){
   const s=getSession();
   if(!s){alert('Sua sessão não está ativa. Entre novamente.');return}
 
@@ -6901,48 +6901,41 @@ function changeOwnPassword(){
   const next=document.getElementById('profileNewPassword')?.value||'';
   const next2=document.getElementById('profileNewPassword2')?.value||'';
 
-  if(!current||!next||!next2){
-    alert('Preencha a senha atual, a nova senha e a confirmação.');
-    return;
-  }
-  if(next.length<4){
-    alert('A nova senha precisa ter pelo menos 4 caracteres neste protótipo.');
-    return;
-  }
-  if(next!==next2){
-    alert('A confirmação da nova senha não coincide.');
-    return;
-  }
+  if(!current||!next||!next2){alert('Preencha a senha atual, a nova senha e a confirmação.');return}
+  if(next.length<4){alert('A nova senha precisa ter pelo menos 4 caracteres.');return}
+  if(next!==next2){alert('A confirmação da nova senha não coincide.');return}
+  if(current===next){alert('A nova senha precisa ser diferente da senha atual.');return}
 
-  const users=getOperationalUsers();
-  const idx=users.findIndex(u=>String(u.email||'').trim().toLowerCase()===String(s.email||'').trim().toLowerCase());
-  if(idx<0){alert('Não encontrei seu cadastro.');return}
-  if(String(users[idx].password||'')!==current){
-    alert('A senha atual está incorreta.');
-    return;
-  }
-  if(current===next){
-    alert('A nova senha precisa ser diferente da senha atual.');
-    return;
-  }
+  nucleoLoadingShow('Alterando sua senha...');
+  try{
+    const remote=await portalJsonp({
+      acao:'portal_change_own_password',
+      currentPassword:current,
+      newPassword:next
+    },20000);
+    if(!remote || remote.sucesso!==true){
+      throw new Error((remote&&remote.erro)||'Não foi possível alterar a senha.');
+    }
 
-  users[idx]={
-    ...users[idx],
-    password:next,
-    passwordChangedAt:new Date().toISOString(),
-    passwordChangedBy:s.name||s.email||'Usuário'
-  };
-  localStorage.setItem(USERS_KEY,JSON.stringify(users));
-  portalBackendSave('users',users[idx].email||users[idx].name,users[idx]);
-  addPortalAuditEvent('alterar_propria_senha',users[idx].email||users[idx].name,{
-    name:users[idx].name,
-    role:users[idx].role||'operational'
-  });
+    // Atualiza apenas o cache local, se o cadastro estiver disponível. A base central é a fonte de verdade.
+    try{
+      const users=getOperationalUsers();
+      const norm=v=>String(v||'').trim().toLowerCase();
+      let idx=users.findIndex(u=>norm(u.email)===norm(s.email));
+      if(idx<0) idx=users.findIndex(u=>norm(u.name)===norm(s.name)&&norm(u.sector)===norm(s.sector));
+      if(idx>=0){
+        users[idx]={...users[idx],password:next,passwordChangedAt:new Date().toISOString(),passwordChangedBy:s.name||s.email||'Usuário'};
+        localStorage.setItem(USERS_KEY,JSON.stringify(users));
+      }
+    }catch(cacheErr){console.warn('Senha alterada na base central; cache local não pôde ser atualizado.',cacheErr)}
 
-  ['profileCurrentPassword','profileNewPassword','profileNewPassword2'].forEach(id=>{
-    const el=document.getElementById(id);if(el)el.value='';
-  });
-  alert('Senha alterada com sucesso.');
+    ['profileCurrentPassword','profileNewPassword','profileNewPassword2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    alert('Senha alterada com sucesso.');
+  }catch(err){
+    alert('Não foi possível alterar a senha. Motivo: '+(err&&err.message?err.message:String(err)));
+  }finally{
+    nucleoLoadingHide();
+  }
 }
 
 
@@ -12927,8 +12920,14 @@ function getOperationalRoView(ro){
     copy.setorResponsavel=tri.responsibleSector||'';
     copy.setor=tri.responsibleSector||'';
     copy.prazo=tri.pdcaDeadline||copy.prazo||'—';
-    copy.status='Aguardando resposta';
-    copy.pdca='Obrigatório';
+    if(tri.pdcaExternal===true || String(tri.pdcaSource||'').toLowerCase()==='external'){
+      copy.status='PDCA externo';
+      copy.pdca='PDCA externo';
+      copy.prazo='—';
+    }else{
+      copy.status='Aguardando resposta';
+      copy.pdca='Obrigatório';
+    }
   }else if(tri.decision==='record'){
     copy.setorResponsavel='';
     copy.status='Somente para registro';
@@ -15545,7 +15544,42 @@ function goStage(idx){
 const stages=[{"id": "plan", "number": "01", "name": "Planejar", "subtitle": "Entender antes de agir", "items": [["p1", "Qual é o problema?", "Descrever de forma clara, objetiva e baseada em fatos."], ["p2", "Qual é o impacto do problema?", "Registrar custos, tempo, qualidade, segurança, produtividade, atrasos ou retrabalho."], ["p3", "Onde o problema ocorre?", "Identificar o local ou processo da ocorrência."], ["p4", "Com que frequência o problema ocorre?", "Registrar a frequência observada para direcionar a análise."], ["p5", "Quais são as possíveis causas do problema?", "Analisar pelo 5M: método, máquina, mão de obra, material e meio ambiente."], ["p6", "Por que essas causas ocorrem?", "Aplicar a técnica dos 5 Porquês."], ["p7", "Qual é a causa raiz que deve ser bloqueada?", "Validar a causa com dados, evidências ou observação do processo."], ["p8", "Qual é a meta SMART?", "Definir o resultado esperado para resolver o problema."], ["p9", "Qual é o prazo para atingir a meta?", "Registrar o prazo previsto para a conclusão das ações."], ["p10", "Qual é o status atual da meta?", "Informe se está planejada, em andamento ou concluída."], ["p11", "Qual ação será executada?", "Descrever o que será feito para bloquear ou eliminar a causa raiz."], ["p12", "Qual é o prazo da ação?", "Registrar quando a ação deve ser executada."], ["p13", "Quais setores são responsáveis pela ação?", "Selecione um ou mais setores que executarão ou acompanharão a ação."], ["p14", "Existe algum risco na implantação da ação?", "Registrar possíveis efeitos colaterais da solução."]]}, {"id": "do", "number": "02", "name": "Fazer", "subtitle": "Colocar o plano em prática", "items": [["d1", "A equipe foi treinada?", "Registrar o treinamento da equipe."], ["d2", "A equipe compreendeu a nova forma de trabalho?", "Confirmar se todos sabem o que e como fazer."], ["d3", "Qual é o status do treinamento?", "Registrar o status da pergunta anterior."], ["d4", "Os recursos necessários estão disponíveis?", "Verificar se a execução pode acontecer sem interrupções."], ["d5", "Como a execução será registrada?", "Registrar também os desvios do plano."]]}, {"id": "check", "number": "03", "name": "Checar", "subtitle": "Olhar para o que aconteceu", "items": [["c1", "Os resultados estão conforme a meta SMART?", "Verificar se o objetivo foi alcançado."], ["c2", "A causa raiz foi eliminada?", "Usar os dados coletados para validar a eficácia da ação."], ["c3", "Houve algum efeito colateral?", "Identificar consequências não previstas na mudança."]]}, {"id": "act", "number": "04", "name": "Agir", "subtitle": "Consolidar o próximo passo", "items": [["a1", "A melhoria foi padronizada?", "Registrar instrução de trabalho, check list ou treinamento."], ["a2", "Como o novo padrão será acompanhado?", "Definir o acompanhamento periódico."], ["a3", "A meta foi atingida?", "Se não foi atingida, registre onde ocorreu a falha: P, D ou C."], ["a4", "Quais foram as lições aprendidas?", "Registrar problemas e aprendizados para o próximo ciclo."]]}];const ros=[];
 restoreImportedRos();
 let detailReturnView='ros';
-let selected=ros[0],activeStage=0;let answers={};function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
+let selected=ros[0],activeStage=0;let answers={};
+
+function pdcaExternalExists(ro){
+  const tri=getRoTriageRecord(ro);
+  return tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external';
+}
+function pdcaSituationLabel(ro){
+  if(pdcaExternalExists(ro))return 'PDCA externo';
+  const status=String(ro?.status||'');
+  const pdca=String(ro?.pdca||'');
+  if(pdca==='Enviado'||status==='PDCA enviado')return 'PDCA enviado';
+  if(status==='Apresentada'||pdca==='Apresentado')return 'PDCA apresentado';
+  if(['Cancelada','Somente para registro'].includes(status))return 'Não se aplica';
+  return 'PDCA necessário';
+}
+async function setExternalPdca(numero,hasExternal){
+  const ro=ros.find(r=>String(r.numero||r.id||r.codigo||'')===String(numero));
+  if(!ro){alert('R.O. não encontrada.');return;}
+  await withNucleoLoading(hasExternal?'Registrando PDCA externo...':'Registrando necessidade de PDCA...',async()=>{
+    const key=triageKeyOf(ro);
+    const map=getSavedTriageMap();
+    const tri={...(map.get(key)||{}),roKey:key};
+    tri.pdcaExternal=!!hasExternal;
+    tri.pdcaSource=hasExternal?'external':'portal';
+    tri.pdcaRequired=!hasExternal && tri.decision==='directed';
+    tri.pdcaExternalUpdatedAt=new Date().toISOString();
+    tri.pdcaExternalUpdatedBy=getSession()?.name||'SGQ';
+    map.set(key,tri);
+    try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
+    portalBackendSave('triage',key,tri);
+    render();
+  },hasExternal?'Salvando PDCA externo':'Atualizando PDCA');
+  alert(hasExternal?'PDCA externo registrado. O setor não será cobrado por um novo PDCA no Núcleo.':'Marcado como PDCA necessário. A pendência ficará visível para o setor responsável.');
+}
+
+function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
   const filterEl=document.getElementById('filter');
   const rowsEl=document.getElementById('rows');
@@ -15591,7 +15625,11 @@ let selected=ros[0],activeStage=0;let answers={};function badgeClass(status){if(
     const pdca=String(r.pdca||'');
     const noPdca=['Cancelada','Somente para registro'].includes(status);
     const contest=status==='Em contestação';
-    const alreadySent=pdca==='Enviado' || status==='PDCA enviado';
+    const externalPdca=pdcaExternalExists(r);
+    const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
+    const tri=getRoTriageRecord(r);
+    const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setorResponsavel||r.setor||'—').trim()||'—';
+    const pdcaSituation=pdcaSituationLabel(r);
 
     let operationalActions='';
     if(!admin){
@@ -15618,14 +15656,22 @@ let selected=ros[0],activeStage=0;let answers={};function badgeClass(status){if(
       operationalActions='<td class="operational-action-col" style="display:none"></td>';
     }
 
+    const adminPdcaControl=admin && !noPdca ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span class="${externalPdca?'badge ok':alreadySent?'badge ok':'badge warn'}">${escapeHtml(pdcaSituation)}</span>
+      ${!alreadySent?`<button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)">Já temos PDCA externo</button>`:''}
+      ${externalPdca?`<button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',false)">Não temos PDCA</button>`:''}
+    </div>` : `<span class="${externalPdca?'badge ok':alreadySent?'badge ok':noPdca?'badge off':'badge warn'}">${escapeHtml(pdcaSituation)}</span>`;
+
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
       <td>${escapeHtml(r.unidade||'')}</td>
+      <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(r.assunto||'')}</td>
       <td>${escapeHtml(r.prazo||'')}</td>
       <td><span class="${badgeClass(r.status)}">${escapeHtml(r.status||'')}</span></td>
-      <td><span class="${r.pdca==='Obrigatório'?'badge':r.pdca==='Suspenso'?'badge warn':r.pdca==='Enviado'?'badge ok':'badge off'}">${escapeHtml(r.pdca||'')}</span></td>
+      <td>${adminPdcaControl}</td>
+      <td><span class="${externalPdca?'badge ok':r.pdca==='Obrigatório'?'badge':r.pdca==='Suspenso'?'badge warn':r.pdca==='Enviado'?'badge ok':'badge off'}">${escapeHtml(externalPdca?'PDCA externo':(r.pdca||''))}</span></td>
       <td><button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')">Visualizar R.O.</button></td>
       ${operationalActions}
     </tr>`;
