@@ -3992,53 +3992,6 @@ Cancelada</textarea></label>
     </div>
 
     <div class="settings-block">
-      <h3>Vincular setor ao e-mail</h3>
-      <p class="help">Cada destino pode ter um ou mais e-mails. Separe os endereços por vírgula, ponto e vírgula ou quebra de linha.</p>
-      <div class="settings-grid">
-        <label>
-          <div class="label">E-mail do SGQ / administradores</div>
-          <textarea id="sgqNotificationEmail" rows="3" placeholder="sgq@empresa.com&#10;qualidade@empresa.com"></textarea>
-        </label>
-        <label>
-          <div class="label">E-mail da Diretoria para SAC</div>
-          <textarea id="directorSacEmail" rows="3" placeholder="diretoria@empresa.com&#10;gestao@empresa.com"></textarea>
-        </label>
-        <label>
-          <div class="label">E-mails prioritários</div>
-          <select id="emailNotificationsEnabled"><option value="Sim">Ativados</option><option value="Não">Desativados</option></select>
-        </label>
-      </div>
-      <div style="margin-top:14px;padding:12px 14px;border:1px solid #d9e2ec;background:#f8fafc;border-radius:10px">
-        <b>O que vai por e-mail</b>
-        <div class="small" style="margin-top:5px">
-          <b>Usuário operacional:</b> nova R.O. direcionada para o setor e resposta da contestação. O assunto da R.O. segue o padrão <b>R.O 10 - Interna - Matriz</b>. O corpo do e-mail segue o padrão corporativo simples, sem tabela ou painel visual. Nas R.O.s direcionadas para tratativa, o PDF completo da R.O. segue anexado ao e-mail.<br>
-          <b>SGQ/ADM:</b> nova contestação recebida e novo PDCA recebido.<br>
-          Outras atualizações continuam aparecendo somente na central de notificações do aplicativo.
-        </div>
-      </div>
-
-      <div style="margin-top:16px">
-        <h4 style="margin:0 0 8px">Canal por tipo de evento</h4>
-        <div class="channel-grid">
-          <div><b>Evento</b></div><div><b>Canal</b></div><div><b>Destino</b></div>
-          <div>R.O. direcionada</div><div><select id="channelRoSector"><option>Ambos</option><option>Portal</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">Setor responsável</div>
-          <div>Resposta de contestação</div><div><select id="channelContestSector"><option>Ambos</option><option>Portal</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">Setor responsável</div>
-          <div>Nova contestação</div><div><select id="channelContestAdmin"><option>Ambos</option><option>Portal</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">SGQ/ADM</div>
-          <div>PDCA recebido</div><div><select id="channelPdcaAdmin"><option>Ambos</option><option>Portal</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">SGQ/ADM</div>
-          <div>Ações / prazos</div><div><select id="channelAction"><option>Portal</option><option>Ambos</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">Conforme responsável</div>
-          <div>Comunicados</div><div><select id="channelAnnouncement"><option>Portal</option><option>Ambos</option><option>E-mail</option><option>Nenhum</option></select></div><div class="small">Público do comunicado</div>
-        </div>
-      </div>
-      <div class="small" style="margin-top:10px">Os destinatários dos setores são identificados automaticamente pelos usuários cadastrados e aprovados no Núcleo.</div>
-      <div class="actions" style="margin-top:12px">
-        <button class="btn secondary" type="button" onclick="testSectorEmail()">Testar R.O.</button><button class="btn secondary" type="button" onclick="testDirectEmailRoute()">Testar rota de e-mail</button>
-        <button class="btn secondary" type="button" onclick="testContestEmail()">Testar resposta de contestação</button>
-      </div>
-      <div id="emailNotificationStatus" class="statusline hidden"></div>
-      <div class="small" style="margin-top:10px">Os e-mails prioritários são enviados diretamente pelo Apps Script e registrados no histórico.</div>
-    </div>
-
-    <div class="settings-block">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
         <div><h3 style="margin:0">Histórico de e-mails</h3><div class="help">Últimos registros informados pela base central.</div></div>
         <div class="actions">
@@ -5536,7 +5489,7 @@ function emailForSector(sector){
   // Se houver mais de uma pessoa no setor, todos os e-mails corporativos
   // válidos daquele setor entram como destinatários.
   const emails=getOperationalUsers()
-    .filter(u=>u && u.approvalStatus!=='pending' && u.approvalStatus!=='rejected')
+    .filter(u=>u && String(u.approvalStatus||'approved').toLowerCase()==='approved')
     .filter(u=>normalizeAnswer(String(u.sector||''))===wanted)
     .map(u=>String(u.email||'').trim().toLowerCase())
     .filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
@@ -5584,20 +5537,23 @@ function emailForNotification(n){
 }
 
 function dispatchNotificationEmail(n){
-  if(!isPriorityEmailNotification(n))return false;
-  const target=emailForNotification(n);
+  // R.O. direcionada deve gerar e-mail sempre, independentemente de configuração/cache local.
+  const isDirectedRo=!!(n && n.type==='ro' && (n.audience==='sector'||n.audience==='user'));
+  if(!isDirectedRo && !isPriorityEmailNotification(n))return false;
+
+  const target=isDirectedRo
+    ? (n.audience==='user' ? String(n.userKey||'').trim() : emailForSector(n.sector))
+    : emailForNotification(n);
   if(!target){
-    console.warn('Portal SGQ: notificação por e-mail sem destino.',n);
+    console.error('Portal SGQ: R.O. direcionada sem e-mail de destino.',n);
+    return false;
+  }
+  if(!portalBackendEnabled()){
+    console.error('Portal SGQ: URL do Apps Script não configurada.');
     return false;
   }
 
-  const sync=getSavedIntegrationSettings();
-  if(!sync.apiUrl){
-    console.warn('Portal SGQ: URL do Apps Script não configurada.');
-    return false;
-  }
-
-  const params=new URLSearchParams({
+  const params={
     acao:'notificar',
     email:target,
     assunto:n.title||'Notificação do Portal SGQ',
@@ -5611,19 +5567,19 @@ function dispatchNotificationEmail(n){
     cliente:n.cliente||'',
     registrante:n.registrante||'',
     eventoId:notificationEventKey(n),
-    anexarPdfRo:((n.audience==='sector'||n.audience==='user')&&n.type==='ro'&&n.ro)?'1':'0'
-  });
+    anexarPdfRo:(isDirectedRo&&n.ro)?'1':'0'
+  };
 
-  // JSONP permite confirmar se o Apps Script realmente enviou ou recusou o e-mail.
-  portalJsonp(Object.fromEntries(params.entries()),20000)
+  portalJsonp(params,30000)
     .then(res=>{
-      if(!res||res.sucesso!==true){
-        console.error('Portal SGQ: Apps Script recusou o e-mail.',res);
+      if(!res||res.sucesso!==true||res.enviado!==true){
+        console.error('Portal SGQ: Apps Script não confirmou o envio.',res);
         return;
       }
-      console.info('Portal SGQ: e-mail confirmado pelo Apps Script.',{tipo:n.type,email:target,ro:n.ro,enviado:res.enviado});
+      console.info('Portal SGQ: e-mail enviado e registrado.',{email:target,ro:n.ro});
+      try{refreshEmailHistory()}catch(e){}
     })
-    .catch(e=>console.error('Portal SGQ: falha ao enviar e-mail.',e));
+    .catch(e=>console.error('Portal SGQ: falha real no envio de e-mail.',e));
   return true;
 }
 function isInAppNotificationEnabled(data){
