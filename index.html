@@ -16005,11 +16005,17 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
       const tri=getRoTriageRecord(r);
-      // R.O.s atribuídas concentra tudo o que já saiu da fila de triagem:
-      // direcionadas, somente para registro e canceladas.
+      // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
+      // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
+      // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
       const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
-      const stillNeedsTriage=!tri || ['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
-      if(stillNeedsTriage)return false;
+      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||'').trim();
+      const sheetStatus=normalizeAnswer(r.raw?.__statusOperacional||'');
+      const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
+      const validSheetStatus=!!sheetStatus && !sheetStatus.includes('nenhum email encontrado');
+      const assignedBySheet=validSheetSector && validSheetStatus;
+      const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
+      if(!assignedByTriage && !assignedBySheet)return false;
       // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
@@ -16039,7 +16045,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const externalPdca=pdcaExternalExists(r);
     const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
     const tri=getRoTriageRecord(r);
-    const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setorResponsavel||r.setor||'—').trim()||'—';
+    const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
     const displayStatus=assignedRoStatus(r);
 
