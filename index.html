@@ -15730,17 +15730,31 @@ async function setExternalPdca(numero,hasExternal){
 
 function assignedRoStatus(r){
   const raw=String(r?.status||'').trim().toLowerCase();
-  const pdca=String(r?.pdca||'').trim().toLowerCase();
   const tri=getRoTriageRecord(r)||{};
   if(raw.includes('cancel')) return 'Cancelada';
   if(raw.includes('obsolet')) return 'Obsoleto';
   if(raw.includes('registro') || raw.includes('somente para registro')) return 'Registro';
-  if(raw.includes('apresent')) return 'PDCA apresentado';
   if(tri.pdcaExternal===true) return 'PDCA externo';
-  // Só considera respondido quando a triagem já registrou que o PDCA era necessário
-  // e houve envio pelo portal. Registros antigos não são promovidos automaticamente.
-  if(tri.pdcaRequired===true && (raw.includes('pdca enviado') || pdca==='enviado' || pdca.includes('respond'))) return 'PDCA respondido';
+
+  // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
+  // salvo/enviado na coleção pdca_sent para esta R.O. Não usa mais r.status/r.pdca
+  // das planilhas antigas, pois esses campos estavam promovendo registros sem resposta.
+  const sentPdca=getPdcaReturnForRo(r);
+  if(sentPdca){
+    const presented = Boolean(sentPdca.apresentadoEm) ||
+      (typeof getPdcaPresentationMap==='function' && getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+    return presented ? 'PDCA apresentado' : 'PDCA respondido';
+  }
   return 'Pendente';
+}
+
+function assignedRoDeadline(r){
+  const status=assignedRoStatus(r);
+  if(status!=='Pendente') return '—';
+  const tri=getRoTriageRecord(r)||{};
+  // Pendência sem PDCA externo sempre vence na próxima terça. Se a triagem já
+  // possui um prazo central salvo, preserva-o; caso contrário calcula para exibição.
+  return String(tri.pdcaDeadline||tri.deadline||nextTuesdayIsoDate()).trim()||nextTuesdayIsoDate();
 }
 
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
@@ -15830,7 +15844,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td>${escapeHtml(r.unidade||'')}</td>
       <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
-      <td>${escapeHtml(r.prazo||'—')}</td>
+      <td>${escapeHtml(assignedRoDeadline(r))}</td>
       <td>${statusControl}</td>
       <td class="ro-eye-cell"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button></td>
       ${operationalActions}
