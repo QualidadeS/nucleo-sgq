@@ -4891,7 +4891,8 @@ const NUCLEO_SHARED_GLOBAL_KEYS=new Set([
   'ro-pdca-deleted-users-v1',
   'nucleo-sector-aliases-v1',
   'ro-pdca-presentations-v1',
-  'nucleo-ro-origin-registry-v1'
+  'nucleo-ro-origin-registry-v1',
+  'nucleo-hidden-assigned-directions-v1'
 ]);
 const NUCLEO_SHARED_USER_KEYS=new Set([
   'ro-pdca-notifications-v1',
@@ -4970,7 +4971,8 @@ function applyPortalBackendSnapshot(snapshot){
     }catch(e){}
   }
   if(Array.isArray(data.triage))localStorage.setItem(TRIAGE_KEY,JSON.stringify(data.triage));
-  if(Array.isArray(data.triageDeletedKeys))localStorage.setItem(DELETED_TRIAGE_KEYS_KEY,JSON.stringify(data.triageDeletedKeys));
+  // triageDeletedKeys era usado por uma versão antiga para bloquear a reconstrução
+  // da triagem. Isso fazia R.O.s válidas irem para 'Não triada'. Não reaplicar esse estado.
   if(Array.isArray(data.externalRoControls))saveExternalRoControlsLocal(data.externalRoControls);
   if(Array.isArray(data.adminModules))localStorage.setItem(ADMIN_MODULES_KEY,JSON.stringify(data.adminModules));
   if(Array.isArray(data.standardDocuments))localStorage.setItem(STANDARD_DOCUMENTS_KEY,JSON.stringify(data.standardDocuments));
@@ -10377,7 +10379,16 @@ function finishExternalTreatment(id){
 
 const TRIAGE_KEY='ro-pdca-triage-v2';
 const DELETED_TRIAGE_KEYS_KEY='nucleo-deleted-triage-keys-v1';
+const HIDDEN_ASSIGNED_KEYS_KEY='nucleo-hidden-assigned-directions-v1';
+try{localStorage.removeItem(DELETED_TRIAGE_KEYS_KEY)}catch(e){}
 let currentTriageRoId='';
+
+function getHiddenAssignedKeys(){
+  try{return new Set(JSON.parse(localStorage.getItem(HIDDEN_ASSIGNED_KEYS_KEY)||'[]').map(String))}catch(e){return new Set()}
+}
+function saveHiddenAssignedKeys(set){
+  try{localStorage.setItem(HIDDEN_ASSIGNED_KEYS_KEY,JSON.stringify([...set]))}catch(e){}
+}
 
 
 function roNumbersSameLegacy(a,b){
@@ -10507,8 +10518,9 @@ function getSavedTriageMap(){
   try{
     getAllRoRecords().forEach(ro=>{
       const key=triageKeyOf(ro);
-      const deletedKeys=getDeletedTriageKeys();
-      if(!key || map.has(key) || deletedKeys.has(String(key)))return;
+      // Uma exclusão antiga de duplicata visual não pode transformar a R.O. em não triada.
+      // Se a planilha ainda comprova setor/status, o direcionamento deve ser reconstruído.
+      if(!key || map.has(key))return;
 
       const setor=String(ro.setorResponsavelPlanilha||'').trim();
       const pessoa=String(ro.pessoaResponsavel||'').trim();
@@ -15970,7 +15982,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 
   const assignedSource = roListMode==='assigned' ? ros.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
-    const records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='');
+    const hiddenAssigned=getHiddenAssignedKeys();
+    const records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
     if(!records.length)return [r];
     // Uma linha visual por R.O. + setor. Registros legados/duplicados não podem
     // reaparecer como uma segunda linha após atualizar o PDCA.
@@ -16078,7 +16091,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 }
 
 async function deleteAssignedDirection(triageKey){
-  if(!isAdmin()){alert('Somente o SGQ pode excluir direcionamentos.');return;}
+  if(!isAdmin()){alert('Somente o SGQ pode remover duplicatas da visualização.');return;}
   const key=String(triageKey||'').trim();
   if(!key)return;
   const map=getSavedTriageMap();
@@ -16086,27 +16099,20 @@ async function deleteAssignedDirection(triageKey){
   if(!tri){alert('Este direcionamento não foi encontrado. Sincronize e tente novamente.');return;}
   const ro=triageRoNumberPart(key);
   const sector=String(tri.responsibleSector||tri.setorDirecionado||'').trim();
-  if(!confirm(`Remover esta linha duplicada da visualização?\n\n${ro}${sector?' • '+sector:''}\n\nO direcionamento e a planilha original serão preservados.`))return;
+  if(!confirm(`Ocultar esta linha duplicada em R.O.s atribuídas?\n\n${ro}${sector?' • '+sector:''}\n\nNenhum direcionamento, setor ou dado da planilha será apagado.`))return;
   try{
-    await withNucleoLoading('Removendo duplicata da visualização...',async()=>{
-      if(portalBackendEnabled()){
-        // A lixeira desta tela serve apenas para limpar uma duplicata visual.
-        // NUNCA altere a planilha original nem apague o direcionamento operacional.
-        // Removemos somente o registro duplicado da coleção de triagens; a chave
-        // fica marcada para que a importação da planilha não o recrie automaticamente.
-        await portalBackendDeleteConfirmed('triage',key);
-      }
-      const deletedKeys=getDeletedTriageKeys();
-      deletedKeys.add(key);
-      saveDeletedTriageKeys(deletedKeys);
-      map.delete(key);
-      try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
+    await withNucleoLoading('Removendo somente a duplicata da visualização...',async()=>{
+      // Esta ação é EXCLUSIVAMENTE visual. Não apaga SGQ_TRIAGENS e não altera
+      // a planilha original. O direcionamento continua existindo e a R.O. segue triada.
+      const hidden=getHiddenAssignedKeys();
+      hidden.add(key);
+      saveHiddenAssignedKeys(hidden);
       render();
       try{renderCurrentOverview()}catch(e){}
-    },'Removendo duplicata');
-    alert('Duplicata removida da visualização. O direcionamento foi preservado.');
+    },'Atualizando visualização');
+    alert('Linha removida da visualização. O direcionamento foi preservado.');
   }catch(err){
-    console.error('[NUCLEO EXCLUIR DIRECIONAMENTO]',err);
+    console.error('[NUCLEO OCULTAR DUPLICATA]',err);
     alert('Não foi possível remover a duplicata da visualização. '+(err?.message||err||''));
   }
 }
