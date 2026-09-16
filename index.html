@@ -402,6 +402,24 @@ main{max-width:1180px;margin:0 auto;padding:54px 54px 36px}
 @media(max-width:760px){.config-row,.config-row.two,.config-row.three{grid-template-columns:1fr}}
 
 
+/* Controle de R.O.: usa a largura disponível e evita que campos curtos quebrem em várias linhas */
+.ro-control-table-wrap{width:100%;overflow-x:auto}
+.ro-control-table{width:100%;min-width:1320px;table-layout:auto}
+.ro-control-table th,.ro-control-table td{vertical-align:middle}
+.ro-control-table th:nth-child(1),.ro-control-table td:nth-child(1){min-width:120px;white-space:nowrap}
+.ro-control-table th:nth-child(2),.ro-control-table td:nth-child(2){min-width:190px;white-space:nowrap}
+.ro-control-table th:nth-child(3),.ro-control-table td:nth-child(3){min-width:180px;white-space:nowrap}
+.ro-control-table th:nth-child(4),.ro-control-table td:nth-child(4){min-width:90px;white-space:nowrap}
+.ro-control-table th:nth-child(5),.ro-control-table td:nth-child(5){min-width:210px}
+.ro-control-table th:nth-child(6),.ro-control-table td:nth-child(6){min-width:105px;white-space:nowrap}
+.ro-control-table th:nth-child(7),.ro-control-table td:nth-child(7){min-width:145px;white-space:nowrap}
+.ro-control-table th:nth-child(8),.ro-control-table td:nth-child(8){min-width:300px}
+.ro-control-table th:nth-child(9),.ro-control-table td:nth-child(9){min-width:130px;white-space:nowrap}
+.ro-control-table th:nth-child(10),.ro-control-table td:nth-child(10){min-width:145px;white-space:nowrap}
+.ro-control-table .btn{white-space:nowrap}
+.pdca-source-control{display:flex;gap:7px;align-items:center;flex-wrap:nowrap;white-space:nowrap}
+.pdca-source-control .btn{padding:8px 10px}
+.pdca-source-control .btn.is-selected{box-shadow:inset 0 0 0 2px currentColor;font-weight:700}
 .ro-link-btn{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .ro-link-btn:hover{text-decoration:underline}
 
@@ -2677,7 +2695,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
   <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
 </div>
-<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><table><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table>
+<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
 </section>
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -15562,21 +15580,41 @@ function pdcaSituationLabel(ro){
 async function setExternalPdca(numero,hasExternal){
   const ro=ros.find(r=>String(r.numero||r.id||r.codigo||'')===String(numero));
   if(!ro){alert('R.O. não encontrada.');return;}
-  await withNucleoLoading(hasExternal?'Registrando PDCA externo...':'Registrando necessidade de PDCA...',async()=>{
-    const key=triageKeyOf(ro);
-    const map=getSavedTriageMap();
-    const tri={...(map.get(key)||{}),roKey:key};
-    tri.pdcaExternal=!!hasExternal;
-    tri.pdcaSource=hasExternal?'external':'portal';
-    tri.pdcaRequired=!hasExternal && tri.decision==='directed';
-    tri.pdcaExternalUpdatedAt=new Date().toISOString();
-    tri.pdcaExternalUpdatedBy=getSession()?.name||'SGQ';
-    map.set(key,tri);
-    try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
-    portalBackendSave('triage',key,tri);
-    render();
-  },hasExternal?'Salvando PDCA externo':'Atualizando PDCA');
-  alert(hasExternal?'PDCA externo registrado. O setor não será cobrado por um novo PDCA no Núcleo.':'Marcado como PDCA necessário. A pendência ficará visível para o setor responsável.');
+  if(!isAdmin()){alert('Somente o SGQ pode alterar a situação do PDCA.');return;}
+
+  try{
+    await withNucleoLoading(hasExternal?'Registrando PDCA externo...':'Registrando necessidade de PDCA...',async()=>{
+      const key=triageKeyOf(ro);
+      const map=getSavedTriageMap();
+      const tri={...(map.get(key)||{}),roKey:key};
+      if(String(tri.decision||'')!=='directed'){
+        throw new Error('Esta R.O. ainda não está direcionada a um setor responsável.');
+      }
+      tri.pdcaExternal=!!hasExternal;
+      tri.pdcaSource=hasExternal?'external':'portal';
+      tri.pdcaRequired=!hasExternal;
+      // Se não há PDCA externo, o setor deve ser cobrado até a próxima terça-feira.
+      if(!hasExternal) tri.pdcaDeadline=nextTuesdayIsoDate();
+      tri.pdcaExternalUpdatedAt=new Date().toISOString();
+      tri.pdcaExternalUpdatedBy=getSession()?.name||'SGQ';
+      map.set(key,tri);
+      try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
+
+      const accepted=portalBackendSave('triage',key,tri);
+      if(!accepted && portalBackendEnabled()){
+        throw new Error('Não foi possível enviar a alteração para a base central.');
+      }
+      render();
+      try{renderCurrentOverview()}catch(e){}
+    },hasExternal?'Salvando PDCA externo':'Atualizando necessidade de PDCA');
+
+    alert(hasExternal
+      ?'PDCA externo registrado. O setor continuará vendo a R.O., mas não será cobrado por um novo PDCA no Núcleo.'
+      :'Marcado como PDCA necessário. O setor responsável verá a pendência e o prazo será a próxima terça-feira.');
+  }catch(err){
+    console.error('[NUCLEO PDCA EXTERNO]',err);
+    alert('Não foi possível alterar a situação do PDCA. '+(err?.message||err||'Erro desconhecido.'));
+  }
 }
 
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
@@ -15656,10 +15694,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       operationalActions='<td class="operational-action-col" style="display:none"></td>';
     }
 
-    const adminPdcaControl=admin && !noPdca ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    const adminPdcaControl=admin && !noPdca ? `<div class="pdca-source-control">
       <span class="${externalPdca?'badge ok':alreadySent?'badge ok':'badge warn'}">${escapeHtml(pdcaSituation)}</span>
-      ${!alreadySent?`<button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)">Já temos PDCA externo</button>`:''}
-      ${externalPdca?`<button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',false)">Não temos PDCA</button>`:''}
+      <button class="btn secondary ${externalPdca?'is-selected':''}" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true)" ${externalPdca?'disabled':''}>Temos PDCA externo</button>
+      <button class="btn secondary ${!externalPdca&&!alreadySent?'is-selected':''}" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',false)" ${!externalPdca&&!alreadySent?'disabled':''}>Não temos PDCA</button>
     </div>` : `<span class="${externalPdca?'badge ok':alreadySent?'badge ok':noPdca?'badge off':'badge warn'}">${escapeHtml(pdcaSituation)}</span>`;
 
     return `<tr>
