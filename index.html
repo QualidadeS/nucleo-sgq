@@ -7061,8 +7061,15 @@ async function changeOwnPassword(){
       }
     }catch(cacheErr){console.warn('Senha alterada na base central; cache local não pôde ser atualizado.',cacheErr)}
 
+    if(remote.confirmado!==true){
+      throw new Error('A base central respondeu, mas não confirmou a gravação da nova senha.');
+    }
     ['profileCurrentPassword','profileNewPassword','profileNewPassword2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-    alert('Senha alterada com sucesso.');
+    alert('Senha alterada e confirmada na base central. Por segurança, entre novamente usando a nova senha.');
+    try{ clearSession(); }catch(_e){
+      try{ localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); }catch(__e){}
+    }
+    location.reload();
   }catch(err){
     alert('Não foi possível alterar a senha. Motivo: '+(err&&err.message?err.message:String(err)));
   }finally{
@@ -10409,10 +10416,12 @@ function triageDisplayRoNumber(value){
 }
 function triageKeyOf(ro){
   const base=triageBaseRoNumber(ro);
-  const explicit=String(ro?.__triageKey||ro?.triageKey||'').trim();
+  const explicit=String(ro?.__triageKey||ro?.triageKey||ro?.__triageRecord?.roKey||'').trim();
   if(explicit)return explicit;
-  // Linhas duplicadas vindas da planilha passam a ser independentes por setor causa.
-  const sector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
+  // Em telas com uma R.O. desdobrada por setor, __assignedSector é a identidade
+  // daquele vínculo. Nunca volte ao setor original da planilha nesses casos,
+  // senão uma ação (ex.: "Temos PDCA") cria uma segunda linha para a mesma R.O.
+  const sector=String(ro?.__assignedSector||ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
   return sector ? triageCompositeKey(base,sector) : base;
 }
 function getTriageRecordsForRoNumber(roNumber,map=getSavedTriageMap()){
@@ -15818,9 +15827,12 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 
   try{
     await withNucleoLoading(hasExternal?'Registrando PDCA externo...':'Registrando necessidade de PDCA...',async()=>{
-      const key=triageKeyOf(ro);
+      // Usa obrigatoriamente a chave do vínculo já existente (R.O. + setor).
+      // Marcar PDCA externo é uma atualização dessa linha, nunca a criação de outra.
+      const existingRecord=ro.__triageRecord||getTriageRecordForRoSector(numero,sector);
+      const key=String(existingRecord?.roKey||triageCompositeKey(numero,sector)).trim();
       const map=getSavedTriageMap();
-      const tri={...(map.get(key)||{}),roKey:key};
+      const tri={...(existingRecord||map.get(key)||{}),roKey:key,roNumber:triageDisplayRoNumber(numero)};
       if(String(tri.decision||'')!=='directed'){
         throw new Error('Esta R.O. ainda não está direcionada a um setor responsável.');
       }
@@ -15831,13 +15843,13 @@ async function setExternalPdca(numero,hasExternal,sector=''){
       if(!hasExternal) tri.pdcaDeadline=nextTuesdayIsoDate();
       tri.pdcaExternalUpdatedAt=new Date().toISOString();
       tri.pdcaExternalUpdatedBy=getSession()?.name||'SGQ';
+      if(portalBackendEnabled()){
+        await portalBackendSaveConfirmed('triage',key,tri);
+      }
+      // Só altera o cache depois de a base central confirmar. Como usamos a mesma
+      // roKey, a linha existente é substituída em vez de duplicada.
       map.set(key,tri);
       try{localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));}catch(e){}
-
-      const accepted=portalBackendSave('triage',key,tri);
-      if(!accepted && portalBackendEnabled()){
-        throw new Error('Não foi possível enviar a alteração para a base central.');
-      }
       render();
       try{renderCurrentOverview()}catch(e){}
     },hasExternal?'Salvando PDCA externo':'Atualizando necessidade de PDCA');
