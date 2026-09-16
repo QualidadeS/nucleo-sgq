@@ -5042,38 +5042,51 @@ function applyPortalBackendSnapshot(snapshot){
   if(el)el.textContent=now;
   return true;
 }
-async function syncPortalBackend(showMessage=false){
+async function syncPortalBackend(showMessage=false,options={}){
   if(portalBackendSyncInProgress)return false;
   if(!portalBackendEnabled()){
     if(showMessage)alert('Configure primeiro a URL do Apps Script em Administração → Integração.');
     updateBackendStatus(false,'Apps Script não configurado.');
     return false;
   }
+  const foreground=!!(showMessage||options.foreground);
   portalBackendSyncInProgress=true;
   updateBackendStatus(null,'Sincronizando...');
+  if(foreground)await showNucleoLoading(options.loadingMessage||'Carregando dados da base central...','Carregando NÚCLEO');
   try{
     const res=await portalJsonp({acao:'portal_load'});
     if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
     applyPortalBackendSnapshot(res);
     updateBackendStatus(true,'Base central conectada.');
+
+    // Atualizações leves acontecem imediatamente. Renderizações grandes ficam fora
+    // do caminho crítico para o navegador não congelar a cada sincronização automática.
     try{
-      loadAdminConfig();
       refreshSectorSelectors();
-      renderAnnouncementsAdmin();
-      renderContestations();
-      populateTriageUnits();
-      renderTriage();
-      renderExternalRoControl();
       refreshExternalRoSidebarBadge();
-      refreshRoSummary();
-      try{render()}catch(e){}
-      renderOperationalUsers();
-      try{populateAdminCleanupRos();}catch(e){}
       refreshNotificationBell();
       refreshContestPendingBadge();
       refreshPdcaSidebarBadge();
-      setTimeout(()=>{try{showPendingAnnouncement()}catch(e){}},100);
     }catch(e){}
+    const heavyRefresh=()=>{
+      try{
+        loadAdminConfig();
+        renderAnnouncementsAdmin();
+        renderContestations();
+        populateTriageUnits();
+        renderTriage();
+        renderExternalRoControl();
+        refreshRoSummary();
+        try{render()}catch(e){}
+        renderOperationalUsers();
+        try{populateAdminCleanupRos();}catch(e){}
+        setTimeout(()=>{try{showPendingAnnouncement()}catch(e){}},100);
+      }catch(e){}
+    };
+    if(foreground)heavyRefresh();
+    else if('requestIdleCallback' in window)requestIdleCallback(heavyRefresh,{timeout:2500});
+    else setTimeout(heavyRefresh,350);
+
     if(showMessage)alert('Base central sincronizada.');
     return true;
   }catch(e){
@@ -5081,6 +5094,7 @@ async function syncPortalBackend(showMessage=false){
     if(showMessage)alert('Não foi possível sincronizar: '+(e.message||e));
     return false;
   }finally{
+    if(foreground)hideNucleoLoading(true);
     portalBackendSyncInProgress=false;
   }
 }
@@ -6433,10 +6447,8 @@ function schedulePendingAnnouncementCheck(){
   setTimeout(()=>{refreshAnnouncementsFromCentral(true)},500);
 }
 
-// Mantém os comunicados atualizados mesmo com o portal já aberto.
-setInterval(()=>{
-  if(getSession())refreshAnnouncementsFromCentral(true);
-},15000);
+// Comunicados já vêm no snapshot da base central. Evita uma segunda consulta
+// periódica concorrendo com a sincronização principal e travando máquinas mais lentas.
 
 function ensurePreviewSession(){
   if(!SKIP_LOGIN_PREVIEW) return;
@@ -6731,7 +6743,7 @@ async function loginUser(){
     // Fonte oficial compartilhada: após autenticar, sempre atualiza este navegador pela base central.
     setTimeout(async()=>{
       try{
-        await syncPortalBackend(false);
+        await syncPortalBackend(false,{foreground:true,loadingMessage:'Atualizando os dados do Núcleo...'});
         refreshSectorSelectors();
         try{populateTriageSectors()}catch(e){}
         try{render()}catch(e){}
@@ -10692,7 +10704,7 @@ function usersBySector(sector){
 }
 function getTriageAssignmentsFromUi(){
   return [...document.querySelectorAll('#triageAssignments .triage-assignment-row')].map(row=>({
-    sector:String(row.dataset.sector||'').trim(),
+    sector:String(row.querySelector('.triage-assignment-sector')?.value||row.dataset.sector||'').trim(),
     originalSector:String(row.dataset.originalSector||'').trim(),
     responsibleUserEmail:String(row.querySelector('.triage-assignment-user')?.value||'').trim().toLowerCase(),
     reason:String(row.querySelector('.triage-assignment-reason')?.value||'').trim()
@@ -10722,7 +10734,22 @@ function addTriageAssignment(sector='',selectedEmail='',reason='',originalSector
   row.dataset.sector=chosen;
   row.dataset.originalSector=String(originalSector||chosen).trim();
   row.style.cssText='display:grid;grid-template-columns:minmax(140px,.7fr) minmax(200px,1fr) minmax(260px,1.35fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef';
-  row.innerHTML=`<div style="font-weight:700;font-size:13px">${escapeHtml(chosen)}</div><select class="triage-assignment-user">${triageAssignmentUserOptions(chosen,selectedEmail)}</select><input class="triage-assignment-reason" value="${escapeHtml(reason||'')}" placeholder="Motivo deste setor *" aria-label="Motivo do direcionamento para ${escapeHtml(chosen)}"><button class="btn secondary" type="button" onclick="this.closest('.triage-assignment-row').remove()" style="padding:8px 10px">Remover</button>`;
+  const sectorOptions=getConfiguredSectorList().map(sec=>`<option value="${escapeHtml(sec)}" ${normalizeAnswer(sec)===normalizeAnswer(chosen)?'selected':''}>${escapeHtml(sec)}</option>`).join('');
+  row.innerHTML=`<select class="triage-assignment-sector" aria-label="Setor responsável" style="font-weight:700">${sectorOptions}</select><select class="triage-assignment-user">${triageAssignmentUserOptions(chosen,selectedEmail)}</select><input class="triage-assignment-reason" value="${escapeHtml(reason||'')}" placeholder="Motivo deste setor *" aria-label="Motivo do direcionamento para ${escapeHtml(chosen)}"><button class="btn secondary" type="button" onclick="this.closest('.triage-assignment-row').remove()" style="padding:8px 10px">Remover</button>`;
+  const sectorSelect=row.querySelector('.triage-assignment-sector');
+  sectorSelect?.addEventListener('change',()=>{
+    const next=String(sectorSelect.value||'').trim();
+    if(!next)return;
+    const duplicate=[...box.querySelectorAll('.triage-assignment-row')].some(other=>other!==row&&normalizeAnswer(other.dataset.sector||'')===normalizeAnswer(next));
+    if(duplicate){
+      alert('Este setor já foi adicionado para esta R.O.');
+      sectorSelect.value=row.dataset.sector||chosen;
+      return;
+    }
+    row.dataset.sector=next;
+    const userSelect=row.querySelector('.triage-assignment-user');
+    if(userSelect)userSelect.innerHTML=triageAssignmentUserOptions(next,'');
+  });
   box.appendChild(row);
   if(picker)picker.value='';
 }
@@ -10939,7 +10966,9 @@ async function saveTriageRecord(){
         setor:decision==='directed'?record.responsibleSector:'',
         setorAnterior:record.previousResponsibleSector||record.responsibleSector||'',
         pessoa:decision==='directed'?(record.responsibleUserName||'Todo o setor'):'',
-        status:decision==='directed'?'Pendente':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
+        // O Status da planilha operacional representa o envio da R.O. ao reclamante/cliente.
+        // A pendência de PDCA é controlada separadamente pelo Núcleo e não deve sobrescrever este campo.
+        status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
       });
       await portalBackendSaveConfirmed('triage',record.roKey,record);
     }
@@ -11426,18 +11455,26 @@ function updateNetworkState(){
 }
 window.addEventListener('online',()=>{updateNetworkState();flushOfflineQueue();setTimeout(()=>syncPortalBackend(false),500)});
 
-// Mantém todas as máquinas atualizadas pela fonte oficial.
+// Mantém as máquinas atualizadas sem bombardear o Apps Script nem rerenderizar
+// a aplicação a cada poucos segundos. Foco/retorno só sincroniza se a última carga
+// já tiver algum tempo, evitando 2–3 chamadas seguidas ao alternar de janela.
 let __nucleoCentralRefreshTimer=null;
+let __nucleoLastAutoSyncAttempt=0;
+function nucleoAutoSyncIfDue(force=false){
+  try{
+    if(!getSession()?.authToken||document.visibilityState==='hidden'||portalBackendSyncInProgress)return;
+    const now=Date.now();
+    if(!force && now-__nucleoLastAutoSyncAttempt<45000)return;
+    __nucleoLastAutoSyncAttempt=now;
+    syncPortalBackend(false);
+  }catch(e){}
+}
 function startNucleoCentralRefresh(){
   try{clearInterval(__nucleoCentralRefreshTimer)}catch(e){}
-  __nucleoCentralRefreshTimer=setInterval(()=>{
-    try{if(getSession()?.authToken && document.visibilityState!=='hidden')syncPortalBackend(false)}catch(e){}
-  },15000);
+  __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),60000);
 }
-document.addEventListener('visibilitychange',()=>{
-  try{if(document.visibilityState==='visible'&&getSession()?.authToken)syncPortalBackend(false)}catch(e){}
-});
-window.addEventListener('focus',()=>{try{if(getSession()?.authToken)syncPortalBackend(false)}catch(e){}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoAutoSyncIfDue(false)});
+window.addEventListener('focus',()=>nucleoAutoSyncIfDue(false));
 startNucleoCentralRefresh();
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
@@ -15922,7 +15959,7 @@ function openAssignedSectorEdit(triageKey){
   openTriageRecord(String(triageKey||''));
   setTimeout(()=>{
     const row=[...document.querySelectorAll('#triageAssignments .triage-assignment-row')].find(r=>triageCompositeKey(triageRoNumberPart(triageKey),r.dataset.sector)===String(triageKey));
-    if(row){row.scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('.triage-assignment-user')?.focus();}
+    if(row){row.scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('.triage-assignment-sector')?.focus();}
   },80);
 }
 
