@@ -2678,24 +2678,14 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
     </div>
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
-  <div id="accessBanner" class="access-banner"></div>
-  <p class="small">R.O.s sincronizadas com a base configurada pelo SGQ.</p>
-<div class="saved-filter-bar">
-  <button class="btn secondary" type="button" onclick="saveCurrentRoFilter()">Salvar filtro atual</button>
-  <select id="savedRoFilters" onchange="applySavedRoFilter(this.value)"><option value="">Filtros salvos...</option></select>
-</div>
-<div class="archive-banner">
-  <span class="small">Visualização da operação</span>
-  <label class="small"><input id="showArchivedToggle" type="checkbox" onchange="render()"> Mostrar arquivadas</label>
-</div>
-<div class="toolbar">
-<input id="search" placeholder="Buscar por número, cliente ou assunto">
-<div id="assignedExtraFilters" style="display:none;gap:10px;flex-wrap:wrap;flex:1 1 100%">
-  <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
-  <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
-  <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
-</div>
-<select id="filter"><option value="todas">Todas</option><option value="ativas">Ativas</option><option value="contestacao">Em contestação</option><option value="encerradas">Encerradas</option></select><button class="btn secondary" onclick="syncNow()">↻ Sincronizar agora</button></div><div id="syncMsg" class="statusline">Última sincronização: ainda não realizada nesta demonstração.</div><div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Assunto</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="assigned-filter-row">
+    <input id="search" placeholder="Buscar por número ou cliente">
+    <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
+    <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
+    <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
+    <select id="filter" onchange="render()"><option value="todas">Todos os status</option><option value="ro_enviada">R.O. enviada</option><option value="pdca_respondido">PDCA respondido</option><option value="pdca_apresentado">PDCA apresentado</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
+  </div>
+  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th>Situação PDCA</th><th>Plano de ação</th><th>R.O. / PDF</th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
 </section>
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -15617,6 +15607,17 @@ async function setExternalPdca(numero,hasExternal){
   }
 }
 
+function assignedRoStatus(r){
+  const raw=String(r?.status||'').trim().toLowerCase();
+  const pdca=String(r?.pdca||'').trim().toLowerCase();
+  if(raw.includes('cancel')) return 'Cancelada';
+  if(raw.includes('obsolet')) return 'Obsoleto';
+  if(raw.includes('registro') || raw.includes('somente para registro')) return 'Registro';
+  if(raw.includes('apresent')) return 'PDCA apresentado';
+  if(raw.includes('pdca enviado') || pdca==='enviado' || pdca.includes('respond')) return 'PDCA respondido';
+  return 'R.O. enviada';
+}
+
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
   const filterEl=document.getElementById('filter');
@@ -15628,7 +15629,6 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
 
-  const showArchived=Boolean(document.getElementById('showArchivedToggle')?.checked);
   const list=ros
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
@@ -15641,7 +15641,6 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
-    .filter(r=>showArchived||!isArchivedRo(r.numero||r.id||r.codigo))
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
@@ -15653,8 +15652,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
       }
-      const text=(r.numero+" "+r.cliente+" "+r.assunto+" "+(r.origemBase||'')).toLowerCase().includes(q);
-      const filt=f==="todas"||(f==="ativas"&&!['Cancelada','Somente para registro'].includes(r.status))||(f==="contestacao"&&r.status==="Em contestação")||(f==="encerradas"&&['Cancelada','Somente para registro'].includes(r.status));
+      const text=(r.numero+" "+r.cliente+" "+(r.origemBase||'')).toLowerCase().includes(q);
+      const displayStatus=assignedRoStatus(r);
+      const statusKey={'R.O. enviada':'ro_enviada','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'ro_enviada';
+      const filt=f==='todas'||f===statusKey;
       return text&&filt;
     });
 
@@ -15668,6 +15669,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const tri=getRoTriageRecord(r);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
+    const displayStatus=assignedRoStatus(r);
 
     let operationalActions='';
     if(!admin){
@@ -15705,9 +15707,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td>${escapeHtml(r.unidade||'')}</td>
       <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
-      <td>${escapeHtml(r.assunto||'')}</td>
-      <td>${escapeHtml(r.prazo||'')}</td>
-      <td><span class="${badgeClass(r.status)}">${escapeHtml(r.status||'')}</span></td>
+      <td>${escapeHtml(r.prazo||'—')}</td>
+      <td><span class="${badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span></td>
       <td>${adminPdcaControl}</td>
       <td><span class="${externalPdca?'badge ok':r.pdca==='Obrigatório'?'badge':r.pdca==='Suspenso'?'badge warn':r.pdca==='Enviado'?'badge ok':'badge off'}">${escapeHtml(externalPdca?'PDCA externo':(r.pdca||''))}</span></td>
       <td><button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')">Visualizar R.O.</button></td>
@@ -17821,6 +17822,25 @@ html,body{max-width:100%;overflow-x:hidden!important}
 .password-eye-wrap{position:relative;display:block;width:100%}
 .password-eye-wrap>input{width:100%!important;padding-right:44px!important;box-sizing:border-box}
 .password-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;cursor:pointer;padding:6px;z-index:5;font-size:17px;line-height:1}
+
+/* R.O.s atribuídas — layout compacto sem rolagem lateral */
+.assigned-filter-row{display:grid;grid-template-columns:minmax(240px,2fr) repeat(4,minmax(135px,1fr));gap:10px;align-items:center;margin:14px 0 16px}
+.assigned-filter-row input,.assigned-filter-row select{width:100%;min-width:0}
+.ro-control-table-wrap{width:100%;overflow-x:visible!important}
+.ro-control-table{width:100%!important;min-width:0!important;table-layout:fixed!important}
+.ro-control-table th,.ro-control-table td{min-width:0!important;white-space:normal;overflow-wrap:anywhere;padding-left:8px;padding-right:8px}
+.ro-control-table th:nth-child(1),.ro-control-table td:nth-child(1){width:8%;white-space:nowrap}
+.ro-control-table th:nth-child(2),.ro-control-table td:nth-child(2){width:12%}
+.ro-control-table th:nth-child(3),.ro-control-table td:nth-child(3){width:12%}
+.ro-control-table th:nth-child(4),.ro-control-table td:nth-child(4){width:7%;white-space:nowrap}
+.ro-control-table th:nth-child(5),.ro-control-table td:nth-child(5){width:8%;white-space:nowrap}
+.ro-control-table th:nth-child(6),.ro-control-table td:nth-child(6){width:10%}
+.ro-control-table th:nth-child(7),.ro-control-table td:nth-child(7){width:23%}
+.ro-control-table th:nth-child(8),.ro-control-table td:nth-child(8){width:10%}
+.ro-control-table th:nth-child(9),.ro-control-table td:nth-child(9){width:10%}
+.pdca-source-control{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.pdca-source-control .btn{padding:7px 9px;font-size:12px;white-space:nowrap}
+@media(max-width:1100px){.assigned-filter-row{grid-template-columns:repeat(2,minmax(0,1fr))}.assigned-filter-row #search{grid-column:1/-1}.ro-control-table{font-size:12px}.pdca-source-control .btn{white-space:normal}}
 </style>
 <script id="passwordEyeScript">
 (function(){
