@@ -4475,7 +4475,7 @@ function pendingHubData(){
       const st=normalizeAnswer(ro.status||'');
       if(st.includes('cancel')||st.includes('somente para registro'))return false;
       const key=String(ro.numero||ro.id||ro.codigo||'').trim();
-      const tri=triageMap.get(key);
+      const tri=resolvedTriageForRo(ro,triageMap);
       const triStatus=normalizeAnswer(tri?.status||tri?.decision||'');
       if(triStatus.includes('cancel')||triStatus.includes('somente para registro'))return false;
       if(sentRos.has(key))return false;
@@ -5440,13 +5440,7 @@ function ensureMenuNotificationBadge(navId){
 function pendingTriageCount(){
   if(!isAdmin())return 0;
   const triageMap=getSavedTriageMap();
-  return getAllRoRecords().filter(ro=>{
-    const key=String(ro.numero||ro.id||ro.codigo||'').trim();
-    if(!key)return false;
-    const t=triageMap.get(key)||{};
-    // Só deixa de ser pendente quando existe uma decisão de triagem registrada.
-    return !String(t.decision||'').trim();
-  }).length;
+  return getAllRoRecords().filter(ro=>roNeedsTriage(ro,triageMap)).length;
 }
 
 function refreshMenuNotificationBadges(){
@@ -10449,6 +10443,23 @@ function getTriageRecordForRoSector(roNumber,sector,map=getSavedTriageMap()){
   return map.get(composite)||map.get(String(roNumber||'').trim())||null;
 }
 
+// Resolve a triagem real da R.O. sem confundir chave base com RO::Setor.
+// Todas as telas que perguntam "já foi triada?" devem usar esta função.
+function resolvedTriageForRo(ro,map=getSavedTriageMap()){
+  if(!ro)return null;
+  const exact=String(triageKeyOf(ro)||'').trim();
+  if(exact && map.has(exact))return map.get(exact);
+  const base=String(triageBaseRoNumber(ro)||'').trim();
+  if(base && map.has(base))return map.get(base);
+  const records=getTriageRecordsForRoNumber(base,map);
+  // Uma decisão real em qualquer vínculo da R.O. prova que ela já passou pela triagem.
+  return records.find(t=>String(t?.decision||'').trim()) || records[0] || null;
+}
+function roNeedsTriage(ro,map=getSavedTriageMap()){
+  const tri=resolvedTriageForRo(ro,map);
+  return !String(tri?.decision||'').trim();
+}
+
 function getDeletedTriageKeys(){
   try{return new Set(JSON.parse(localStorage.getItem(DELETED_TRIAGE_KEYS_KEY)||'[]').map(String))}catch(e){return new Set()}
 }
@@ -10581,7 +10592,7 @@ function getTriageRecords(){
   const saved=getSavedTriageMap();
   return getAllRoRecords().map(ro=>{
     const key=triageKeyOf(ro);
-    const tri=saved.get(key)||{};
+    const tri=resolvedTriageForRo(ro,saved)||{};
     const decision=tri.decision||'';
     let triagemStatus='new';
     if(decision==='directed')triagemStatus='directed';
