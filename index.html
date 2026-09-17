@@ -1152,6 +1152,17 @@ body.external-ro-denied #navNewExternalRo{
 <style id="stage5Styles">
 .intel-panel{margin-top:16px;border:1px solid #d9e2ec;border-radius:12px;padding:14px;background:#fbfcfc}
 .intel-panel h3{margin:0 0 10px}
+.duplicate-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.duplicate-expand-btn{border:0;background:transparent;color:#355b7d;font-weight:700;cursor:pointer;padding:4px 7px;border-radius:7px}
+.duplicate-expand-btn:hover{background:#edf4f8}
+.duplicate-detail-list{display:grid;gap:10px}
+.duplicate-detail-card{border:1px solid #dfe7ed;border-radius:10px;padding:12px;background:#fff}
+.duplicate-detail-top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.duplicate-score{font-weight:800;color:#244b68}
+.duplicate-badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.duplicate-badge{font-size:11px;padding:3px 7px;border-radius:999px;background:#eef3f6;color:#41566a}
+.duplicate-fulltext{white-space:pre-wrap;line-height:1.45;color:#405168;margin-top:7px}
+
 .intel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:900px){.intel-grid{grid-template-columns:1fr}}
 .intel-card{border:1px solid #e1e8e5;border-radius:10px;padding:12px;background:#fff}
@@ -11241,6 +11252,28 @@ function renderRoIntelligence(){
   if(card)card.classList.toggle('intel-warning',sims.some(x=>x.score>=65));
   if(list)list.innerHTML=sims.length?sims.map(x=>`<div style="padding:5px 0;border-top:1px solid #edf1ef"><button class="ro-link-btn" type="button" onclick="openRO('${escapeHtml(x.ro.numero||x.ro.id||x.ro.codigo)}')"><b>${escapeHtml(x.ro.numero||'R.O.')}</b></button> · ${x.score}% semelhante · ${escapeHtml(x.ro.cliente||'')}</div>`).join(''):'Nenhuma ocorrência suficientemente semelhante pelos critérios atuais.';
 }
+function similarityReasons(a,b,triageMap){
+  const reasons=[];
+  const same=(x,y)=>normalizeAnswer(x||'')&&normalizeAnswer(x||'')===normalizeAnswer(y||'');
+  if(same(a?.cliente,b?.cliente))reasons.push('Mesmo cliente');
+  if(same(a?.tipoRO||a?.assunto,b?.tipoRO||b?.assunto))reasons.push('Mesmo tipo de R.O.');
+  const ar=a?.raw||{},br=b?.raw||{};
+  const ai=firstValue(ar,['Código do item:','Código do item','Codigo do item','Item'])||'';
+  const bi=firstValue(br,['Código do item:','Código do item','Codigo do item','Item'])||'';
+  if(ai&&same(ai,bi))reasons.push('Mesmo item');
+  const textScore=Math.round(jaccardSimilarity(a?.descricao||'',b?.descricao||'')*100);
+  if(textScore>=20)reasons.push('Descrição '+textScore+'% semelhante');
+  const as=effectiveRoSector(a,triageMap),bs=effectiveRoSector(b,triageMap);
+  if(as&&same(as,bs))reasons.push('Mesmo setor');
+  return reasons;
+}
+function duplicateMeta(ro){
+  const raw=ro?.raw||{};
+  const item=firstValue(raw,['Código do item:','Código do item','Codigo do item','Item'])||'';
+  const pedido=firstValue(raw,['Número do pedido:','Número do pedido','Pedido'])||'';
+  const data=ro?.data||ro?.dataRegistro||ro?.timestamp||firstValue(raw,['Data','Data:','Data da ocorrência','Data da ocorrência:'])||'';
+  return {item,pedido,data};
+}
 function renderTriageDuplicateWarning(ro){
   const box=document.getElementById('triageDuplicateWarning');
   const list=document.getElementById('triageDuplicateList');
@@ -11248,13 +11281,15 @@ function renderTriageDuplicateWarning(ro){
 
   box.classList.remove('hidden');
   list.textContent='Verificando ocorrências semelhantes...';
+  window.__triageDuplicateContext={ro,sims:[]};
 
   const run=()=>{
     try{
-      const sims=findSimilarRos(ro,4).filter(x=>x.score>=50);
+      const sims=findSimilarRos(ro,8).filter(x=>x.score>=50);
+      window.__triageDuplicateContext={ro,sims};
       box.classList.toggle('hidden',!sims.length);
       if(sims.length){
-        list.innerHTML=sims.map(x=>`<div style="padding:4px 0"><b>${escapeHtml(x.ro.numero||'')}</b> · ${x.score}% semelhante · ${escapeHtml(x.ro.cliente||'')} · ${escapeHtml(x.ro.descricao||'').slice(0,120)}</div>`).join('');
+        list.innerHTML=sims.slice(0,4).map(x=>`<div style="padding:4px 0"><b>${escapeHtml(x.ro.numero||'')}</b> · ${x.score}% semelhante · ${escapeHtml(x.ro.cliente||'')} · ${escapeHtml(x.ro.descricao||'').slice(0,120)}${String(x.ro.descricao||'').length>120?'…':''}</div>`).join('');
       }else{
         list.textContent='';
       }
@@ -11267,6 +11302,33 @@ function renderTriageDuplicateWarning(ro){
   if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:500});
   else setTimeout(run,30);
 }
+function openTriageDuplicateDetails(){
+  const ctx=window.__triageDuplicateContext||{};
+  const ro=ctx.ro;
+  if(!ro)return;
+  const triageMap=getSavedTriageMap();
+  const sims=(ctx.sims&&ctx.sims.length?ctx.sims:findSimilarRos(ro,20).filter(x=>x.score>=50));
+  const overlay=document.getElementById('triageDuplicateDetailsOverlay');
+  const list=document.getElementById('triageDuplicateDetailsList');
+  const summary=document.getElementById('triageDuplicateDetailsSummary');
+  if(!overlay||!list)return;
+  if(summary)summary.innerHTML=`<b>${escapeHtml(ro.numero||ro.id||ro.codigo||'R.O. atual')}</b> · ${sims.length} ocorrência(s) com 50% ou mais de similaridade.`;
+  list.innerHTML=sims.length?sims.map(x=>{
+    const m=duplicateMeta(x.ro), reasons=similarityReasons(ro,x.ro,triageMap);
+    const meta=[x.ro.cliente?('Cliente: '+x.ro.cliente):'',m.item?('Item: '+m.item):'',m.pedido?('Pedido: '+m.pedido):'',m.data?('Data: '+m.data):'',effectiveRoSector(x.ro,triageMap)?('Setor: '+effectiveRoSector(x.ro,triageMap)):''].filter(Boolean);
+    return `<div class="duplicate-detail-card">
+      <div class="duplicate-detail-top"><button class="ro-link-btn" type="button" onclick="openRO('${escapeHtml(x.ro.numero||x.ro.id||x.ro.codigo)}')"><b>${escapeHtml(x.ro.numero||'R.O.')}</b></button><span class="duplicate-score">${x.score}% semelhante</span></div>
+      ${reasons.length?`<div class="duplicate-badges">${reasons.map(r=>`<span class="duplicate-badge">${escapeHtml(r)}</span>`).join('')}</div>`:''}
+      ${meta.length?`<div class="small">${meta.map(escapeHtml).join(' · ')}</div>`:''}
+      <div class="duplicate-fulltext">${escapeHtml(String(x.ro.descricao||'Sem descrição registrada.'))}</div>
+    </div>`;
+  }).join(''):'<div class="small">Nenhuma ocorrência com 50% ou mais de similaridade.</div>';
+  overlay.classList.add('open');
+}
+function closeTriageDuplicateDetails(){
+  document.getElementById('triageDuplicateDetailsOverlay')?.classList.remove('open');
+}
+
 function pdcaQualityIssues(){
   const a=answers||{},issues=[];
   const text=(id)=>String(a[id]||'').trim();
@@ -14993,14 +15055,14 @@ const ADMIN_OPERATIONAL_MODULES={
     ]
   },
   nccapa:{
-    eyebrow:'RELATÓRIO INDEPENDENTE DE QUALIDADE',
+    eyebrow:'NÃO CONFORMIDADES',
     title:'Não conformidades e CAPA',
-    desc:'Uma não conformidade não é uma R.O. Abra aqui um relatório próprio para registrar o desvio, sua fonte, evidências, impacto e setor responsável pelo tratamento.',
+    desc:'Central de não conformidades internas e de fornecedor. NC de cliente continua no fluxo de SAC; NC de fornecedor é registrada como RNC e pode ou não estar vinculada a uma R.O.',
     cards:[
-      ['Abrir relatório de não conformidade','Registrar uma nova não conformidade independente de R.O.','new'],
-      ['Em tratamento','Acompanhar análises, contenções e responsáveis.','active'],
-      ['CAPA vinculada','Controlar ações corretivas e preventivas vinculadas.','capa'],
-      ['Central de Ações','Acompanhar ações, prazos, evidências e conclusão.','history']
+      ['Nova NC / RNC','Registrar uma NC interna ou uma RNC de fornecedor. O vínculo com R.O. é opcional.','new'],
+      ['Em tratamento','Acompanhar NCs e RNCs abertas, contenções e responsáveis.','active'],
+      ['RNC de fornecedores','Consultar as não conformidades de fornecedor e seus vínculos.','rnc'],
+      ['CAPA vinculada','Controlar NCs e RNCs com ação corretiva/preventiva vinculada.','capa']
     ]
   },
   documents:{
@@ -15203,8 +15265,14 @@ function adminModuleFields(key){
       <label><span class="small">Eficácia</span><select id="admModEffectiveness"><option value="">A avaliar</option><option value="effective">Eficaz</option><option value="ineffective">Não eficaz</option></select></label>
       <label style="grid-column:1/-1"><span class="small">Observações / evidências</span><textarea id="admModDescription" placeholder="Conteúdo, certificado, avaliação de eficácia..."></textarea></label>`,
     nccapa:`
-      <label><span class="small">Título do desvio</span><input id="admModTitle" placeholder="Título do desvio"></label>
-      <label><span class="small">Processo / fonte</span><input id="admModCode" placeholder="Processo, requisito, norma ou fonte"></label>
+      <div style="grid-column:1/-1;padding:12px 14px;border:1px solid #dbe6ff;background:#f7faff;border-radius:12px"><b>Como o Núcleo trata as NCs</b><div class="small" style="margin-top:4px">Cliente = SAC (continua no Controle de SAC) • Fornecedor = RNC • Interna = NC interna. RNC e NC interna podem existir sem R.O.</div></div>
+      <label><span class="small">Tipo de não conformidade *</span><select id="admModNcType" onchange="updateNcCapaFormType()"><option value="internal">NC interna</option><option value="supplier">Fornecedor (RNC)</option></select></label>
+      <label id="admModRncNumberWrap" class="hidden"><span class="small">Número da RNC</span><input id="admModRncNumber" readonly placeholder="Gerado ao salvar"></label>
+      <label><span class="small">Título do desvio *</span><input id="admModTitle" placeholder="Título do desvio"></label>
+      <label><span class="small">Origem</span><select id="admModNcOrigin"><option value="direct">Registro direto</option><option value="ro">R.O.</option><option value="receiving">Recebimento / inspeção</option><option value="audit">Auditoria</option><option value="process">Processo interno</option><option value="other">Outra</option></select></label>
+      <label id="admModSupplierWrap" class="hidden"><span class="small">Fornecedor *</span><input id="admModSupplier" placeholder="Nome do fornecedor"></label>
+      <label><span class="small">R.O. relacionada (opcional)</span><input id="admModRelatedRo" placeholder="Ex.: RO-IN-00476"></label>
+      <label><span class="small">Processo / requisito / fonte</span><input id="admModCode" placeholder="Processo, requisito, norma ou fonte"></label>
       <label><span class="small">Unidade</span><input id="admModLocation" placeholder="Unidade"></label>
       <label><span class="small">Setor responsável</span><input id="admModSector" placeholder="Setor responsável"></label>
       <label><span class="small">Responsável</span><input id="admModResponsible" placeholder="Responsável pelo tratamento"></label>
@@ -15311,6 +15379,7 @@ function filterAdminModuleRecords(key,mode){
   if(mode==='active')return list.filter(r=>!['done','published'].includes(r.status));
   if(mode==='pending')return list.filter(r=>isAdminModulePending(r,key));
   if(mode==='capa')return list.filter(r=>r.capa==='yes');
+  if(mode==='rnc')return list.filter(r=>r.ncType==='supplier'||String(r.rncNumber||'').trim());
   if(mode==='elaboration')return list.filter(r=>r.status==='elaboration');
   if(mode==='review')return list.filter(r=>r.status==='review');
   if(mode==='approval')return list.filter(r=>r.status==='approval');
@@ -15386,6 +15455,7 @@ function openAdminOperationalWorkspace(key,index){
         </div>
       </div>
     </div>`;
+    if(key==='nccapa')updateNcCapaFormType();
     if(key==='documents'&&!isAdmin()){
       const st=document.getElementById('admModStatus');if(st){st.value='open';st.disabled=true}
       const resp=document.getElementById('admModResponsible');if(resp)resp.closest('label')?.classList.add('hidden');
@@ -15400,7 +15470,7 @@ function openAdminOperationalWorkspace(key,index){
     <div class="card" style="margin-top:14px;padding:0;overflow:hidden">
       ${records.length?`<table style="width:100%"><thead><tr><th>${key==='processes'?'Documento interno':key==='documents'?'Solicitação':'Registro'}</th><th>${key==='documents'?'Solicitante / área':'Responsável / área'}</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead><tbody>
         ${records.map(r=>`<tr>
-          <td><b>${escapeHtml(r.title||'Sem título')}</b><div class="small">${escapeHtml(r.code||r.description||'')}</div></td>
+          <td><b>${escapeHtml(key==='nccapa'&&r.rncNumber?(r.rncNumber+' · '+(r.title||'Sem título')):(r.title||'Sem título'))}</b><div class="small">${escapeHtml(key==='nccapa'?(r.ncType==='supplier'?('Fornecedor: '+(r.supplier||'—')+(r.relatedRo?' • R.O.: '+r.relatedRo:'')):('NC interna'+(r.relatedRo?' • R.O.: '+r.relatedRo:''))):(r.code||r.description||''))}</div></td>
           <td>${escapeHtml(key==='documents'?(r.createdBy||r.sector||'—'):(r.responsible||r.sector||r.location||'—'))}</td>
           <td>${escapeHtml(adminModuleDate(r.dueDate))}</td>
           <td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td>
@@ -15410,6 +15480,20 @@ function openAdminOperationalWorkspace(key,index){
     </div>
   </div>`;
 }
+function updateNcCapaFormType(){
+  const type=String(document.getElementById('admModNcType')?.value||'internal');
+  document.getElementById('admModSupplierWrap')?.classList.toggle('hidden',type!=='supplier');
+  document.getElementById('admModRncNumberWrap')?.classList.toggle('hidden',type!=='supplier');
+}
+function nextRncNumber(){
+  const year=new Date().getFullYear();
+  let max=0;
+  getAdminModuleRecords().filter(r=>r.module==='nccapa').forEach(r=>{
+    const m=String(r.rncNumber||'').match(/^RNC-(\d{4})-(\d+)$/i);
+    if(m&&Number(m[1])===year)max=Math.max(max,Number(m[2])||0);
+  });
+  return `RNC-${year}-${String(max+1).padStart(4,'0')}`;
+}
 function collectAdminModuleForm(key,existing){
   const val=id=>String(document.getElementById(id)?.value||'').trim();
   const now=new Date().toISOString();
@@ -15417,6 +15501,11 @@ function collectAdminModuleForm(key,existing){
     ...(existing||{}),
     id:existing?.id||('ADM-'+key.toUpperCase()+'-'+Date.now()),
     module:key,
+    ncType:val('admModNcType')||(existing?.ncType||''),
+    rncNumber:val('admModRncNumber')||(existing?.rncNumber||''),
+    ncOrigin:val('admModNcOrigin')||(existing?.ncOrigin||''),
+    supplier:val('admModSupplier')||(existing?.supplier||''),
+    relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     title:val('admModTitle'),
     code:val('admModCode'),
     location:val('admModLocation'),
@@ -15450,6 +15539,10 @@ function saveAdminOperationalRecord(key,id){
   const existing=id?adminModuleRecord(id):null;
   const r=collectAdminModuleForm(key,existing);
   if(!r.title){alert('Informe o título/nome principal do registro.');return}
+  if(key==='nccapa'&&r.ncType==='supplier'){
+    if(!r.supplier){alert('Informe o fornecedor da RNC.');return}
+    if(!r.rncNumber)r.rncNumber=nextRncNumber();
+  }
   if(key==='documents'&&!r.code){alert('Selecione o documento solicitado.');return}
   if(key==='documents'&&!isAdmin()){
     r.status='open';
@@ -15505,6 +15598,7 @@ function editAdminOperationalRecord(id){
     </div>
   </div>`;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
+  set('admModNcType',r.ncType||'internal');set('admModRncNumber',r.rncNumber);set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
   set('admModTitle',r.title);set('admModCode',r.code);set('admModLocation',r.location);set('admModSector',r.sector);
   set('admModResponsible',r.responsible);set('admModEventDate',r.eventDate);set('admModDueDate',r.dueDate);set('admModStatus',r.status);
   set('admModEffectiveness',r.effectiveness);set('admModSeverity',r.severity);set('admModCapa',r.capa);
@@ -15512,6 +15606,7 @@ function editAdminOperationalRecord(id){
   set('admModProduct',r.product);set('admModOrder',r.order);set('admModInvoice',r.invoice);
   set('admModQuantity',r.quantity);set('admModLanguage',r.language);set('admModRecipient',r.recipient);
   set('admModRecipientEmail',r.recipientEmail);set('admModDocType',r.docType);set('admModRevision',r.revision);
+  if(key==='nccapa')updateNcCapaFormType();
   if(key==='documents'&&!isAdmin()){
     const st=document.getElementById('admModStatus');if(st)st.disabled=true;
     const resp=document.getElementById('admModResponsible');if(resp)resp.disabled=true;
@@ -17862,6 +17957,22 @@ document.addEventListener('DOMContentLoaded',()=>{
 </div>
 
 
+<div id="triageDuplicateDetailsOverlay" class="triage-modal-overlay" onclick="if(event.target===this)closeTriageDuplicateDetails()">
+  <div class="triage-modal" style="width:min(1040px,96vw)">
+    <div class="triage-modal-head">
+      <div>
+        <h2>Duplicidade e reincidência</h2>
+        <p class="small" style="margin:5px 0 0">Comparações encontradas para a R.O. em triagem, com os critérios que contribuíram para a similaridade.</p>
+      </div>
+      <button class="btn secondary" type="button" onclick="closeTriageDuplicateDetails()">Fechar</button>
+    </div>
+    <div class="triage-modal-body" style="max-height:72vh;overflow:auto">
+      <div id="triageDuplicateDetailsSummary" class="small" style="margin-bottom:12px"></div>
+      <div id="triageDuplicateDetailsList" class="duplicate-detail-list"></div>
+    </div>
+  </div>
+</div>
+
 <div id="triageModalOverlay" class="triage-modal-overlay" onclick="if(event.target===this)closeTriageModal()">
   <div class="triage-modal">
     <div class="triage-modal-head">
@@ -17875,7 +17986,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     <div class="triage-modal-body">
       <div id="triageRoSummary" class="triage-ro-summary"></div>
       <div id="triageDuplicateWarning" class="intel-panel hidden" style="margin-top:12px">
-        <b>Possível duplicidade / reincidência</b>
+        <div class="duplicate-panel-head">
+          <b>Possível duplicidade / reincidência</b>
+          <button id="triageDuplicateExpandBtn" class="duplicate-expand-btn" type="button" onclick="openTriageDuplicateDetails()">Expandir ↗</button>
+        </div>
         <div id="triageDuplicateList" class="small" style="margin-top:6px"></div>
       </div>
 
