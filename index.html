@@ -10453,7 +10453,29 @@ function resolvedTriageForRo(ro,map=getSavedTriageMap()){
   if(base && map.has(base))return map.get(base);
   const records=getTriageRecordsForRoNumber(base,map);
   // Uma decisão real em qualquer vínculo da R.O. prova que ela já passou pela triagem.
-  return records.find(t=>String(t?.decision||'').trim()) || records[0] || null;
+  const decided=records.find(t=>String(t?.decision||'').trim()) || records[0] || null;
+  if(decided)return decided;
+
+  // Recuperação da fonte original: se a coluna específica de Setor responsável
+  // ainda está preenchida, a R.O. JÁ FOI TRIADA. Não exigir status operacional
+  // aqui. Versões anteriores chegaram a limpar/alterar esse status e isso criava
+  // a dualidade: aparecia em "R.O.s atribuídas" e também em "Necessita triar".
+  // O PDCA (pendente/externo/respondido) é um estado posterior e não define triagem.
+  const sheetSector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||'').trim();
+  const sectorNorm=normalizeAnswer(sheetSector);
+  const hasAssignedSector=!!sheetSector &&
+    !['nao direcionado','nao informado','sem setor','-'].includes(sectorNorm);
+  if(hasAssignedSector){
+    return {
+      roKey:triageCompositeKey(base,sheetSector),
+      roNumber:base,
+      decision:'directed',
+      responsibleSector:sheetSector,
+      importedFromSheet:true,
+      __synthetic:true
+    };
+  }
+  return null;
 }
 function roNeedsTriage(ro,map=getSavedTriageMap()){
   const tri=resolvedTriageForRo(ro,map);
