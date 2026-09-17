@@ -11181,46 +11181,91 @@ function formatDateBR(value){
 const OFFLINE_QUEUE_KEY='portal-sgq-offline-sync-v1';
 
 function tokenizeForSimilarity(v){
-  const stop=new Set(['de','da','do','das','dos','e','em','para','por','com','um','uma','o','a','os','as','no','na','nos','nas','que','foi','ser','tem','ao']);
-  return normalizeAnswer(v||'').replace(/[^a-z0-9áéíóúãõâêôç\s]/gi,' ').split(/\s+/).filter(x=>x.length>2&&!stop.has(x));
+  // Similaridade de reincidência deve comparar o PROBLEMA, não metadados.
+  // Termos administrativos/contextuais e verbos genéricos não podem criar uma falsa reincidência.
+  const stop=new Set([
+    'de','da','do','das','dos','e','em','para','por','com','um','uma','o','a','os','as','no','na','nos','nas','que','foi','ser','tem','ao','aos','se','sua','seu','suas','seus',
+    'cliente','producao','produto','operador','empresa','setor','ocorrencia','problema','registrada','registrado','informacao','informado','informada','necessario','necessaria','durante','devido','conforme','este','esta','esse','essa','tipo','peca','pecas','processo',
+    'falta','erro','falha','incorreto','incorreta','incorretos','incorretas'
+  ]);
+  const stem=(x)=>{
+    x=normalizeAnswer(x||'').replace(/[^a-z0-9]/g,'');
+    // pequenas normalizações úteis para descrições industriais em português
+    const map={
+      medidas:'medida',dimensoes:'dimensao',dimensional:'dimensao',dimensionais:'dimensao',comprimentos:'comprimento',larguras:'largura',alturas:'altura',
+      chapas:'chapa',caixas:'caixa',cliches:'cliche',etiquetas:'etiqueta',fitas:'fita',colas:'cola',pedidos:'pedido',lotes:'lote',itens:'item',
+      atrasando:'atraso',atrasada:'atraso',atrasado:'atraso',danificou:'danificar',danificada:'danificar',danificado:'danificar',
+      especificado:'especificacao',especificada:'especificacao',especificacoes:'especificacao',solicitado:'solicitacao',solicitada:'solicitacao'
+    };
+    return map[x]||x;
+  };
+  return normalizeAnswer(v||'').replace(/[^a-z0-9áéíóúãõâêôç\s]/gi,' ').split(/\s+/)
+    .map(stem).filter(x=>x.length>2&&!stop.has(x));
+}
+function problemFeatures(v){
+  const toks=tokenizeForSimilarity(v);
+  const features=new Set(toks);
+  // Bigrams preservam o objeto do problema: "fita dupla", "medida chapa", etc.
+  for(let i=0;i<toks.length-1;i++)features.add(toks[i]+'_'+toks[i+1]);
+  const n=normalizeAnswer(v||'');
+  const concepts=[];
+  if(/\b(medida|dimens|comprimento|largura|altura|milimet|mm\b)/.test(n))concepts.push('CONCEITO_DIMENSIONAL');
+  if(/\b(cliche|clichê)/.test(n))concepts.push('OBJETO_CLICHE');
+  if(/\b(fita dupla|dupla face|adesiv)/.test(n))concepts.push('OBJETO_FITA_ADESIVA');
+  if(/\b(chapa|chapas)/.test(n))concepts.push('OBJETO_CHAPA');
+  if(/\b(caixa|caixas|embalagem|embalagens)/.test(n))concepts.push('OBJETO_EMBALAGEM');
+  if(/\b(etiqueta|etiquetas|rotulo|rótulo)/.test(n))concepts.push('OBJETO_ETIQUETA');
+  if(/\b(impress|tinta|cor|tonalidade)/.test(n))concepts.push('CONCEITO_IMPRESSAO');
+  if(/\b(colagem|cola|descol|aderencia|aderência)/.test(n))concepts.push('CONCEITO_COLAGEM');
+  if(/\b(corte|cortad|faca)/.test(n))concepts.push('CONCEITO_CORTE');
+  if(/\b(amass|rasg|quebr|danific)/.test(n))concepts.push('CONCEITO_DANO_FISICO');
+  concepts.forEach(x=>features.add(x));
+  return features;
 }
 function jaccardSimilarity(a,b){
-  const A=new Set(tokenizeForSimilarity(a)),B=new Set(tokenizeForSimilarity(b));
+  const A=problemFeatures(a),B=problemFeatures(b);
   if(!A.size||!B.size)return 0;
   let inter=0;A.forEach(x=>{if(B.has(x))inter++});
   const union=new Set([...A,...B]).size;
   return union?inter/union:0;
 }
+function problemSimilarity(a,b){
+  const A=problemFeatures(a),B=problemFeatures(b);
+  if(!A.size||!B.size)return 0;
+  let inter=0;A.forEach(x=>{if(B.has(x))inter++});
+  // Dice é menos punitivo quando uma descrição é muito mais detalhada que a outra.
+  const dice=(2*inter)/(A.size+B.size);
+  const ca=[...A].filter(x=>x.startsWith('CONCEITO_')||x.startsWith('OBJETO_'));
+  const cb=new Set([...B].filter(x=>x.startsWith('CONCEITO_')||x.startsWith('OBJETO_')));
+  const conceptHits=ca.filter(x=>cb.has(x)).length;
+  const conceptBoost=conceptHits?Math.min(.22,conceptHits*.11):0;
+  return Math.min(1,dice+conceptBoost);
+}
 function roSimilarity(a,b,triageMap){
   if(!a||!b)return 0;
-  let score=0,weight=0;
+  const text=problemSimilarity(a.descricao||'',b.descricao||'');
+  // REGRA PRINCIPAL: sem semelhança real do problema, metadados não geram pontuação.
+  if(text<0.22)return 0;
+
+  let score=text*90;
   const same=(x,y)=>normalizeAnswer(x||'')&&normalizeAnswer(x||'')===normalizeAnswer(y||'');
-  if(a.cliente||b.cliente){weight+=2;if(same(a.cliente,b.cliente))score+=2}
-  if(a.tipoRO||a.assunto||b.tipoRO||b.assunto){weight+=1.5;if(same(a.tipoRO||a.assunto,b.tipoRO||b.assunto))score+=1.5}
   const ar=a.raw||{},br=b.raw||{};
   const ai=firstValue(ar,['Código do item:','Código do item','Codigo do item','Item'])||'';
   const bi=firstValue(br,['Código do item:','Código do item','Codigo do item','Item'])||'';
-  if(ai||bi){weight+=2;if(same(ai,bi))score+=2}
-  weight+=4;
-  score+=jaccardSimilarity(a.descricao||'',b.descricao||'')*4;
-
-  // Usa o mesmo mapa de triagem para todas as comparações.
-  // Antes este ponto reconstruía o mapa milhares de vezes ao abrir a triagem.
-  const as=effectiveRoSector(a,triageMap),bs=effectiveRoSector(b,triageMap);
-  if(as||bs){weight+=1;if(same(as,bs))score+=1}
-  return weight?Math.round(score/weight*100):0;
+  // Item e tipo só REFORÇAM um problema que já é semelhante. Cliente/setor não pontuam.
+  if(ai&&bi&&same(ai,bi))score+=7;
+  if(same(a.tipoRO||a.assunto,b.tipoRO||b.assunto))score+=3;
+  return Math.max(0,Math.min(100,Math.round(score)));
 }
 function findSimilarRos(ro,limit=6){
   const id=String(ro?.numero||ro?.id||ro?.codigo||'');
   const triageMap=getSavedTriageMap();
   const out=[];
-
   getAllRoRecords().forEach(x=>{
     if(String(x.numero||x.id||x.codigo||'')===id)return;
     const score=roSimilarity(ro,x,triageMap);
     if(score>=35)out.push({ro:x,score});
   });
-
   return out.sort((a,b)=>b.score-a.score).slice(0,limit);
 }
 function summarizeOccurrence(ro){
@@ -11254,17 +11299,14 @@ function renderRoIntelligence(){
 }
 function similarityReasons(a,b,triageMap){
   const reasons=[];
+  const pct=Math.round(problemSimilarity(a?.descricao||'',b?.descricao||'')*100);
+  if(pct>=22)reasons.push('Problema '+pct+'% semelhante');
   const same=(x,y)=>normalizeAnswer(x||'')&&normalizeAnswer(x||'')===normalizeAnswer(y||'');
-  if(same(a?.cliente,b?.cliente))reasons.push('Mesmo cliente');
-  if(same(a?.tipoRO||a?.assunto,b?.tipoRO||b?.assunto))reasons.push('Mesmo tipo de R.O.');
   const ar=a?.raw||{},br=b?.raw||{};
   const ai=firstValue(ar,['Código do item:','Código do item','Codigo do item','Item'])||'';
   const bi=firstValue(br,['Código do item:','Código do item','Codigo do item','Item'])||'';
-  if(ai&&same(ai,bi))reasons.push('Mesmo item');
-  const textScore=Math.round(jaccardSimilarity(a?.descricao||'',b?.descricao||'')*100);
-  if(textScore>=20)reasons.push('Descrição '+textScore+'% semelhante');
-  const as=effectiveRoSector(a,triageMap),bs=effectiveRoSector(b,triageMap);
-  if(as&&same(as,bs))reasons.push('Mesmo setor');
+  if(ai&&bi&&same(ai,bi))reasons.push('Mesmo item');
+  if(same(a?.tipoRO||a?.assunto,b?.tipoRO||b?.assunto))reasons.push('Mesmo tipo de R.O.');
   return reasons;
 }
 function duplicateMeta(ro){
@@ -11285,7 +11327,7 @@ function renderTriageDuplicateWarning(ro){
 
   const run=()=>{
     try{
-      const sims=findSimilarRos(ro,8).filter(x=>x.score>=50);
+      const sims=findSimilarRos(ro,8).filter(x=>x.score>=35);
       window.__triageDuplicateContext={ro,sims};
       box.classList.toggle('hidden',!sims.length);
       if(sims.length){
@@ -11307,12 +11349,12 @@ function openTriageDuplicateDetails(){
   const ro=ctx.ro;
   if(!ro)return;
   const triageMap=getSavedTriageMap();
-  const sims=(ctx.sims&&ctx.sims.length?ctx.sims:findSimilarRos(ro,20).filter(x=>x.score>=50));
+  const sims=(ctx.sims&&ctx.sims.length?ctx.sims:findSimilarRos(ro,20).filter(x=>x.score>=35));
   const overlay=document.getElementById('triageDuplicateDetailsOverlay');
   const list=document.getElementById('triageDuplicateDetailsList');
   const summary=document.getElementById('triageDuplicateDetailsSummary');
   if(!overlay||!list)return;
-  if(summary)summary.innerHTML=`<b>${escapeHtml(ro.numero||ro.id||ro.codigo||'R.O. atual')}</b> · ${sims.length} ocorrência(s) com 50% ou mais de similaridade.`;
+  if(summary)summary.innerHTML=`<b>${escapeHtml(ro.numero||ro.id||ro.codigo||'R.O. atual')}</b> · ${sims.length} ocorrência(s) com problema semelhante.`;
   list.innerHTML=sims.length?sims.map(x=>{
     const m=duplicateMeta(x.ro), reasons=similarityReasons(ro,x.ro,triageMap);
     const meta=[x.ro.cliente?('Cliente: '+x.ro.cliente):'',m.item?('Item: '+m.item):'',m.pedido?('Pedido: '+m.pedido):'',m.data?('Data: '+m.data):'',effectiveRoSector(x.ro,triageMap)?('Setor: '+effectiveRoSector(x.ro,triageMap)):''].filter(Boolean);
@@ -11322,7 +11364,7 @@ function openTriageDuplicateDetails(){
       ${meta.length?`<div class="small">${meta.map(escapeHtml).join(' · ')}</div>`:''}
       <div class="duplicate-fulltext">${escapeHtml(String(x.ro.descricao||'Sem descrição registrada.'))}</div>
     </div>`;
-  }).join(''):'<div class="small">Nenhuma ocorrência com 50% ou mais de similaridade.</div>';
+  }).join(''):'<div class="small">Nenhuma ocorrência com problema suficientemente semelhante.</div>';
   overlay.classList.add('open');
 }
 function closeTriageDuplicateDetails(){
@@ -15712,7 +15754,21 @@ function removeRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;co
 function mergeRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1)),pos=row.findIndex(v=>v.id===x.id),right=row[pos+1];if(!right)return alert('Não há célula à direita para mesclar.');x.width=(Number(x.width)||20)+(Number(right.width)||20);const ri=a.findIndex(v=>v.id===right.id);if(ri>=0)a.splice(ri,1);saveRncHeaderFields(a)}
 function splitRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;const w=Math.max(6,Number(x.width)||20);x.width=w/2;const ni=a.findIndex(v=>v.id===x.id)+1;a.splice(ni,0,{id:nextRncHeaderId(),row:Number(x.row)||1,label:'',value:'',source:'@',width:w/2,height:Number(x.height)||7,align:x.align||'left',bold:false});saveRncHeaderFields(a)}
 function rncHeaderValue(t,x,preview=true,obj={}){const src=String(x.source||'');if(src==='@logo')return '__RNC_LOGO__';if(src==='title')return t.title||'';if(src==='code')return t.code||'';if(src==='revision')return t.revision||'';if(src==='@label')return '';if(src.startsWith('@')){const v=src.slice(1);if(x.id==='h-register'&&!preview)return obj.rncNumber||'—';return v}return x.value||''}
-function rncHeaderRowsHtml(t,preview=true,obj={}){const a=t.headerLayout||defaultRncHeaderLayout(),bw=Math.max(.4,Number(t.layout?.borderWidth)||.65),fs=(Number(t.layout?.fontScale)||100)/100;return [...new Set(a.map(x=>Number(x.row)||1))].sort((a,b)=>a-b).map(row=>{const cells=a.filter(x=>(Number(x.row)||1)===row),cols=cells.map(x=>Math.max(5,Number(x.width)||20)+'fr').join(' '),h=Math.max(3,...cells.map(x=>Number(x.height)||7));return `<div data-rnc-header-row="${row}" style="display:grid;grid-template-columns:${cols};border-bottom:${bw}px solid #111;min-height:${preview?h*4.2+'px':h+'mm'}">${cells.map((x,j)=>{const i=a.findIndex(z=>z.id===x.id),v=rncHeaderValue(t,x,preview,obj),al=['left','center','right'].includes(x.align)?x.align:'left';const label=x.label?`<b ${preview?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'label',this.textContent)" onclick="event.stopPropagation()"`:''} style="font-size:${6.7*fs}px;outline:none">${escapeHtml(x.label)}</b>`:'';const value=v==='__RNC_LOGO__'?rncTemplateLogoHtml(t,preview):(v?`<span ${preview&&String(x.source||'').startsWith('@')&&x.source!=='@logo'?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'source','@'+this.textContent)" onclick="event.stopPropagation()"`:''} style="font-size:${7.4*fs}px;${x.bold?'font-weight:800;':''};outline:none">${escapeHtml(v)}</span>`:'');return `<div style="position:relative;padding:${preview?'4px 5px':'1mm'};border-right:${j===cells.length-1?0:bw}px solid #777;text-align:${al};display:flex;${x.label&&v?'flex-direction:column;gap:2px;':'align-items:center;'}justify-content:${al==='center'?'center':al==='right'?'flex-end':'flex-start'}">${label}${value}${preview&&j<cells.length-1?`<span onpointerdown="startRncHeaderResize(event,'${x.id}')" style="position:absolute;right:-4px;top:0;width:8px;height:100%;cursor:col-resize;z-index:5" title="Arraste para dimensionar"></span>`:''}</div>`}).join('')}</div>`}).join('')}
+function selectRncHeaderCell(id){rncGridSelectedFieldId='';rncGridSelectedHeaderId=id||'';refreshRncTemplatePreview();const a=rncHeaderFields();const list=document.getElementById('tplHeaderLayoutList');if(list)list.innerHTML=renderRncHeaderLayoutEditor({...collectRncTemplateForm(),headerLayout:a})}
+function selectedRncHeaderCell(){return rncHeaderFields().find(x=>x.id===rncGridSelectedHeaderId)||null}
+function rncHeaderIndexBySelected(){return rncHeaderFields().findIndex(x=>x.id===rncGridSelectedHeaderId)}
+function rncHeaderAdjustWidth(delta){const a=rncHeaderFields(),x=a.find(v=>v.id===rncGridSelectedHeaderId);if(!x)return;const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1)),i=row.findIndex(v=>v.id===x.id),right=row[i+1];if(right){const min=5,total=(Number(x.width)||20)+(Number(right.width)||20),nw=Math.max(min,Math.min(total-min,(Number(x.width)||20)+delta));x.width=nw;right.width=total-nw}else{x.width=Math.max(5,Math.min(100,(Number(x.width)||20)+delta))}saveRncHeaderFields(a)}
+function rncHeaderAdjustHeight(delta){const a=rncHeaderFields(),x=a.find(v=>v.id===rncGridSelectedHeaderId);if(!x)return;const row=Number(x.row)||1,h=Math.max(3,Math.min(60,(Number(x.height)||7)+delta));a.filter(v=>(Number(v.row)||1)===row).forEach(v=>v.height=h);saveRncHeaderFields(a)}
+function rncHeaderMergeSelected(){const i=rncHeaderIndexBySelected();if(i>=0)mergeRncHeaderCell(i)}
+function rncHeaderCellBounds(a,x){const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1));const total=row.reduce((s,v)=>s+(Number(v.width)||20),0)||100;let cur=0;for(const v of row){const w=(Number(v.width)||20)/total*100;if(v.id===x.id)return [cur,cur+w];cur+=w}return [0,100]}
+function rncHeaderMergeVertical(dir){const a=rncHeaderFields(),x=a.find(v=>v.id===rncGridSelectedHeaderId);if(!x)return;const row=Number(x.row)||1,span=Math.max(1,Number(x.rowSpan)||1),targetRow=dir<0?row-1:row+span;if(targetRow<1)return alert('Não há linha acima para mesclar.');const candidates=a.filter(v=>(Number(v.row)||1)===targetRow);if(!candidates.length)return alert(dir<0?'Não há célula acima para mesclar.':'Não há célula abaixo para mesclar.');const [l,r]=rncHeaderCellBounds(a,x);let best=null,bestOv=0;for(const v of candidates){const [vl,vr]=rncHeaderCellBounds(a,v),ov=Math.max(0,Math.min(r,vr)-Math.max(l,vl));if(ov>bestOv){bestOv=ov;best=v}}if(!best||bestOv<Math.max(2,(r-l)*.35))return alert('Não encontrei uma célula alinhada nessa direção para mesclar.');if(!confirm(`Mesclar “${x.label||'célula'}” ${dir<0?'para cima':'para baixo'}? O conteúdo da outra célula será removido.`))return;const bi=a.findIndex(v=>v.id===best.id);if(bi>=0)a.splice(bi,1);if(dir<0){x.row=targetRow;x.rowSpan=span+Math.max(1,Number(best.rowSpan)||1)}else{x.rowSpan=span+Math.max(1,Number(best.rowSpan)||1)}saveRncHeaderFields(a)}
+function rncHeaderMergeUp(){rncHeaderMergeVertical(-1)}
+function rncHeaderMergeDown(){rncHeaderMergeVertical(1)}
+function rncHeaderSplitSelected(){const i=rncHeaderIndexBySelected();if(i>=0)splitRncHeaderCell(i)}
+function rncHeaderDeleteSelected(){const i=rncHeaderIndexBySelected();if(i<0)return;removeRncHeaderCell(i);rncGridSelectedHeaderId='';refreshRncTemplatePreview()}
+function rncHeaderAddCellSelected(){const x=selectedRncHeaderCell();addRncHeaderCell(x?Number(x.row)||1:undefined)}
+function rncHeaderAddRowSelected(){addRncHeaderRow()}
+function rncHeaderRowsHtml(t,preview=true,obj={}){const a=t.headerLayout||defaultRncHeaderLayout(),bw=Math.max(.4,Number(t.layout?.borderWidth)||.65),fs=(Number(t.layout?.fontScale)||100)/100,rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((a,b)=>a-b);if(!rows.length)return'';const maxRow=Math.max(...rows,...a.map(x=>(Number(x.row)||1)+Math.max(1,Number(x.rowSpan)||1)-1));const rowHeights=Array.from({length:maxRow},(_,i)=>{const rr=i+1,c=a.filter(x=>(Number(x.row)||1)===rr);return Math.max(3,...c.map(x=>Number(x.height)||7))});const positions=new Map();for(const rr of rows){const cells=a.filter(x=>(Number(x.row)||1)===rr),total=cells.reduce((s,x)=>s+(Number(x.width)||20),0)||100;let cur=0;for(const x of cells){const w=(Number(x.width)||20)/total*100;positions.set(x.id,[cur,cur+w]);cur+=w}}const rowTpl=rowHeights.map(h=>preview?`${h*4.2}px`:`${h}mm`).join(' ');return `<div data-rnc-header-grid="1" style="display:grid;grid-template-columns:repeat(1000,minmax(0,1fr));grid-template-rows:${rowTpl};border-bottom:${bw}px solid #111">${a.map(x=>{const i=a.findIndex(z=>z.id===x.id),v=rncHeaderValue(t,x,preview,obj),al=['left','center','right'].includes(x.align)?x.align:'left',[l,r]=positions.get(x.id)||[0,100],cs=Math.max(1,Math.round(l*10)+1),ce=Math.max(cs+1,Math.round(r*10)+1),rs=Number(x.row)||1,re=Math.min(maxRow+1,rs+Math.max(1,Number(x.rowSpan)||1));const label=x.label?`<b ${preview?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'label',this.textContent)" onclick="event.stopPropagation();selectRncHeaderCell('${x.id}')"`:''} style="font-size:${6.7*fs}px;outline:none">${escapeHtml(x.label)}</b>`:'';const value=v==='__RNC_LOGO__'?rncTemplateLogoHtml(t,preview):(v?`<span ${preview&&String(x.source||'').startsWith('@')&&x.source!=='@logo'?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'source','@'+this.textContent)" onclick="event.stopPropagation();selectRncHeaderCell('${x.id}')"`:''} style="font-size:${7.4*fs}px;${x.bold?'font-weight:800;':''};outline:none">${escapeHtml(v)}</span>`:'');const selected=preview&&x.id===rncGridSelectedHeaderId;return `<div data-rnc-header-cell="${x.id}" ${preview?`onclick="selectRncHeaderCell('${x.id}')"`:''} style="grid-column:${cs}/${ce};grid-row:${rs}/${re};position:relative;padding:${preview?'4px 5px':'1mm'};border-right:${bw}px solid #777;border-top:${rs>1?bw:0}px solid #777;text-align:${al};display:flex;${x.label&&v?'flex-direction:column;gap:2px;':'align-items:center;'}justify-content:${al==='center'?'center':al==='right'?'flex-end':'flex-start'};${selected?'box-shadow:inset 0 0 0 2px #2f6fed;background:#eef5ff;':''};cursor:${preview?'pointer':'default'}">${label}${value}${preview?`<span onpointerdown="startRncHeaderResize(event,'${x.id}')" style="position:absolute;right:-4px;top:0;width:8px;height:100%;cursor:col-resize;z-index:5" title="Arraste para dimensionar"></span>`:''}</div>`}).join('')}</div>`}
 function previewEditRncHeader(i,k,v){const a=rncHeaderFields();if(!a[i])return;a[i][k]=String(v||'');setTplJson('tplHeaderLayoutData',a)}
 function startRncHeaderResize(ev,id){ev.preventDefault();ev.stopPropagation();const a=rncHeaderFields(),x=a.find(v=>v.id===id);if(!x)return;const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1)),idx=row.findIndex(v=>v.id===id),right=row[idx+1];if(!right)return;const rowEl=ev.currentTarget.closest('[data-rnc-header-row]'),startX=ev.clientX,startW=Number(x.width)||20,startR=Number(right.width)||20,total=startW+startR,w=rowEl?.getBoundingClientRect().width||600,min=5;const move=e=>{const d=((e.clientX-startX)/w)*row.reduce((s,v)=>s+(Number(v.width)||20),0),nw=Math.max(min,Math.min(total-min,startW+d));x.width=nw;right.width=total-nw;setTplJson('tplHeaderLayoutData',a);refreshRncTemplatePreview()};const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);saveRncHeaderFields(a)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up)}
 function defaultRncFieldLayout(){return [
@@ -15734,6 +15790,7 @@ function defaultRncFieldLayout(){return [
 ]}
 const RNC_FIELD_SOURCES=[['rncReporter','Responsável'],['rncShift','Turno'],['eventDate','Data de abertura'],['rncIssueDate','Data de emissão'],['rncSupervisor','Supervisor'],['rncManager','Gerente'],['rncNumber','Nº RNC'],['supplier','Fornecedor'],['rncInvoice','Nota fiscal'],['rncProductCode','Código produto'],['rncProduct','Produto'],['rncDimensions','Dimensões'],['rncQuantity','Quantidade'],['rncBlockArea','Área bloqueio'],['relatedRo','R.O. relacionada'],['sector','Setor'],['title','Título'],['description','Descrição'],['rncSummary','Resumo do desvio'],['rncDetailedDescription','Descrição detalhada'],['rncEffect','Efeito do desvio'],['rncImmediateActions','Ações imediatas'],['rncFiveWhys','5 Porquês'],['rncSupplierConclusion','Conclusão da causa'],['rncCause','Causa'],['rncCorrectiveActions','Ações corretivas/preventivas'],['rncEffectiveness','Verificação de eficácia'],['photo:registro-fotografico','Fotos da RNC'],['@RNC','Texto fixo: RNC'],['@—','Texto fixo: —'],['@','Em branco'],['@A','Texto fixo: A'],['@SGQ','Texto fixo: SGQ']];
 let rncGridSelectedFieldId='';
+let rncGridSelectedHeaderId='';
 function rncGridFields(){return getTplJson('tplFieldLayoutData',defaultRncFieldLayout())}
 function saveRncGridFields(a,rerender=true){setTplJson('tplFieldLayoutData',a);if(rerender){const list=document.getElementById('tplFieldLayoutList');if(list)list.innerHTML=renderRncFieldLayoutEditor({...collectRncTemplateForm(),fieldLayout:a})}refreshRncTemplatePreview()}
 function renderRncFieldLayoutEditor(t){const a=t.fieldLayout||defaultRncFieldLayout();return a.map((x,i)=>`<div style="border:1px solid #e3e8f1;border-radius:11px;padding:11px;${x.id===rncGridSelectedFieldId?'box-shadow:0 0 0 2px #2f6fed inset;background:#f7faff':''}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:9px"><b style="font-size:12px">${escapeHtml(x.label||'Campo')}</b><div style="display:flex;gap:4px"><button class="btn secondary" type="button" title="Localizar na folha" onclick="selectRncGridField('${x.id}')">◎ Ver</button><button class="btn secondary" type="button" onclick="moveRncLayoutField(${i},-1)">↑</button><button class="btn secondary" type="button" onclick="moveRncLayoutField(${i},1)">↓</button><button class="btn secondary" type="button" onclick="removeRncLayoutField(${i})">×</button></div></div><div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:9px"><label><span class="small">Texto exibido</span><input data-rnc-field-label="${i}" value="${escapeHtml(x.label||'Campo')}" oninput="updateRncLayoutField(${i},'label',this.value)"></label><label><span class="small">Dado de origem</span><select onchange="updateRncLayoutField(${i},'source',this.value)">${RNC_FIELD_SOURCES.map(o=>`<option value="${o[0]}" ${x.source===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label><label><span class="small">Seção</span><select onchange="updateRncLayoutField(${i},'section',this.value)">${(t.sections||[]).map(s=>`<option value="${s.id}" ${x.section===s.id?'selected':''}>${escapeHtml(s.label)}</option>`).join('')}</select></label><label><span class="small">Título e valor</span><select onchange="updateRncLayoutField(${i},'display',this.value)"><option value="inline" ${(x.display||'stack')==='inline'?'selected':''}>Na mesma linha</option><option value="stack" ${(x.display||'stack')==='stack'?'selected':''}>Um abaixo do outro</option></select></label><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;grid-column:1/-1"><label><span class="small">Largura (%)</span><input type="number" min="5" max="100" value="${Number(x.width)||25}" onchange="updateRncLayoutField(${i},'width',this.value)"></label><label><span class="small">Linha</span><input type="number" min="1" max="30" value="${Number(x.row)||1}" onchange="updateRncLayoutField(${i},'row',this.value)"></label><label><span class="small">Altura da linha (mm)</span><input type="number" min="3" max="60" step="0.5" value="${Number(x.height)||Number(t.layout?.rowHeight)||7}" onchange="updateRncLayoutRowHeight(${i},this.value)"></label></div></div></div>`).join('')}
@@ -15742,7 +15799,7 @@ function updateRncLayoutRowHeight(i,v){const a=rncGridFields();if(!a[i])return;c
 function moveRncLayoutField(i,d){const a=rncGridFields(),j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];saveRncGridFields(a)}
 function removeRncLayoutField(i){const a=rncGridFields();if(!a[i])return;if(rncGridSelectedFieldId===a[i].id)rncGridSelectedFieldId='';a.splice(i,1);saveRncGridFields(a)}
 function addRncLayoutField(){const a=rncGridFields();const sec=selectedRncGridField()?.section||document.getElementById('tplNewFieldSection')?.value||'identification',rows=a.filter(x=>x.section===sec).map(x=>Number(x.row)||1);a.push({id:'campo-'+Date.now(),section:sec,label:'Novo campo',source:'@—',width:25,row:Math.max(1,...rows),display:'inline'});saveRncGridFields(a)}
-function selectRncGridField(id){rncGridSelectedFieldId=id||'';refreshRncTemplatePreview();const a=rncGridFields();const list=document.getElementById('tplFieldLayoutList');if(list)list.innerHTML=renderRncFieldLayoutEditor({...collectRncTemplateForm(),fieldLayout:a})}
+function selectRncGridField(id){rncGridSelectedHeaderId='';rncGridSelectedFieldId=id||'';refreshRncTemplatePreview();const a=rncGridFields();const list=document.getElementById('tplFieldLayoutList');if(list)list.innerHTML=renderRncFieldLayoutEditor({...collectRncTemplateForm(),fieldLayout:a})}
 function selectedRncGridField(){return rncGridFields().find(x=>x.id===rncGridSelectedFieldId)||null}
 function rncGridRowCells(a,x){return a.filter(v=>v.section===x.section&&(Number(v.row)||1)===(Number(x.row)||1))}
 function rncGridAdjustWidth(delta){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);if(!x)return;const row=rncGridRowCells(a,x),i=row.findIndex(v=>v.id===x.id),right=row[i+1];if(right){const min=5,total=(Number(x.width)||25)+(Number(right.width)||25),nw=Math.max(min,Math.min(total-min,(Number(x.width)||25)+delta));right.width=total-nw;x.width=nw}else{x.width=Math.max(5,Math.min(100,(Number(x.width)||25)+delta));saveRncGridFields(a);return}saveRncGridFields(a)}
@@ -15752,27 +15809,32 @@ function rncGridAddCell(){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSele
 function rncGridAddRow(){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);const sec=x?.section||'identification';const max=Math.max(0,...a.filter(v=>v.section===sec).map(v=>Number(v.row)||1));const n={id:'campo-'+Date.now(),section:sec,label:'Novo campo',source:'@—',width:100,row:max+1,display:'inline'};a.push(n);rncGridSelectedFieldId=n.id;saveRncGridFields(a)}
 function rncGridDeleteSelected(){const a=rncGridFields(),i=a.findIndex(v=>v.id===rncGridSelectedFieldId);if(i<0)return;a.splice(i,1);rncGridSelectedFieldId='';saveRncGridFields(a)}
 function rncGridMergeNext(){const a=rncGridFields(),i=a.findIndex(v=>v.id===rncGridSelectedFieldId);if(i<0)return;const x=a[i];const candidates=a.map((v,j)=>({v,j})).filter(o=>o.j>i&&o.v.section===x.section&&(Number(o.v.row)||1)===(Number(x.row)||1));if(!candidates.length){alert('Não há outra célula à direita nesta linha.');return}const n=candidates[0];if(!confirm(`Mesclar “${x.label||'célula'}” com “${n.v.label||'célula'}”? O conteúdo da segunda célula será removido.`))return;x.width=Math.min(100,(Number(x.width)||25)+(Number(n.v.width)||25));a.splice(n.j,1);saveRncGridFields(a)}
+function rncGridCellBounds(a,x){const row=a.filter(v=>v.section===x.section&&(Number(v.row)||1)===(Number(x.row)||1));const total=row.reduce((s,v)=>s+(Number(v.width)||25),0)||100;let cur=0;for(const v of row){const w=(Number(v.width)||25)/total*100;if(v.id===x.id)return [cur,cur+w];cur+=w}return [0,100]}
+function rncGridMergeVertical(dir){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);if(!x)return;const row=Number(x.row)||1,span=Math.max(1,Number(x.rowSpan)||1),targetRow=dir<0?row-1:row+span;if(targetRow<1)return alert('Não há linha acima para mesclar.');const candidates=a.filter(v=>v.section===x.section&&(Number(v.row)||1)===targetRow);if(!candidates.length)return alert(dir<0?'Não há célula acima para mesclar.':'Não há célula abaixo para mesclar.');const [l,r]=rncGridCellBounds(a,x);let best=null,bestOv=0;for(const v of candidates){const [vl,vr]=rncGridCellBounds(a,v),ov=Math.max(0,Math.min(r,vr)-Math.max(l,vl));if(ov>bestOv){bestOv=ov;best=v}}if(!best||bestOv<Math.max(2,(r-l)*.35))return alert('Não encontrei uma célula alinhada nessa direção para mesclar.');if(!confirm(`Mesclar “${x.label||'célula'}” ${dir<0?'para cima':'para baixo'}? O conteúdo da outra célula será removido.`))return;const bi=a.findIndex(v=>v.id===best.id);if(bi>=0)a.splice(bi,1);if(dir<0){x.row=targetRow;x.rowSpan=span+Math.max(1,Number(best.rowSpan)||1)}else{x.rowSpan=span+Math.max(1,Number(best.rowSpan)||1)}saveRncGridFields(a)}
+function rncGridMergeUp(){rncGridMergeVertical(-1)}
+function rncGridMergeDown(){rncGridMergeVertical(1)}
 function rncGridSplit(){const a=rncGridFields(),i=a.findIndex(v=>v.id===rncGridSelectedFieldId);if(i<0)return;const x=a[i],half=Math.max(5,(Number(x.width)||25)/2);x.width=half;a.splice(i+1,0,{id:'campo-'+Date.now(),section:x.section,label:'Nova célula',source:'@—',width:half,row:Number(x.row)||1,display:'inline'});saveRncGridFields(a)}
 function rncGridMoveRow(delta){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);if(!x)return;const old=Number(x.row)||1,n=Math.max(1,old+delta);a.filter(v=>v.section===x.section&&(Number(v.row)||1)===old).forEach(v=>v.row=n);saveRncGridFields(a)}
+function rncGridMoveSelectedHorizontal(dir){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);if(!x)return;const row=rncGridRowCells(a,x);const pos=row.findIndex(v=>v.id===x.id),other=row[pos+(dir<0?-1:1)];if(!other)return;const ix=a.indexOf(x),io=a.indexOf(other);[a[ix],a[io]]=[a[io],a[ix]];saveRncGridFields(a)}
+function rncGridMoveSelectedVertical(dir){const a=rncGridFields(),x=a.find(v=>v.id===rncGridSelectedFieldId);if(!x)return;const targetRow=(Number(x.row)||1)+(dir<0?-1:1);if(targetRow<1)return;const candidates=a.filter(v=>v.section===x.section&&(Number(v.row)||1)===targetRow);if(!candidates.length){x.row=targetRow;saveRncGridFields(a);return}const [l,r]=rncGridCellBounds(a,x);let best=candidates[0],bestOv=-1;for(const v of candidates){const [vl,vr]=rncGridCellBounds(a,v),ov=Math.max(0,Math.min(r,vr)-Math.max(l,vl));if(ov>bestOv){bestOv=ov;best=v}}const oldRow=Number(x.row)||1;x.row=targetRow;best.row=oldRow;saveRncGridFields(a)}
+function rncHeaderMoveSelectedHorizontal(dir){const a=rncHeaderFields(),x=a.find(v=>v.id===rncGridSelectedHeaderId);if(!x)return;const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1)),pos=row.findIndex(v=>v.id===x.id),other=row[pos+(dir<0?-1:1)];if(!other)return;const ix=a.indexOf(x),io=a.indexOf(other);[a[ix],a[io]]=[a[io],a[ix]];saveRncHeaderFields(a)}
+function rncHeaderMoveSelectedVertical(dir){const a=rncHeaderFields(),x=a.find(v=>v.id===rncGridSelectedHeaderId);if(!x)return;const targetRow=(Number(x.row)||1)+(dir<0?-1:1);if(targetRow<1)return;const candidates=a.filter(v=>(Number(v.row)||1)===targetRow);if(!candidates.length){x.row=targetRow;saveRncHeaderFields(a);return}const [l,r]=rncHeaderCellBounds(a,x);let best=candidates[0],bestOv=-1;for(const v of candidates){const [vl,vr]=rncHeaderCellBounds(a,v),ov=Math.max(0,Math.min(r,vr)-Math.max(l,vl));if(ov>bestOv){bestOv=ov;best=v}}const oldRow=Number(x.row)||1;x.row=targetRow;best.row=oldRow;saveRncHeaderFields(a)}
 function startRncCellResize(ev,id){ev.preventDefault();ev.stopPropagation();selectRncGridField(id);const a=rncGridFields(),x=a.find(v=>v.id===id);if(!x)return;const rowEl=ev.currentTarget.closest('[data-rnc-grid-row]'),rowCells=rncGridRowCells(a,x),idx=rowCells.findIndex(v=>v.id===id),right=rowCells[idx+1],startX=ev.clientX,startW=Number(x.width)||25,startRight=right?(Number(right.width)||25):0,total=startW+startRight,rowW=rowEl?.getBoundingClientRect().width||500,min=5;const move=e=>{const delta=((e.clientX-startX)/rowW)*rowCells.reduce((sum,v)=>sum+(Number(v.width)||25),0);if(right){const nw=Math.max(min,Math.min(total-min,startW+delta));x.width=nw;right.width=total-nw}else{x.width=Math.max(min,Math.min(100,startW+delta))}setTplJson('tplFieldLayoutData',a);refreshRncTemplatePreview()};const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);saveRncGridFields(a)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up)}
 function startRncRowResize(ev,id){ev.preventDefault();ev.stopPropagation();selectRncGridField(id);const a=rncGridFields(),x=a.find(v=>v.id===id);if(!x)return;const startY=ev.clientY,startH=Number(x.height)||Number(document.getElementById('tplRowHeight')?.value)||7;const move=e=>{const h=Math.max(3,Math.min(60,startH+(e.clientY-startY)/4.2));a.filter(v=>v.section===x.section&&(Number(v.row)||1)===(Number(x.row)||1)).forEach(v=>v.height=h);setTplJson('tplFieldLayoutData',a);refreshRncTemplatePreview()};const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);saveRncGridFields(a)};window.addEventListener('pointermove',move);window.addEventListener('pointerup',up)}
-function rncGridToolbarHtml(){const x=selectedRncGridField();return `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:7px 8px;margin-bottom:8px;border:1px solid #d8e0ec;border-radius:10px;background:#fff;position:sticky;top:72px;z-index:4"><b style="font-size:12px">Grade:</b>${x?`<span class="small">${escapeHtml(x.label||'Célula')}</span><button class="btn secondary" type="button" onclick="rncGridAdjustWidth(-5)">− largura</button><button class="btn secondary" type="button" onclick="rncGridAdjustWidth(5)">+ largura</button><button class="btn secondary" type="button" onclick="rncGridAdjustHeight(-1)">− altura</button><button class="btn secondary" type="button" onclick="rncGridAdjustHeight(1)">+ altura</button><button class="btn secondary" type="button" onclick="rncGridToggleDisplay()">Título/valor</button><button class="btn secondary" type="button" onclick="rncGridMergeNext()">Mesclar →</button><button class="btn secondary" type="button" onclick="rncGridSplit()">Dividir</button><button class="btn secondary" type="button" onclick="rncGridAddCell()">+ Célula</button><button class="btn secondary" type="button" onclick="rncGridAddRow()">+ Linha</button><button class="btn secondary" type="button" onclick="rncGridDeleteSelected()">Excluir</button>`:'<span class="small">Clique em uma célula da folha para editar a grade.</span>'}</div>`}
+function rncGridToolbarHtml(){const h=selectedRncHeaderCell();if(h)return `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:7px 8px;margin-bottom:8px;border:1px solid #9db8e8;border-radius:10px;background:#eef5ff;position:sticky;top:72px;z-index:4"><b style="font-size:12px">Cabeçalho:</b><span class="small">${escapeHtml(h.label||rncHeaderValue(collectRncTemplateForm(),h,true,{})||'Célula')}</span><button class="btn secondary" type="button" title="Trocar com a célula da esquerda" onclick="rncHeaderMoveSelectedHorizontal(-1)">← mover</button><button class="btn secondary" type="button" title="Trocar com a célula da direita" onclick="rncHeaderMoveSelectedHorizontal(1)">mover →</button><button class="btn secondary" type="button" title="Trocar com a célula acima" onclick="rncHeaderMoveSelectedVertical(-1)">↑ mover</button><button class="btn secondary" type="button" title="Trocar com a célula abaixo" onclick="rncHeaderMoveSelectedVertical(1)">↓ mover</button><button class="btn secondary" type="button" onclick="rncHeaderAdjustWidth(-5)">− largura</button><button class="btn secondary" type="button" onclick="rncHeaderAdjustWidth(5)">+ largura</button><button class="btn secondary" type="button" onclick="rncHeaderAdjustHeight(-1)">− altura</button><button class="btn secondary" type="button" onclick="rncHeaderAdjustHeight(1)">+ altura</button><button class="btn secondary" type="button" onclick="rncHeaderMergeSelected()">Mesclar →</button><button class="btn secondary" type="button" onclick="rncHeaderMergeUp()">Mesclar ↑</button><button class="btn secondary" type="button" onclick="rncHeaderMergeDown()">Mesclar ↓</button><button class="btn secondary" type="button" onclick="rncHeaderSplitSelected()">Dividir</button><button class="btn secondary" type="button" onclick="rncHeaderAddCellSelected()">+ Célula</button><button class="btn secondary" type="button" onclick="rncHeaderAddRowSelected()">+ Linha</button><button class="btn danger" type="button" onclick="rncHeaderDeleteSelected()">Excluir</button></div>`;const x=selectedRncGridField();return `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:7px 8px;margin-bottom:8px;border:1px solid #d8e0ec;border-radius:10px;background:#fff;position:sticky;top:72px;z-index:4"><b style="font-size:12px">Grade:</b>${x?`<span class="small">${escapeHtml(x.label||'Célula')}</span><button class="btn secondary" type="button" title="Trocar com a célula da esquerda" onclick="rncGridMoveSelectedHorizontal(-1)">← mover</button><button class="btn secondary" type="button" title="Trocar com a célula da direita" onclick="rncGridMoveSelectedHorizontal(1)">mover →</button><button class="btn secondary" type="button" title="Trocar com a célula acima" onclick="rncGridMoveSelectedVertical(-1)">↑ mover</button><button class="btn secondary" type="button" title="Trocar com a célula abaixo" onclick="rncGridMoveSelectedVertical(1)">↓ mover</button><button class="btn secondary" type="button" onclick="rncGridAdjustWidth(-5)">− largura</button><button class="btn secondary" type="button" onclick="rncGridAdjustWidth(5)">+ largura</button><button class="btn secondary" type="button" onclick="rncGridAdjustHeight(-1)">− altura</button><button class="btn secondary" type="button" onclick="rncGridAdjustHeight(1)">+ altura</button><button class="btn secondary" type="button" onclick="rncGridToggleDisplay()">Título/valor</button><button class="btn secondary" type="button" onclick="rncGridMergeNext()">Mesclar →</button><button class="btn secondary" type="button" onclick="rncGridMergeUp()">Mesclar ↑</button><button class="btn secondary" type="button" onclick="rncGridMergeDown()">Mesclar ↓</button><button class="btn secondary" type="button" onclick="rncGridSplit()">Dividir</button><button class="btn secondary" type="button" onclick="rncGridAddCell()">+ Célula</button><button class="btn secondary" type="button" onclick="rncGridAddRow()">+ Linha</button><button class="btn secondary" type="button" onclick="rncGridDeleteSelected()">Excluir</button>`:'<span class="small">Clique em qualquer célula da folha, inclusive no cabeçalho, para editar a grade.</span>'}</div>`}
 function rncFieldValue(obj,source,preview=false){if(String(source||'').startsWith('@'))return String(source).slice(1);if(preview){const ex={rncReporter:'Maria',rncShift:'1º turno',eventDate:'17/09/2026',rncIssueDate:'17/09/2026',rncSupervisor:'Supervisor',rncManager:'Gerente',rncNumber:'RNC-2026-0001',supplier:'Fornecedor ABC',rncInvoice:'3215',rncProductCode:'000123',rncProduct:'Produto exemplo',rncDimensions:'Especificação',rncQuantity:'250 un.',rncBlockArea:'Qualidade',relatedRo:'Não vinculada',sector:'Qualidade',title:'RNC',description:'Descrição'};return ex[source]||'—'}return obj?.[source]??'—'}
 function rncLayoutRowsHtml(t,section,obj={},preview=false,cellClass=''){
-  const all=t.fieldLayout||defaultRncFieldLayout();
-  const fields=all.filter(x=>x.section===section);
-  const rows=[...new Set(fields.map(x=>Number(x.row)||1))].sort((a,b)=>a-b);
-  return rows.map(row=>{
-    const f=fields.filter(x=>(Number(x.row)||1)===row);if(!f.length)return'';
-    const cols=f.map(x=>Math.max(5,Number(x.width)||25)+'fr').join(' ');const baseH=Number(t.layout?.rowHeight)||7,rowH=Math.max(3,...f.map(x=>Number(x.height)||baseH));const rowMin=preview?Math.max(18,rowH*4.2)+'px':rowH+'mm';const rbw=Math.max(.4,Number(t.layout?.borderWidth)||.65);
-    return `<div data-rnc-grid-row="${section}:${row}" style="display:grid;grid-template-columns:${cols};border-bottom:${rbw}px solid #777">${f.map(x=>{
-      const idx=all.findIndex(z=>z.id===x.id),selected=preview&&x.id===rncGridSelectedFieldId;
+  const all=t.fieldLayout||defaultRncFieldLayout(),fields=all.filter(x=>x.section===section);if(!fields.length)return'';
+  const rows=[...new Set(fields.map(x=>Number(x.row)||1))].sort((a,b)=>a-b),maxRow=Math.max(...rows,...fields.map(x=>(Number(x.row)||1)+Math.max(1,Number(x.rowSpan)||1)-1)),baseH=Number(t.layout?.rowHeight)||7,rbw=Math.max(.4,Number(t.layout?.borderWidth)||.65);
+  const rowHeights=Array.from({length:maxRow},(_,i)=>{const rr=i+1,c=fields.filter(x=>(Number(x.row)||1)===rr);return Math.max(3,...c.map(x=>Number(x.height)||baseH))});
+  const positions=new Map();for(const rr of rows){const cells=fields.filter(x=>(Number(x.row)||1)===rr),total=cells.reduce((s,x)=>s+(Number(x.width)||25),0)||100;let cur=0;for(const x of cells){const w=(Number(x.width)||25)/total*100;positions.set(x.id,[cur,cur+w]);cur+=w}}
+  const rowTpl=rowHeights.map(h=>preview?`${Math.max(18,h*4.2)}px`:`${h}mm`).join(' ');
+  return `<div data-rnc-grid-section="${section}" style="display:grid;grid-template-columns:repeat(1000,minmax(0,1fr));grid-template-rows:${rowTpl};border-bottom:${rbw}px solid #777">${fields.map(x=>{
+      const idx=all.findIndex(z=>z.id===x.id),selected=preview&&x.id===rncGridSelectedFieldId,[l,r]=positions.get(x.id)||[0,100],cs=Math.max(1,Math.round(l*10)+1),ce=Math.max(cs+1,Math.round(r*10)+1),rs=Number(x.row)||1,re=Math.min(maxRow+1,rs+Math.max(1,Number(x.rowSpan)||1));
       const label=preview?`<span contenteditable="true" spellcheck="false" title="Clique para editar o texto" oninput="previewEditRncFieldLabel(${idx},this.textContent)" onclick="event.stopPropagation()" style="font-size:7px;font-weight:700;outline:none;cursor:text;border-radius:3px">${escapeHtml(x.label||'')}</span>`:`<span style="font-size:6.5px;font-weight:700">${escapeHtml(x.label||'')}</span>`;
-      const isPhoto=String(x.source||'').startsWith('photo:');const photoId=isPhoto?String(x.source).slice(6):'';const pf=(t.photoFields||[]).find(f=>f.id===photoId);const imgs=!preview&&isPhoto?((obj?.rncPhotos||{})[photoId]||[]):[];const photoVal=isPhoto?(preview?`<div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(pf?.maxPhotos)||4)},1fr);gap:4px;width:100%;margin-top:4px">${Array.from({length:Math.min(4,Number(pf?.maxPhotos)||4)},()=>'<div style="min-height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div>`:(imgs.length?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;width:100%">${imgs.map(src=>`<img src="${src}" style="width:100%;max-height:60mm;object-fit:contain;border:1px solid #ddd">`).join('')}</div>`:'—')):'';const val=isPhoto?photoVal:`<b style="font-size:8px;font-weight:500">${escapeHtml(String(rncFieldValue(obj,x.source,preview)||'—'))}</b>`;
-      const inline=(x.display||'stack')==='inline';
-      return `<div class="${cellClass}" data-rnc-grid-cell="${x.id}" ${preview?`onclick="selectRncGridField('${x.id}')"`:''} style="position:relative;min-height:${rowMin};padding:${preview?'4px 5px':'1mm'};border-right:${rbw}px solid #777;${selected?'box-shadow:inset 0 0 0 2px #2f6fed;background:#eef5ff;':''};cursor:${preview?'pointer':'default'}"><div style="display:${inline?'flex':'block'};align-items:center;gap:${inline?'5px':'0'};height:100%">${label}${inline?'<span style="font-weight:700">:</span>':''}${inline?val:`<div style="margin-top:${preview?'4px':'1.2mm'}">${val}</div>`}</div>${preview?`<span title="Arraste para mudar a largura" onpointerdown="startRncCellResize(event,'${x.id}')" style="position:absolute;right:-3px;top:0;width:7px;height:100%;cursor:col-resize;z-index:3"></span><span title="Arraste para mudar a altura da linha" onpointerdown="startRncRowResize(event,'${x.id}')" style="position:absolute;left:0;bottom:-4px;width:100%;height:8px;cursor:row-resize;z-index:4"></span>`:''}</div>`;
-    }).join('')}</div>`;
-  }).join('')
+      const isPhoto=String(x.source||'').startsWith('photo:'),photoId=isPhoto?String(x.source).slice(6):'',pf=(t.photoFields||[]).find(f=>f.id===photoId),imgs=!preview&&isPhoto?((obj?.rncPhotos||{})[photoId]||[]):[],photoVal=isPhoto?(preview?`<div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(pf?.maxPhotos)||4)},1fr);gap:4px;width:100%;margin-top:4px">${Array.from({length:Math.min(4,Number(pf?.maxPhotos)||4)},()=>'<div style="min-height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div>`:(imgs.length?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;width:100%">${imgs.map(src=>`<img src="${src}" style="width:100%;max-height:60mm;object-fit:contain;border:1px solid #ddd">`).join('')}</div>`:'—')):'',val=isPhoto?photoVal:`<b style="font-size:8px;font-weight:500">${escapeHtml(String(rncFieldValue(obj,x.source,preview)||'—'))}</b>`,inline=(x.display||'stack')==='inline';
+      return `<div class="${cellClass}" data-rnc-grid-cell="${x.id}" ${preview?`onclick="selectRncGridField('${x.id}')"`:''} style="grid-column:${cs}/${ce};grid-row:${rs}/${re};position:relative;padding:${preview?'4px 5px':'1mm'};border-right:${rbw}px solid #777;border-top:${rs>1?rbw:0}px solid #777;${selected?'box-shadow:inset 0 0 0 2px #2f6fed;background:#eef5ff;':''};cursor:${preview?'pointer':'default'}"><div style="display:${inline?'flex':'block'};align-items:center;gap:${inline?'5px':'0'};height:100%">${label}${inline?'<span style="font-weight:700">:</span>':''}${inline?val:`<div style="margin-top:${preview?'4px':'1.2mm'}">${val}</div>`}</div>${preview?`<span title="Arraste para mudar a largura" onpointerdown="startRncCellResize(event,'${x.id}')" style="position:absolute;right:-3px;top:0;width:7px;height:100%;cursor:col-resize;z-index:3"></span><span title="Arraste para mudar a altura da linha" onpointerdown="startRncRowResize(event,'${x.id}')" style="position:absolute;left:0;bottom:-4px;width:100%;height:8px;cursor:row-resize;z-index:4"></span>`:''}</div>`;
+    }).join('')}</div>`
 }
 function previewEditRncFieldLabel(i,v){
   const a=getTplJson('tplFieldLayoutData',defaultRncFieldLayout());if(!a[i])return;
