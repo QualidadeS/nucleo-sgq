@@ -1162,6 +1162,9 @@ body.external-ro-denied #navNewExternalRo{
 .duplicate-badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .duplicate-badge{font-size:11px;padding:3px 7px;border-radius:999px;background:#eef3f6;color:#41566a}
 .duplicate-fulltext{white-space:pre-wrap;line-height:1.45;color:#405168;margin-top:7px}
+/* Detalhes de duplicidade devem abrir acima da triagem que os chamou. */
+#triageDuplicateDetailsOverlay{z-index:100080}
+#triageDuplicateDetailsOverlay .triage-modal{position:relative;z-index:1}
 
 .intel-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 @media(max-width:900px){.intel-grid{grid-template-columns:1fr}}
@@ -15987,8 +15990,8 @@ function printRncStandard(id){
   @page{size:A4 portrait;margin:6mm}*{box-sizing:border-box}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:8px}.doc{width:100%;border:${bw}px solid #111}.head{display:grid;grid-template-columns:${L.logoWidth}% 1fr;min-height:${L.headerHeight}mm;border-bottom:${bw}px solid #111}.logoBox{display:flex;align-items:center;justify-content:center;border-right:${bw}px solid #111;padding:1.5mm}.logo{max-width:92%;max-height:${Math.max(7,L.headerHeight-2)}mm;object-fit:contain}.logoText{font-size:${18*fs}px}.sys{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.sys b{font-size:${10*fs}px}.sys span{margin-top:1mm}.meta{display:grid;grid-template-columns:1fr 1fr}.meta div{padding:1mm;border-right:${bw}px solid #777;border-bottom:${bw}px solid #777}.meta div:nth-child(even){border-right:0}.titleRow{display:grid;grid-template-columns:18mm 1fr;border-bottom:1px solid #111}.titleRow>*{padding:1.5mm}.titleRow b:first-child{border-right:1px solid #777}.report{text-align:center;font-weight:800}.bar{color:#fff;font-weight:800;min-height:${L.sectionHeight}mm;display:flex;align-items:center;padding:.7mm 1.5mm;border-top:${bw}px solid #111;border-bottom:${bw}px solid #111}.grid3,.grid4,.grid5,.grid6{display:grid;border-bottom:1px solid #777}.grid3{grid-template-columns:1.1fr 1fr 1fr}.grid4{grid-template-columns:1.1fr .6fr .9fr 1fr}.grid5{grid-template-columns:1.3fr .8fr .9fr 1fr 1fr}.grid6{grid-template-columns:1.1fr .7fr .8fr .9fr .8fr 1fr}.cell{min-height:${L.rowHeight}mm;padding:1mm;border-right:${bw}px solid #777}.cell:last-child{border-right:0}.cell span{display:block;font-size:6.5px;font-weight:700;margin-bottom:1.5mm}.cell b{font-size:8px;font-weight:500}.long{border-bottom:1px solid #777;min-height:13mm}.lbl{font-weight:700;padding:1.4mm 2mm;border-bottom:1px solid #bbb}.answer{padding:2mm;min-height:9mm}.supplierNote{padding:1.8mm 2mm;background:#f2f4f7;border-bottom:1px solid #111}.matrix{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #777}.matrix div{padding:2mm;min-height:9mm;border-right:1px solid #777}.sign{display:grid;grid-template-columns:repeat(3,1fr);min-height:13mm}.sign div{text-align:center;padding:2mm;border-right:1px solid #777}.toolbar{margin-bottom:8px}.toolbar button{padding:7px 12px}@media print{.toolbar{display:none}}
   </style></head><body><div class="toolbar"><button onclick="window.print()">Salvar como PDF / Imprimir</button></div><div class="doc">
   ${rncHeaderRowsHtml(tpl,false,r)}
-  ${bar('identification','IDENTIFICAÇÃO')}${enabled('identification')?rncLayoutRowsHtml(t,'identification',r,false,'cell'):''}
-  ${bar('blocking','BLOQUEIO')}${enabled('blocking')?rncLayoutRowsHtml(t,'blocking',r,false,'cell'):''}
+  ${bar('identification','IDENTIFICAÇÃO')}${enabled('identification')?rncLayoutRowsHtml(tpl,'identification',r,false,'cell'):''}
+  ${bar('blocking','BLOQUEIO')}${enabled('blocking')?rncLayoutRowsHtml(tpl,'blocking',r,false,'cell'):''}
   ${bar('problem','DESVIO EVIDENCIADO / DESCRIÇÃO')}${enabled('problem')?rncLayoutRowsHtml(tpl,'problem',r,false,'cell'):''}
   ${bar('effect','EFEITO DO DESVIO')}${enabled('effect')?rncLayoutRowsHtml(tpl,'effect',r,false,'cell'):''}
   ${bar('participants','PARTICIPANTES DO PREENCHIMENTO')}${enabled('participants')?rncLayoutRowsHtml(tpl,'participants',r,false,'cell'):''}
