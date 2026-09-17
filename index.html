@@ -15089,7 +15089,8 @@ const ADMIN_OPERATIONAL_MODULES={
       ['Documentos vigentes','Consultar documentos internos publicados e em uso.','published'],
       ['Em revisão','Acompanhar documentos internos em revisão.','review'],
       ['Revisões pendentes','Ver documentos com revisão próxima ou pendente.','pending'],
-      ['Histórico documental','Consultar versões, revisões e documentos substituídos.','history']
+      ['Histórico documental','Consultar versões, revisões e documentos substituídos.','history'],
+      ['Modelos de formulários','Configurar perguntas, revisão e aparência dos formulários gerados pelo Núcleo.','templates']
     ]
   }
 };
@@ -15469,6 +15470,7 @@ function openAdminOperationalWorkspace(key,index){
   const back=`<button class="btn secondary" type="button" onclick="showAdminOperationalModule('${key}')">← Voltar ao módulo</button>`;
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
+  if(key==='processes'&&mode==='templates'){renderProcessTemplatesWorkspace();return}
   if(mode==='new'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
       <div class="card" style="margin-top:14px;padding:20px">
@@ -15613,24 +15615,81 @@ function saveAdminOperationalRecord(key,id){
   alert('Registro salvo.');
   showAdminOperationalModule(key);
 }
+
+const PROCESS_TEMPLATE_KEY='nucleo_process_templates_v1';
+function defaultRncProcessTemplate(){
+  return {id:'tpl-rnc-for-cor-qua-0003',kind:'RNC',name:'RNC de fornecedor',code:'FOR-COR-QUA-0003',revision:'Vigente',title:'RELATÓRIO DE SEGREGAÇÃO / NÃO CONFORMIDADE DE FORNECEDOR',status:'active',accent:'#1455ff',showLogo:true,logoText:'SETA',updatedAt:'',sections:[
+    {id:'identification',label:'IDENTIFICAÇÃO',enabled:true},{id:'blocking',label:'BLOQUEIO',enabled:true},{id:'problem',label:'DESCRIÇÃO DA NÃO CONFORMIDADE',enabled:true},{id:'supplier',label:'RESPOSTA DO FORNECEDOR',enabled:true},{id:'signatures',label:'APROVAÇÕES',enabled:true}
+  ]};
+}
+function getProcessTemplates(){
+  try{const a=JSON.parse(localStorage.getItem(PROCESS_TEMPLATE_KEY)||'[]');if(Array.isArray(a)&&a.length)return a}catch(e){}
+  return [defaultRncProcessTemplate()];
+}
+function saveProcessTemplates(a){safeStorageSet(PROCESS_TEMPLATE_KEY,JSON.stringify(a));portalBackendSave('shared_state','process_templates',{items:a,updatedAt:new Date().toISOString()});}
+function getRncProcessTemplate(){return getProcessTemplates().find(x=>x.kind==='RNC'&&x.status!=='obsolete')||defaultRncProcessTemplate()}
+function renderProcessTemplatesWorkspace(){
+  const list=document.getElementById('adminModuleContent');if(!list)return;const t=getRncProcessTemplate();
+  list.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button>
+  <div class="card" style="margin-top:14px;padding:20px">
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">MODELO CONTROLADO</div><h3 style="margin:6px 0 4px">${escapeHtml(t.code)} · ${escapeHtml(t.name)}</h3><div class="small">Edite o padrão que o Núcleo usa para perguntar, organizar e gerar o documento final. O modelo original não precisa ser preenchido manualmente.</div></div><span class="pill">${t.status==='obsolete'?'Obsoleto':'Vigente'}</span></div>
+    <div style="display:grid;grid-template-columns:minmax(280px,.85fr) minmax(420px,1.5fr);gap:18px;margin-top:18px;align-items:start">
+      <div style="display:grid;gap:12px">
+        <label><span class="small">Código do formulário</span><input id="tplCode" value="${escapeHtml(t.code)}"></label>
+        <label><span class="small">Nome</span><input id="tplName" value="${escapeHtml(t.name)}"></label>
+        <label><span class="small">Revisão</span><input id="tplRevision" value="${escapeHtml(t.revision)}"></label>
+        <label><span class="small">Título no documento</span><textarea id="tplTitle" rows="2">${escapeHtml(t.title)}</textarea></label>
+        <div><span class="small">Identidade do documento</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:5px"><label><input id="tplLogoText" value="${escapeHtml(t.logoText||'SETA')}" placeholder="Marca / texto"></label><label><input id="tplAccent" type="color" value="${escapeHtml(t.accent||'#1455ff')}" style="height:42px;padding:4px"></label></div></div>
+        <div><span class="small">Seções do padrão</span><div style="display:grid;gap:7px;margin-top:7px">${t.sections.map((x,i)=>`<label style="display:flex;align-items:center;gap:8px;border:1px solid #e3e8f1;border-radius:10px;padding:9px 10px"><input type="checkbox" id="tplSec${i}" ${x.enabled?'checked':''} style="width:auto"><input id="tplSecLabel${i}" value="${escapeHtml(x.label)}" style="border:0;padding:2px;background:transparent"></label>`).join('')}</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="button" onclick="saveRncProcessTemplateFromForm()">Salvar modelo</button><button class="btn secondary" type="button" onclick="resetRncProcessTemplate()">Restaurar padrão</button></div>
+        <div class="small">Para o teste, o editor controla código, revisão, identidade e seções. Depois podemos evoluir para adicionar/remover/reordenar perguntas sem mexer no código.</div>
+      </div>
+      <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Prévia do documento</b><button class="btn secondary" type="button" onclick="refreshRncTemplatePreview()">Atualizar prévia</button></div><div id="rncTemplatePreview"></div></div>
+    </div>
+  </div></div>`;refreshRncTemplatePreview();
+}
+function collectRncTemplateForm(){
+  const base=getRncProcessTemplate(),val=id=>document.getElementById(id)?.value||'';
+  return {...base,code:val('tplCode').trim()||base.code,name:val('tplName').trim()||base.name,revision:val('tplRevision').trim()||base.revision,title:val('tplTitle').trim()||base.title,logoText:val('tplLogoText').trim()||'SETA',accent:val('tplAccent')||'#1455ff',updatedAt:new Date().toISOString(),sections:base.sections.map((x,i)=>({...x,enabled:!!document.getElementById('tplSec'+i)?.checked,label:val('tplSecLabel'+i).trim()||x.label}))};
+}
+function saveRncProcessTemplateFromForm(){
+  const t=collectRncTemplateForm(),all=getProcessTemplates(),ix=all.findIndex(x=>x.id===t.id);if(ix>=0)all[ix]=t;else all.unshift(t);saveProcessTemplates(all);alert('Modelo salvo. Novas gerações de RNC usarão este padrão.');renderProcessTemplatesWorkspace();
+}
+function resetRncProcessTemplate(){if(!confirm('Restaurar o modelo RNC para a configuração inicial do Núcleo?'))return;const all=getProcessTemplates().filter(x=>x.kind!=='RNC');all.unshift(defaultRncProcessTemplate());saveProcessTemplates(all);renderProcessTemplatesWorkspace();}
+function refreshRncTemplatePreview(){
+  const host=document.getElementById('rncTemplatePreview');if(!host)return;let t;try{t=collectRncTemplateForm()}catch(e){t=getRncProcessTemplate()}
+  const sec=id=>t.sections.find(x=>x.id===id)?.enabled;const lbl=id=>escapeHtml(t.sections.find(x=>x.id===id)?.label||'');
+  host.innerHTML=`<div style="background:#eef1f5;padding:18px;border-radius:14px;overflow:auto"><div style="width:min(100%,720px);min-height:760px;margin:auto;background:white;border:1px solid #aab3c2;box-shadow:0 8px 24px #0001;font-family:Arial,sans-serif;color:#172033">
+    <div style="display:grid;grid-template-columns:1fr 190px;border-bottom:2px solid ${t.accent}"><div style="padding:18px 20px"><div style="font-size:24px;font-weight:900;letter-spacing:.04em;color:${t.accent}">${escapeHtml(t.logoText)}</div><div style="font-size:10px;letter-spacing:.14em;margin-top:4px">SISTEMA DE GESTÃO INTEGRADO</div></div><div style="border-left:1px solid #ccd3dd;padding:10px;font-size:9px;line-height:1.65"><b>Código</b> ${escapeHtml(t.code)}<br><b>Revisão</b> ${escapeHtml(t.revision)}<br><b>Registro</b> RNC-2026-0001</div></div>
+    <div style="padding:14px 20px;font-size:15px;font-weight:800;border-bottom:1px solid #ccd3dd">${escapeHtml(t.title)}</div>
+    ${sec('identification')?`<div style="padding:9px 20px;background:${t.accent};color:white;font-size:10px;font-weight:800">${lbl('identification')}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #ccd3dd">${['Responsável','Turno','Data da abertura','Nº do registro'].map((x,i)=>`<div style="padding:10px;border-right:${i<3?'1px solid #e1e5eb':'0'};min-height:55px"><small>${x}</small><br><b>${['Maria','1º turno','17/09/2026','RNC-2026-0001'][i]}</b></div>`).join('')}</div>`:''}
+    ${sec('blocking')?`<div style="padding:9px 20px;background:#f2f5f9;font-size:10px;font-weight:800;border-bottom:1px solid #ccd3dd">${lbl('blocking')}</div><div style="padding:12px 20px;border-bottom:1px solid #ccd3dd"><b>Fornecedor ABC</b> · NF 3215 · Produto 000123 · 250 un. não conformes</div>`:''}
+    ${sec('problem')?`<div style="padding:9px 20px;background:#f2f5f9;font-size:10px;font-weight:800;border-bottom:1px solid #ccd3dd">${lbl('problem')}</div><div style="padding:14px 20px;min-height:95px;border-bottom:1px solid #ccd3dd">Descrição detalhada do problema relatado pelo SGQ, com os dados preenchidos pelo Núcleo.</div>`:''}
+    ${sec('supplier')?`<div style="padding:9px 20px;background:#f2f5f9;font-size:10px;font-weight:800;border-bottom:1px solid #ccd3dd">${lbl('supplier')}</div><div style="padding:14px 20px;min-height:170px;border-bottom:1px solid #ccd3dd"><b>Situação do retorno:</b> SEM RESPOSTA<br><br><span style="color:#667085">Ações imediatas · Investigação da causa · 5 Porquês · Ações corretivas · Eficácia</span></div>`:''}
+    ${sec('signatures')?`<div style="display:grid;grid-template-columns:repeat(3,1fr);min-height:65px">${['ELABORADOR','VERIFICADOR','APROVADOR'].map(x=>`<div style="text-align:center;padding:12px;border-right:1px solid #ccd3dd;font-size:9px"><b>${x}</b></div>`).join('')}</div>`:''}
+    <div style="padding:8px 20px;border-top:2px solid ${t.accent};font-size:8px;color:#667085">Documento controlado pelo Núcleo · ${escapeHtml(t.code)} · ${escapeHtml(t.revision)}</div>
+  </div></div>`;
+}
+
 function printRncStandard(id){
   const r=adminModuleRecord(id); if(!r||r.module!=='nccapa'||r.ncType!=='supplier')return;
   const e=v=>escapeHtml(String(v??'')).replace(/\n/g,'<br>');
   const v=(x,empty='')=>String(x??'').trim()||empty;
+  const tpl=getRncProcessTemplate();
   const responseLabel={none:'SEM RESPOSTA',partial:'RESPOSTA PARCIAL',complete:'RESPOSTA COMPLETA'}[r.rncResponseStatus]||'SEM RESPOSTA';
   const cell=(label,value,cls='')=>`<div class="cell ${cls}"><span>${e(label)}</span><b>${e(v(value,'—'))}</b></div>`;
   const long=(label,value)=>`<div class="long"><div class="lbl">${e(label)}</div><div class="answer">${e(v(value,'—'))}</div></div>`;
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>${e(v(r.rncNumber,'RNC'))}</title><style>
   @page{size:A4 portrait;margin:7mm}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;font-size:9px}.doc{width:100%;border:1.4px solid #000}.top{display:grid;grid-template-columns:1fr 180px}.brand{border-right:1px solid #000;text-align:center}.brand div{padding:4px;border-bottom:1px solid #000}.brand div:last-child{border-bottom:0}.brand .sys{font-weight:700;font-size:11px}.brand .form{font-weight:700;font-size:10px}.meta{display:grid;grid-template-columns:1fr 1fr}.meta>div{padding:4px;border-bottom:1px solid #000}.meta>div:nth-child(odd){border-right:1px solid #000}.report{font-size:13px;font-weight:800;text-align:center;padding:6px;border-top:1px solid #000}.bar{font-weight:800;text-align:left;padding:4px 6px;border-top:1.4px solid #000;border-bottom:1px solid #000;background:#e7e7e7;letter-spacing:.2px}.grid4{display:grid;grid-template-columns:1.3fr .65fr 1fr 1.15fr}.grid5{display:grid;grid-template-columns:1.1fr .85fr .85fr 1.1fr 1.1fr}.cell{min-height:39px;padding:4px 5px;border-right:1px solid #000}.cell:last-child{border-right:0}.cell span{display:block;font-size:7.5px;font-weight:700;margin-bottom:5px}.cell b{font-size:9px;font-weight:500}.rowline{border-bottom:1px solid #000}.long{border-bottom:1px solid #000;min-height:48px}.long .lbl{font-weight:700;padding:4px 5px;border-bottom:1px solid #bbb}.long .answer{padding:6px;white-space:normal;min-height:32px}.response-note{padding:4px 6px;border-bottom:1px solid #000;font-size:8px}.signature{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1.4px solid #000;margin-top:0}.signature>div{text-align:center;min-height:38px;padding:4px;border-right:1px solid #000}.signature>div:last-child{border-right:0}.signature b{display:block;margin-bottom:12px}.foot{font-size:7px;padding:4px 6px;border-top:1px solid #000}.toolbar{display:flex;gap:8px;margin:0 0 8px}.toolbar button{font:inherit;padding:7px 12px;cursor:pointer}@media print{.toolbar{display:none}.doc{break-inside:avoid}}
   </style></head><body><div class="toolbar"><button onclick="window.print()">Salvar como PDF / Imprimir</button></div><div class="doc">
-  <div class="top"><div class="brand"><div class="sys">SISTEMA DE GESTÃO INTEGRADO</div><div class="form">FORMULÁRIO DE REGISTRO</div></div><div class="meta"><div><b>Código</b><br>FOR-COR-QUA-0003</div><div><b>Revisão</b><br>Vigente</div><div><b>Registro</b><br>${e(v(r.rncNumber,'—'))}</div><div><b>Página</b><br>1 de 1</div></div></div>
-  <div class="report">RELATÓRIO DE SEGREGAÇÃO / NÃO CONFORMIDADE DE FORNECEDOR</div>
+  <div class="top"><div class="brand"><div class="sys" style="color:${e(tpl.accent)}">${e(tpl.logoText)} · SISTEMA DE GESTÃO INTEGRADO</div><div class="form">FORMULÁRIO DE REGISTRO</div></div><div class="meta"><div><b>Código</b><br>${e(tpl.code)}</div><div><b>Revisão</b><br>${e(tpl.revision)}</div><div><b>Registro</b><br>${e(v(r.rncNumber,'—'))}</div><div><b>Página</b><br>1 de 1</div></div></div>
+  <div class="report">${e(tpl.title)}</div>
   <div class="bar">IDENTIFICAÇÃO</div><div class="grid4 rowline">${cell('Responsável',r.rncReporter)}${cell('Turno',r.rncShift)}${cell('Data da Abertura',r.eventDate||r.rncIssueDate)}${cell('Nº DE REGISTRO',r.rncNumber)}</div><div class="grid4 rowline">${cell('Supervisor da área',r.rncSupervisor)}${cell('Gerente da área',r.rncManager)}${cell('R.O. relacionada',r.relatedRo||'Não vinculada')}${cell('Situação',r.status)}</div>
   <div class="bar">BLOQUEIO</div><div class="grid5 rowline">${cell('Fornecedor',r.supplier)}${cell('Nota Fiscal',r.rncInvoice)}${cell('Data da emissão',r.rncIssueDate)}${cell('Intervalo do bloqueio',r.rncBlockRange)}${cell('Qtd. Bloqueada / Não Conforme',r.rncQuantity)}</div><div class="grid5 rowline">${cell('Código do produto',r.rncProductCode)}${cell('Produto / descrição',r.rncProduct)}${cell('Dimensões / especificação',r.rncDimensions)}${cell('Área responsável pelo bloqueio',r.rncBlockArea)}${cell('Disposição','')}</div>
   ${long('Desvio evidenciado — Resumo',r.rncSummary||r.title)}${long('Descrição detalhada da ocorrência',r.rncDetailedDescription||r.description)}
   <div class="bar">RESPOSTA DO FORNECEDOR</div><div class="response-note"><b>Situação do retorno:</b> ${e(responseLabel)} — os campos abaixo registram somente informações devolvidas pelo fornecedor.</div>
   ${long('AÇÕES IMEDIATAS',r.rncImmediateActions)}${long('IDENTIFICAÇÃO / INVESTIGAÇÃO DA CAUSA',r.rncCause)}${long('ANÁLISE DOS 5 PORQUÊS',r.rncFiveWhys)}${long('CONCLUSÃO DA INVESTIGAÇÃO DE CAUSA',r.rncSupplierConclusion)}${long('AÇÕES CORRETIVAS E PREVENTIVAS',r.rncCorrectiveActions)}${long('VERIFICAÇÃO DE EFICÁCIA',r.rncEffectiveness)}
-  <div class="signature"><div><b>ELABORADOR</b>SGQ</div><div><b>VERIFICADOR</b></div><div><b>APROVADOR</b></div></div><div class="foot">Documento gerado pelo Núcleo a partir do padrão FOR-COR-QUA-0003.</div></div></body></html>`;
+  <div class="signature"><div><b>ELABORADOR</b>SGQ</div><div><b>VERIFICADOR</b></div><div><b>APROVADOR</b></div></div><div class="foot">Documento gerado pelo Núcleo a partir do padrão ${e(tpl.code)} · ${e(tpl.revision)}.</div></div></body></html>`;
   let frame=document.getElementById('nucleoRncPrintFrame');
   if(frame)frame.remove();
   frame=document.createElement('iframe');frame.id='nucleoRncPrintFrame';frame.setAttribute('title','RNC para impressão');
