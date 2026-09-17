@@ -10382,6 +10382,7 @@ const DELETED_TRIAGE_KEYS_KEY='nucleo-deleted-triage-keys-v1';
 const HIDDEN_ASSIGNED_KEYS_KEY='nucleo-hidden-assigned-directions-v1';
 try{localStorage.removeItem(DELETED_TRIAGE_KEYS_KEY)}catch(e){}
 let currentTriageRoId='';
+let currentEditingTriageKey='';
 
 function getHiddenAssignedKeys(){
   try{return new Set(JSON.parse(localStorage.getItem(HIDDEN_ASSIGNED_KEYS_KEY)||'[]').map(String))}catch(e){return new Set()}
@@ -10864,6 +10865,7 @@ function openTriageRecord(id){
   if(!ro){alert('R.O. não encontrada.');return}
 
   currentTriageRoId=roNumber;
+  currentEditingTriageKey=wanted.includes('::')?wanted:'';
   const savedMap=getSavedTriageMap();
   const tri=savedMap.get(wanted)||savedMap.get(roNumber)||{};
 
@@ -10887,7 +10889,9 @@ function openTriageRecord(id){
   const assignmentsBox=document.getElementById('triageAssignments');
   if(assignmentsBox)assignmentsBox.innerHTML='';
   const existingForRo=getTriageRecordsForRoNumber(roNumber);
-  const existingAssignments=existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]);
+  // Pelo lápis, editar SOMENTE o vínculo clicado. Na triagem normal, mostrar todos.
+  const targetedAssignment=currentEditingTriageKey ? (savedMap.get(currentEditingTriageKey)||tri) : null;
+  const existingAssignments=targetedAssignment?.responsibleSector?[targetedAssignment]:(existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]));
   existingAssignments.forEach(x=>addTriageAssignment(x.responsibleSector,x.responsibleUserEmail||'',x.assignmentReason||x.reason||'',x.responsibleSector));
 
   document.getElementById('triageNote').value=tri.note||'';
@@ -10935,6 +10939,7 @@ function closeTriageModal(){
   if(el)el.classList.remove('open');
   document.body.style.overflow='';
   currentTriageRoId='';
+  currentEditingTriageKey='';
 }
 
 function nextTuesdayIsoDate(fromDate=new Date()){
@@ -10984,8 +10989,13 @@ async function saveTriageRecord(){
 
   const map=getSavedTriageMap();
   const roNumber=String(key).split('::')[0];
-  const previousRecords=getTriageRecordsForRoNumber(roNumber,map).slice();
-  // Remove direcionamentos anteriores desta mesma R.O.; a seleção atual passa a ser a fonte de verdade.
+  const allPreviousRecords=getTriageRecordsForRoNumber(roNumber,map).slice();
+  // Pelo lápis, altera somente o direcionamento clicado. Nunca apaga os outros
+  // setores da mesma R.O. Na triagem completa, a seleção atual continua sendo
+  // a fonte de verdade para todos os direcionamentos.
+  const previousRecords=currentEditingTriageKey
+    ? allPreviousRecords.filter(x=>String(x.roKey||'')===String(currentEditingTriageKey))
+    : allPreviousRecords;
   previousRecords.forEach(old=>map.delete(String(old.roKey||'')));
   const targetSectors=decision==='directed'?responsibleSectors:[''];
   const savedRecords=[];
@@ -15983,8 +15993,20 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedSource = roListMode==='assigned' ? ros.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     const hiddenAssigned=getHiddenAssignedKeys();
-    const records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
-    if(!records.length)return [r];
+    let records=getTriageRecordsForRoNumber(base).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
+    // Recuperação segura: se SGQ_TRIAGENS estiver vazio/desatualizado, mas a
+    // própria R.O. importada ainda trouxer setor causa, ela continua atribuída.
+    // Não exige status operacional aqui, pois versões anteriores chegaram a
+    // limpar esse campo no cache e isso fazia a lista inteira desaparecer.
+    if(!records.length){
+      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
+      const norm=normalizeAnswer(sheetSector);
+      if(sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(norm)){
+        const syntheticKey=triageCompositeKey(base,sheetSector);
+        records=[{roKey:syntheticKey,roNumber:base,decision:'directed',responsibleSector:sheetSector,importedFromSheet:true,__synthetic:true}];
+      }
+    }
+    if(!records.length)return [];
     // Uma linha visual por R.O. + setor. Registros legados/duplicados não podem
     // reaparecer como uma segunda linha após atualizar o PDCA.
     const bySector=new Map();
@@ -16009,11 +16031,9 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
       // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
       const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
-      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||'').trim();
-      const sheetStatus=normalizeAnswer(r.raw?.__statusOperacional||'');
+      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
       const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
-      const validSheetStatus=!!sheetStatus && !sheetStatus.includes('nenhum email encontrado');
-      const assignedBySheet=validSheetSector && validSheetStatus;
+      const assignedBySheet=validSheetSector;
       const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
       if(!assignedByTriage && !assignedBySheet)return false;
       // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
@@ -16127,7 +16147,7 @@ function openAssignedSectorEdit(triageKey){
   if(!isAdmin()){alert('Somente o SGQ pode editar o setor causa.');return;}
   openTriageRecord(String(triageKey||''));
   setTimeout(()=>{
-    const row=[...document.querySelectorAll('#triageAssignments .triage-assignment-row')].find(r=>triageCompositeKey(triageRoNumberPart(triageKey),r.dataset.sector)===String(triageKey));
+    const row=document.querySelector('#triageAssignments .triage-assignment-row');
     if(row){row.scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('.triage-assignment-sector')?.focus();}
   },80);
 }
