@@ -4485,10 +4485,9 @@ function pendingHubData(){
   const actions=actionDashboardItems().filter(x=>x.status.code!=='done');
   const contests=getContestations().filter(c=>c.status==='pending'&&(admin||sameSector(c.sector)));
 
-  const triagePending=admin?getAllRoRecords().filter(ro=>{
-    const key=String(ro.numero||ro.id||ro.codigo||'').trim();
-    return !triageMap.get(key);
-  }):[];
+  // Mantém a fila "Aguardando triagem" coerente com renderTriage().
+  // Não use a chave base diretamente: direcionamentos multi-setor usam RO::Setor.
+  const triagePending=admin?getTriageRecords().filter(r=>r.triagemStatus==='new'):[];
 
   const registrations=pendingRegistrationItems();
   return {roItems,actions,contests,triagePending,registrations};
@@ -16644,7 +16643,10 @@ function overviewUserData(){
 function overviewAdminData(){
   const triageMap=overviewSafe(()=>getSavedTriageMap(),new Map());
   const allRos=overviewSafe(()=>getAllRoRecords(),[]);
-  const triagePending=allRos.filter(r=>!triageMap.get(String(r.numero||r.id||r.codigo||'').trim())).length;
+  // Use a mesma regra da tela de Triagem. A mesma R.O. pode ter chave técnica
+  // RO::Setor; procurar apenas pela chave base fazia uma R.O. já atribuída
+  // também ser contada como "aguardando triagem".
+  const triagePending=overviewSafe(()=>getTriageRecords().filter(r=>r.triagemStatus==='new').length,0);
   const contests=overviewSafe(()=>getContestations().filter(c=>c.status==='pending'),[]);
   const pendingActions=overviewSafe(()=>pendingActionItems(),[]);
   const actionReview=pendingActions.filter(x=>['review','overdue'].includes(x?.status?.code)).length;
