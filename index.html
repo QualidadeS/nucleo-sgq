@@ -15835,12 +15835,27 @@ function refreshRncTemplatePreview(){
     const fitScale=Math.min(1,availW/sw,availH/sh);
     const zoomPct=rncPreviewZoom==='fit'?100:Math.max(50,Math.min(250,Number(rncPreviewZoom)||100));
     const scale=Math.max(.2,Math.min(2.5,fitScale*(zoomPct/100)));
-    sheet.style.transformOrigin='top left';sheet.style.transform=`scale(${scale})`;
-    if(viewport){viewport.style.overflow=(zoomPct>100?'auto':'hidden');viewport.style.justifyContent='flex-start';viewport.style.alignItems='flex-start';viewport.style.padding='10px';}
-    const label=document.getElementById('rncPreviewZoomLabel');if(label)label.textContent=rncPreviewZoom==='fit'?'100%':`${Math.round(zoomPct)}%`;
     const scaledW=sw*scale,scaledH=sh*scale;
-    sheet.style.marginRight=`-${Math.max(0,sw-scaledW)}px`;sheet.style.marginBottom=`-${Math.max(0,sh-scaledH)}px`;
-    if(viewport && zoomPct<=100){viewport.scrollTop=0;viewport.scrollLeft=0;}
+    // O transform não altera o tamanho de layout do elemento. Um canvas com o tamanho
+    // realmente escalado mantém a folha centralizada e evita que o zoom a empurre lateralmente.
+    const canvas=document.createElement('div');
+    canvas.className='rnc-preview-canvas';
+    canvas.style.cssText=`position:relative;flex:0 0 auto;width:${scaledW}px;height:${scaledH}px;`;
+    sheet.parentNode.insertBefore(canvas,sheet);canvas.appendChild(sheet);
+    sheet.style.position='absolute';sheet.style.left='0';sheet.style.top='0';
+    sheet.style.transformOrigin='top left';sheet.style.transform=`scale(${scale})`;
+    sheet.style.margin='0';
+    if(viewport){
+      viewport.style.overflow='auto';viewport.style.alignItems='flex-start';viewport.style.padding='10px';
+      viewport.style.justifyContent=(scaledW<=Math.max(0,viewport.clientWidth-20)?'center':'flex-start');
+    }
+    const label=document.getElementById('rncPreviewZoomLabel');if(label)label.textContent=rncPreviewZoom==='fit'?'100%':`${Math.round(zoomPct)}%`;
+    if(viewport){
+      // Quando ainda cabe, fica geometricamente centralizado. Quando passa a largura do visor,
+      // começa pela esquerda e a rolagem horizontal passa a navegar somente a prévia.
+      if(scaledW<=Math.max(0,viewport.clientWidth-20)) viewport.scrollLeft=0;
+      if(zoomPct<=100 && scaledH<=Math.max(0,viewport.clientHeight-20)) viewport.scrollTop=0;
+    }
   });
 }
 
