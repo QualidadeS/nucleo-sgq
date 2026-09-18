@@ -15658,8 +15658,78 @@ function saveAdminOperationalRecord(key,id){
     alert('Solicitação registrada. Não há documento padrão compatível; o pedido foi encaminhado ao SGQ.');
     showAdminOperationalModule(key);return;
   }
+  if(key==='nccapa'&&r.ncType==='supplier'){
+    finishRncCreation(r,ix>=0);
+    return;
+  }
   alert('Registro salvo.');
   showAdminOperationalModule(key);
+}
+
+async function finishRncCreation(r,wasExisting){
+  const msg=wasExisting?'RNC atualizada com sucesso.':'RNC criada com sucesso.';
+  // O POST já foi disparado pela rotina de salvamento. Confirma na base antes de chamar de sucesso.
+  let confirmed=!portalBackendEnabled();
+  if(portalBackendEnabled()){
+    showNucleoLoading('Salvando RNC...');
+    for(let i=0;i<8&&!confirmed;i++){
+      await new Promise(res=>setTimeout(res,i?900:450));
+      try{
+        const chk=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id:r.id},15000);
+        if(chk?.sucesso&&chk?.registro&&String(chk.registro.id)===String(r.id)) confirmed=true;
+      }catch(e){}
+    }
+    hideNucleoLoading();
+  }
+  if(!confirmed){
+    alert('A RNC ficou salva neste navegador, mas a base central ainda não confirmou o salvamento. Tente salvar novamente antes de enviar.');
+    return;
+  }
+  openRncSuccessModal(r,msg);
+}
+function ensureRncSuccessModal(){
+  let ov=document.getElementById('rncSuccessOverlay');if(ov)return ov;
+  ov=document.createElement('div');ov.id='rncSuccessOverlay';ov.className='modal hidden';ov.style.zIndex='100300';
+  ov.innerHTML=`<div class="modal-box" style="width:min(680px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h3 id="rncSuccessTitle" style="margin-bottom:5px">RNC criada com sucesso</h3><div id="rncSuccessMeta" class="small"></div></div><button class="btn secondary" type="button" onclick="closeRncSuccessModal()">Fechar</button></div><div style="margin-top:18px;padding:14px;border:1px solid #dbe4df;border-radius:12px;background:#f8faf9"><b>O que deseja fazer agora?</b><div class="small" style="margin-top:4px">Você pode conferir o PDF antes do envio ou enviar depois em Acompanhar RNC.</div><div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px"><button class="btn secondary" type="button" id="rncSuccessPdfBtn">Ver PDF</button><button class="btn primary" type="button" id="rncSuccessSendBtn">Realizar envio</button><button class="btn secondary" type="button" onclick="closeRncSuccessModal(true)">Concluir e voltar</button></div></div></div>`;
+  document.body.appendChild(ov);return ov;
+}
+function openRncSuccessModal(r,msg){
+  const ov=ensureRncSuccessModal();ov.dataset.rncId=r.id;ov.classList.remove('hidden');
+  document.getElementById('rncSuccessTitle').textContent=msg||'RNC criada com sucesso.';
+  document.getElementById('rncSuccessMeta').textContent=[r.rncNumber,r.supplier,r.eventDate||r.rncIssueDate].filter(Boolean).join(' · ');
+  document.getElementById('rncSuccessPdfBtn').onclick=()=>printRncStandard(r.id);
+  document.getElementById('rncSuccessSendBtn').onclick=()=>openRncSendModal(r.id);
+}
+function closeRncSuccessModal(goBack=false){const ov=document.getElementById('rncSuccessOverlay');ov?.classList.add('hidden');if(goBack)showAdminOperationalModule('nccapa')}
+function ensureRncSendModal(){
+  let ov=document.getElementById('rncSendOverlay');if(ov)return ov;
+  ov=document.createElement('div');ov.id='rncSendOverlay';ov.className='modal hidden';ov.style.zIndex='100350';
+  ov.innerHTML=`<div class="modal-box" style="width:min(720px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin-bottom:4px">Enviar RNC</h3><div class="small">O PDF da RNC será anexado ao e-mail.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('rncSendOverlay').classList.add('hidden')">Fechar</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px"><label><span class="small">Responsável pela abertura</span><input id="rncSendFromName" disabled></label><label><span class="small">E-mail do responsável</span><input id="rncSendReplyTo" disabled></label><label style="grid-column:1/-1"><span class="small">E-mail do fornecedor *</span><input id="rncSendSupplierEmail" type="email" placeholder="fornecedor@empresa.com"></label><label style="grid-column:1/-1"><span class="small">Diretoria / outros destinatários (CC)</span><input id="rncSendCc" placeholder="email1@seta.com.br; email2@seta.com.br"></label><label style="grid-column:1/-1"><span class="small">Assunto</span><input id="rncSendSubject"></label><label style="grid-column:1/-1"><span class="small">Mensagem</span><textarea id="rncSendMessage" style="min-height:110px"></textarea></label></div><div id="rncSendStatus" class="small" style="margin-top:10px"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn secondary" type="button" id="rncSendPreviewBtn">Ver PDF</button><button class="btn primary" type="button" id="rncSendNowBtn">Enviar RNC</button></div></div>`;
+  document.body.appendChild(ov);return ov;
+}
+function openRncSendModal(id){
+  const r=adminModuleRecord(id);if(!r)return;const ov=ensureRncSendModal(),sess=getSession()||{};ov.dataset.rncId=id;ov.classList.remove('hidden');
+  document.getElementById('rncSendFromName').value=sess.name||r.createdBy||'';document.getElementById('rncSendReplyTo').value=sess.email||r.createdByEmail||'';
+  document.getElementById('rncSendSupplierEmail').value=r.supplierEmail||'';document.getElementById('rncSendCc').value=r.rncEmailCc||'';
+  document.getElementById('rncSendSubject').value=`RNC ${r.rncNumber||''} – ${r.supplier||'Fornecedor'}`;
+  document.getElementById('rncSendMessage').value=`Prezados,\n\nSegue anexa a ${r.rncNumber||'RNC'} referente à não conformidade registrada.\n\nSolicitamos a análise e o retorno das ações aplicáveis.\n\nAtenciosamente,\n${sess.name||r.createdBy||'SGQ'}`;
+  document.getElementById('rncSendPreviewBtn').onclick=()=>printRncStandard(id);document.getElementById('rncSendNowBtn').onclick=sendRncEmailNow;
+  document.getElementById('rncSendStatus').textContent='';
+}
+async function sendRncEmailNow(){
+  const ov=document.getElementById('rncSendOverlay'),id=ov?.dataset.rncId,r=adminModuleRecord(id);if(!r)return;
+  const supplierEmail=String(document.getElementById('rncSendSupplierEmail')?.value||'').trim();if(!supplierEmail||!supplierEmail.includes('@'))return alert('Informe o e-mail do fornecedor.');
+  const cc=String(document.getElementById('rncSendCc')?.value||'').trim(),replyTo=String(document.getElementById('rncSendReplyTo')?.value||'').trim(),subject=String(document.getElementById('rncSendSubject')?.value||'').trim(),message=String(document.getElementById('rncSendMessage')?.value||'').trim();
+  if(!portalBackendEnabled())return alert('Configure o Apps Script para realizar o envio.');
+  const html=printRncStandard(id,true);if(!html)return alert('Não foi possível montar o PDF da RNC.');
+  const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');btn.disabled=true;st.textContent='Enviando e aguardando confirmação...';showNucleoLoading('Enviando RNC...');
+  const updated={...r,supplierEmail,rncEmailCc:cc,rncEmailStatus:'sending',rncEmailLastAttemptAt:new Date().toISOString()};let all=getAdminModuleRecords(),ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=updated;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,updated);
+  const submitted=portalPostForm({acao:'portal_send_rnc_email',id,email:supplierEmail,cc,replyTo,subject,message,html,eventoId:eventId,ator:getSession()?.name||'SGQ'});
+  if(!submitted){hideNucleoLoading();btn.disabled=false;st.textContent='Não foi possível iniciar o envio.';return}
+  let result=null;for(let i=0;i<12&&!result;i++){await new Promise(res=>setTimeout(res,i?1000:700));try{const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);if(chk?.sucesso&&chk?.status&&chk.status!=='processing')result=chk}catch(e){}}
+  hideNucleoLoading();btn.disabled=false;
+  if(!result||result.status!=='sent'){st.textContent='O envio não foi confirmado.'+(result?.erro?' '+result.erro:'');return}
+  const done={...updated,rncEmailStatus:'sent',rncEmailSentAt:result.at||new Date().toISOString(),rncEmailTo:supplierEmail,rncEmailCc:cc};all=getAdminModuleRecords();ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=done;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,done);st.textContent='RNC enviada com sucesso.';setTimeout(()=>{ov.classList.add('hidden');openRncSuccessModal(done,'RNC enviada com sucesso.');},650);
 }
 
 const PROCESS_LAYOUT_KEY='nucleo_process_layouts_v1';
@@ -15976,7 +16046,7 @@ function refreshRncTemplatePreview(){
   });
 }
 
-function printRncStandard(id){
+function printRncStandard(id,returnHtml=false){
   const r=adminModuleRecord(id); if(!r||r.module!=='nccapa'||r.ncType!=='supplier')return;
   const e=v=>escapeHtml(String(v??'')).replace(/\n/g,'<br>'); const v=(x,empty='')=>String(x??'').trim()||empty; const tpl=getRncProcessTemplate();
   const responseLabel={none:'SEM RESPOSTA',partial:'RESPOSTA PARCIAL',complete:'RESPOSTA COMPLETA'}[r.rncResponseStatus]||'SEM RESPOSTA';
@@ -16006,6 +16076,7 @@ function printRncStandard(id){
   ${(tpl.fixedImages||[]).map(x=>`<div class="long"><div class="lbl">${e(x.label||'IMAGEM')}</div><div class="answer" style="text-align:center"><img src="${x.dataUrl}" style="max-width:95%;max-height:45mm;object-fit:contain"></div></div>`).join('')}
   ${enabled('signatures')?rncLayoutRowsHtml(tpl,'signatures',r,false,'cell'):''}
   </div></body></html>`;
+  if(returnHtml)return html;
   let frame=document.getElementById('nucleoRncPrintFrame');if(frame)frame.remove();frame=document.createElement('iframe');frame.id='nucleoRncPrintFrame';frame.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;background:#fff;';document.body.appendChild(frame);const d=frame.contentDocument||frame.contentWindow.document;d.open();d.write(html);d.close();const doPrint=()=>{try{frame.contentWindow.focus();frame.contentWindow.print()}catch(err){console.error(err);alert('Não foi possível abrir a impressão do PDF.')}};if(d.readyState==='complete')setTimeout(doPrint,250);else frame.onload=()=>setTimeout(doPrint,250);
 }
 
