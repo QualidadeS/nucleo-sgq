@@ -15843,12 +15843,15 @@ function normalizeRncTemplate(t){
   const sections=d.sections.map(ds=>{const os=oldSecs.find(x=>x.id===ds.id);const merged=os?{...ds,...os}:{...ds};if(!src.ownershipVersion&&merged.id==='signatures')merged.owner='footer';return merged;});
   const layout={...d.layout,...(src.layout||{})};
   let fieldLayout=Array.isArray(src.fieldLayout)&&src.fieldLayout.length?src.fieldLayout.map(x=>({...x})):defaultRncFieldLayout();if(Number(src.gridVersion||0)<3){const defs=defaultRncFieldLayout();const existing=new Set(fieldLayout.map(x=>x.id));defs.forEach(x=>{if(!existing.has(x.id))fieldLayout.push({...x})})}
+  // Migração v4: remove a célula fantasma legado "@A" que podia surgir antes
+  // do PORQUÊ 1 e normaliza os cinco campos dos 5 Porquês para ocupar 100% da linha.
+  if(Number(src.gridVersion||0)<4){fieldLayout=fieldLayout.filter(x=>!(x.section==='fivewhys'&&String(x.source||'')==='@A'));const whys=fieldLayout.filter(x=>x.section==='fivewhys');if(whys.length===5)whys.forEach(x=>{x.width=20;x.row=1})}
   // Migração v2: nos modelos salvos antes do rodapé real, as três assinaturas podiam
   // continuar marcadas como fornecedor e por isso apareciam no meio da página 2.
   if(Number(src.ownershipVersion||0)<2){fieldLayout=fieldLayout.map(x=>x.section==='signatures'?{...x,owner:'footer'}:x);const sig=sections.find(x=>x.id==='signatures');if(sig)sig.owner='footer';}
   let headerLayout=Array.isArray(src.headerLayout)&&src.headerLayout.length?src.headerLayout.map(x=>({...x})):defaultRncHeaderLayout();
   if(!headerLayout.some(x=>x.source==='@logo')){headerLayout=headerLayout.map(x=>({...x,row:(Number(x.row)||1)+2}));headerLayout.unshift({id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},{id:'h-system',row:1,label:'',value:'SISTEMA DE GESTÃO INTEGRADO',source:'@SISTEMA DE GESTÃO INTEGRADO',width:80,height:13,align:'center',bold:true},{id:'h-form',row:2,label:'',value:'FORMULÁRIO DE REGISTRO',source:'@FORMULÁRIO DE REGISTRO',width:100,height:6,align:'center',bold:false});}
-  return {...d,...src,gridVersion:3,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
+  return {...d,...src,gridVersion:4,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
 }
 function getProcessTemplates(){
   try{const a=JSON.parse(localStorage.getItem(PROCESS_TEMPLATE_KEY)||'[]');if(Array.isArray(a)&&a.length)return a.map(x=>x.kind==='RNC'?normalizeRncTemplate(x):x)}catch(e){}
@@ -16160,13 +16163,8 @@ function rncWordCompatibleHtml(html){
     pg.style.breakInside='auto';
     pg.style.pageBreakInside='auto';
     pg.style.pageBreakAfter='auto';
-    if(i>0){
-      const br=doc.createElement('p');
-      br.setAttribute('data-rnc-word-page-break','1');
-      br.setAttribute('style','page-break-before:always;break-before:page;margin:0;padding:0;height:0;line-height:0;font-size:1px');
-      br.innerHTML='&nbsp;';
-      pg.parentNode.insertBefore(br,pg);
-    }
+    // A quebra real é aplicada no OOXML pelo backend após a exportação DOCX.
+    // Não inserir quebra HTML aqui: Google Docs pode deslocá-la e criar página vazia.
   });
   doc.querySelectorAll('.doc').forEach(el=>{el.style.height='auto';el.style.minHeight='0';el.style.display='block';el.style.overflow='visible'});
   doc.querySelectorAll('.pageContent').forEach(el=>{el.style.display='block';el.style.width='100%'});
