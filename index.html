@@ -4843,6 +4843,27 @@ async function portalBackendSaveConfirmed(collection,id,data){
   return res;
 }
 
+async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=60000){
+  if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+  const eventoId='PORTALSAVE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+  const submitted=portalPostForm({
+    acao:'portal_save',colecao:String(collection||''),id:String(id||''),
+    dados:JSON.stringify(data||{}),ator:getSession()?.name||'Sistema',eventoId
+  });
+  if(!submitted)throw new Error('Não foi possível enviar o registro para a base central.');
+  const started=Date.now();
+  while(Date.now()-started<timeoutMs){
+    await new Promise(resolve=>setTimeout(resolve,700));
+    const chk=await portalJsonp({acao:'portal_save_status',eventoId},15000).catch(()=>null);
+    if(chk?.status==='done'){
+      const read=await portalJsonp({acao:'portal_get_record',colecao:String(collection||''),id:String(id||'')},15000).catch(()=>null);
+      if(read?.sucesso&&read?.registro)return {sucesso:true,registro:read.registro};
+    }
+    if(chk?.status==='error')throw new Error(chk.erro||'A base central recusou o salvamento.');
+  }
+  throw new Error('A base central não confirmou o salvamento dentro do tempo esperado.');
+}
+
 async function portalBackendDeleteConfirmed(collection,id){
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
   const res=await portalJsonp({
@@ -15670,42 +15691,22 @@ function saveAdminOperationalRecord(key,id){
 
 async function finishRncCreation(r,wasExisting){
   const msg=wasExisting?'RNC atualizada com sucesso.':'RNC criada com sucesso.';
-  if(!portalBackendEnabled()){
-    openRncSuccessModal(r,msg);
-    return;
-  }
+  if(!portalBackendEnabled()){openRncSuccessModal(r,msg);return;}
   showNucleoLoading('Salvando RNC...');
-  let confirmed=false, lastError='';
   try{
-    // Sem fotos/base64, confirma diretamente e recebe a resposta real do Apps Script.
-    const payload=JSON.stringify(r||{});
-    if(payload.length < 7000){
-      const res=await portalBackendSaveConfirmed('admin_modules',r.id,r);
-      confirmed=!!res?.sucesso;
-    }else{
-      // RNC com fotos precisa de POST. O evento permite confirmar o processamento real do POST.
-      const eventoId='RNCSAVE-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-      const submitted=portalPostForm({acao:'portal_save',colecao:'admin_modules',id:String(r.id||''),dados:payload,ator:getSession()?.name||'Sistema',eventoId});
-      if(!submitted) throw new Error('Não foi possível enviar a RNC para a base central.');
-      for(let i=0;i<20&&!confirmed;i++){
-        await new Promise(res=>setTimeout(res,i?900:500));
-        const chk=await portalJsonp({acao:'portal_save_status',eventoId},15000).catch(()=>null);
-        if(chk?.status==='done'){confirmed=true;break}
-        if(chk?.status==='error') throw new Error(chk.erro||'A base central recusou o salvamento da RNC.');
-      }
-      if(!confirmed) throw new Error('A base central não confirmou o salvamento dentro do tempo esperado.');
-    }
-    // Confere que o registro pode ser lido de volta antes de liberar PDF/envio.
-    const chk=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id:r.id},15000);
-    if(!chk?.sucesso||!chk?.registro) throw new Error('A RNC foi enviada, mas não pôde ser lida de volta da base central.');
-    confirmed=true;
-  }catch(e){ lastError=String(e?.message||e||'Falha desconhecida.'); }
-  hideNucleoLoading();
-  if(!confirmed){
-    alert('Não foi possível confirmar o salvamento da RNC na base central.\n\n'+lastError+'\n\nNada será enviado por e-mail até o salvamento ser confirmado.');
-    return;
+    // Usa POST confirmado para toda RNC. A rota GET não é usada para gravar e
+    // fotos podem tornar o registro grande demais para uma URL.
+    const saved=await portalBackendSaveConfirmedPost('admin_modules',r.id,r,90000);
+    const central=saved?.registro||r;
+    // Atualiza o cache local com a versão realmente devolvida pela base (inclusive refs das fotos).
+    const all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(r.id));
+    if(ix>=0){all[ix]={...r,...central};saveAdminModuleRecords(all)}
+    hideNucleoLoading();
+    openRncSuccessModal({...r,...central},msg);
+  }catch(e){
+    hideNucleoLoading();
+    alert('Não foi possível confirmar o salvamento da RNC na base central.\n\n'+String(e?.message||e||'Falha desconhecida.')+'\n\nNada será enviado por e-mail até o salvamento ser confirmado.');
   }
-  openRncSuccessModal(r,msg);
 }
 function ensureRncSuccessModal(){
   let ov=document.getElementById('rncSuccessOverlay');if(ov)return ov;
@@ -15742,8 +15743,19 @@ async function sendRncEmailNow(){
   const cc=String(document.getElementById('rncSendCc')?.value||'').trim(),replyTo=String(document.getElementById('rncSendReplyTo')?.value||'').trim(),subject=String(document.getElementById('rncSendSubject')?.value||'').trim(),message=String(document.getElementById('rncSendMessage')?.value||'').trim();
   if(!portalBackendEnabled())return alert('Configure o Apps Script para realizar o envio.');
   const html=printRncStandard(id,true);if(!html)return alert('Não foi possível montar o PDF da RNC.');
-  const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');btn.disabled=true;st.textContent='Enviando e aguardando confirmação...';showNucleoLoading('Enviando RNC...');
-  const updated={...r,supplierEmail,rncEmailCc:cc,rncEmailStatus:'sending',rncEmailLastAttemptAt:new Date().toISOString()};let all=getAdminModuleRecords(),ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=updated;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,updated);
+  const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');btn.disabled=true;st.textContent='Confirmando RNC na base central...';showNucleoLoading('Confirmando RNC...');
+  const updated={...r,supplierEmail,rncEmailCc:cc,rncEmailStatus:'sending',rncEmailLastAttemptAt:new Date().toISOString()};let all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(id));if(ix>=0)all[ix]=updated;saveAdminModuleRecords(all);
+  try{
+    // O envio nunca corre em paralelo com o salvamento. Primeiro confirma que o
+    // mesmo ID está legível na base central; se necessário, grava e confirma.
+    let central=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id},15000).catch(()=>null);
+    if(!central?.sucesso||!central?.registro){
+      central=await portalBackendSaveConfirmedPost('admin_modules',id,updated,90000);
+    }
+    st.textContent='RNC confirmada. Enviando e-mail...';updateNucleoLoading('Enviando RNC...');
+  }catch(e){
+    hideNucleoLoading();btn.disabled=false;st.textContent='O envio não foi iniciado. '+String(e?.message||e);return;
+  }
   const submitted=portalPostForm({acao:'portal_send_rnc_email',id,email:supplierEmail,cc,replyTo,subject,message,html,eventoId:eventId,ator:getSession()?.name||'SGQ'});
   if(!submitted){hideNucleoLoading();btn.disabled=false;st.textContent='Não foi possível iniciar o envio.';return}
   let result=null;for(let i=0;i<12&&!result;i++){await new Promise(res=>setTimeout(res,i?1000:700));try{const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);if(chk?.sucesso&&chk?.status&&chk.status!=='processing')result=chk}catch(e){}}
