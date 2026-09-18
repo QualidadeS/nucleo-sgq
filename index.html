@@ -15128,6 +15128,7 @@ const ADMIN_OPERATIONAL_MODULES={
       ['Nova NC / RNC','Registrar uma NC interna ou uma RNC de fornecedor. O vínculo com R.O. é opcional.','new'],
       ['Em tratamento','Acompanhar NCs e RNCs abertas, contenções e responsáveis.','active'],
       ['RNC de fornecedores','Consultar as não conformidades de fornecedor e seus vínculos.','rnc'],
+      ['Enviar RNC','Selecionar uma RNC já pronta, conferir o PDF e realizar o envio por e-mail.','rnc_send'],
       ['CAPA vinculada','Controlar NCs e RNCs com ação corretiva/preventiva vinculada.','capa']
     ]
   },
@@ -15539,6 +15540,7 @@ function openAdminOperationalWorkspace(key,index){
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
   if(key==='processes'&&mode==='templates'){renderProcessTemplatesWorkspace();return}
+  if(key==='nccapa'&&mode==='rnc_send'){renderRncSendWorkspace();return}
   if(mode==='new'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
       <div class="card" style="margin-top:14px;padding:20px">
@@ -15578,6 +15580,38 @@ function openAdminOperationalWorkspace(key,index){
     </div>
   </div>`;
 }
+function renderRncSendWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;
+  const rncs=getAdminModuleRecords().filter(r=>r.module==='nccapa'&&(r.ncType==='supplier'||String(r.rncNumber||'').trim())).slice().sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
+  host.innerHTML=`<div style="grid-column:1/-1">
+    <button class="btn secondary" type="button" onclick="showAdminOperationalModule('nccapa')">← Voltar ao módulo</button>
+    <div class="card" style="margin-top:14px;padding:20px">
+      <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div><h3 style="margin:0">Enviar RNC</h3><div class="small" style="margin-top:5px">Escolha uma RNC já pronta. Você pode conferir o PDF e fazer o envio sem abrir a tela de acompanhamento.</div></div>
+        <div style="min-width:min(360px,100%);flex:0 1 420px"><input id="rncSendSearch" placeholder="Buscar por nº da RNC, fornecedor ou título" oninput="filterRncSendWorkspace()"></div>
+      </div>
+      <div id="rncSendWorkspaceList" style="margin-top:16px"></div>
+    </div>
+  </div>`;
+  renderRncSendWorkspaceList(rncs);
+}
+function rncSendWorkspaceRecords(){
+  return getAdminModuleRecords().filter(r=>r.module==='nccapa'&&(r.ncType==='supplier'||String(r.rncNumber||'').trim())).slice().sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
+}
+function filterRncSendWorkspace(){renderRncSendWorkspaceList(rncSendWorkspaceRecords())}
+function renderRncSendWorkspaceList(records){
+  const host=document.getElementById('rncSendWorkspaceList');if(!host)return;
+  const q=normalizeAnswer(document.getElementById('rncSendSearch')?.value||'');
+  const rows=(records||[]).filter(r=>!q||normalizeAnswer([r.rncNumber,r.supplier,r.title,r.rncProduct,r.description].filter(Boolean).join(' ')).includes(q));
+  if(!rows.length){host.innerHTML='<div style="padding:26px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa"><b>Nenhuma RNC encontrada.</b><div class="small" style="margin-top:5px">RNCs salvas no Núcleo aparecerão aqui para envio.</div></div>';return}
+  host.innerHTML=`<div style="overflow:auto;border:1px solid #e5e7eb;border-radius:12px"><table style="width:100%"><thead><tr><th>RNC</th><th>Fornecedor</th><th>Situação do envio</th><th>Último envio</th><th style="text-align:right">Ações</th></tr></thead><tbody>${rows.map(r=>`<tr>
+    <td><b>${escapeHtml(r.rncNumber||'RNC sem número')}</b><div class="small">${escapeHtml(r.title||r.rncSummary||'—')}</div></td>
+    <td>${escapeHtml(r.supplier||'—')}</td>
+    <td><span class="pill">${escapeHtml(r.rncEmailStatus==='sent'?'Enviada':r.rncEmailStatus==='sending'?'Enviando':'Não enviada')}</span>${r.supplierEmail?`<div class="small" style="margin-top:4px">${escapeHtml(r.supplierEmail)}</div>`:''}</td>
+    <td>${escapeHtml(formatDateTimeBR(r.rncEmailSentAt||'')||'—')}</td>
+    <td><div style="display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Ver PDF</button><button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar RNC</button></div></td>
+  </tr>`).join('')}</tbody></table></div>`;
+}
 function updateNcCapaFormType(){
   const type=String(document.getElementById('admModNcType')?.value||'internal');
   document.getElementById('admModSupplierWrap')?.classList.toggle('hidden',type!=='supplier');
@@ -15611,7 +15645,7 @@ function collectAdminModuleForm(key,existing){
     rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'),
     rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'), rncResponseStatus:val('admModRncResponseStatus'),
     rncImmediateActions:val('admModRncImmediateActions')||val('admModAction'), rncCause:val('admModRncCause'), rncFiveWhys:val('admModRncFiveWhys'), rncSupplierConclusion:val('admModRncSupplierConclusion'),
-    rncCorrectiveActions:val('admModRncCorrectiveActions'), rncEffectiveness:val('admModRncEffectiveness'), rncPhotos:collectRncPhotos(),
+    rncCorrectiveActions:val('admModRncCorrectiveActions'), rncEffectiveness:val('admModRncEffectiveness'), rncPhotos:(()=>{const fresh=collectRncPhotos(),oldPhotos=(existing&&existing.rncPhotos&&typeof existing.rncPhotos==='object')?existing.rncPhotos:{};const merged={...oldPhotos};Object.keys(fresh||{}).forEach(k=>{const a=Array.isArray(fresh[k])?fresh[k]:[];if(a.length)merged[k]=a;else if(!Array.isArray(merged[k]))merged[k]=[]});return merged})(),
     title:val('admModTitle'),
     code:val('admModCode'),
     location:val('admModLocation'),
@@ -15711,7 +15745,7 @@ async function finishRncCreation(r,wasExisting){
 function ensureRncSuccessModal(){
   let ov=document.getElementById('rncSuccessOverlay');if(ov)return ov;
   ov=document.createElement('div');ov.id='rncSuccessOverlay';ov.className='modal hidden';ov.style.zIndex='100300';
-  ov.innerHTML=`<div class="modal-box" style="width:min(680px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h3 id="rncSuccessTitle" style="margin-bottom:5px">RNC criada com sucesso</h3><div id="rncSuccessMeta" class="small"></div></div><button class="btn secondary" type="button" onclick="closeRncSuccessModal()">Fechar</button></div><div style="margin-top:18px;padding:14px;border:1px solid #dbe4df;border-radius:12px;background:#f8faf9"><b>O que deseja fazer agora?</b><div class="small" style="margin-top:4px">Você pode conferir o PDF antes do envio ou enviar depois em Acompanhar RNC.</div><div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px"><button class="btn secondary" type="button" id="rncSuccessPdfBtn">Ver PDF</button><button class="btn primary" type="button" id="rncSuccessSendBtn">Realizar envio</button><button class="btn secondary" type="button" onclick="closeRncSuccessModal(true)">Concluir e voltar</button></div></div></div>`;
+  ov.innerHTML=`<div class="modal-box" style="width:min(680px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h3 id="rncSuccessTitle" style="margin-bottom:5px">RNC criada com sucesso</h3><div id="rncSuccessMeta" class="small"></div></div><button class="btn secondary" type="button" onclick="closeRncSuccessModal()">Fechar</button></div><div style="margin-top:18px;padding:14px;border:1px solid #dbe4df;border-radius:12px;background:#f8faf9"><b>O que deseja fazer agora?</b><div class="small" style="margin-top:4px">Você pode conferir o PDF antes do envio ou enviar depois pela opção Enviar RNC.</div><div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px"><button class="btn secondary" type="button" id="rncSuccessPdfBtn">Ver PDF</button><button class="btn primary" type="button" id="rncSuccessSendBtn">Realizar envio</button><button class="btn secondary" type="button" onclick="closeRncSuccessModal(true)">Concluir e voltar</button></div></div></div>`;
   document.body.appendChild(ov);return ov;
 }
 function openRncSuccessModal(r,msg){
