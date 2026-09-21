@@ -11024,12 +11024,16 @@ function updateTriageDecisionUi(){
   const note=document.getElementById('triageNote');
 
   const directed=decision==='directed';
+  const unitCorrection=decision==='unit_correction';
   const motiveRequired=['record','cancelled','obsolete'].includes(decision);
-  if(noteLabel)noteLabel.textContent=motiveRequired?'Motivo *':'Observação da triagem';
-  if(note)note.placeholder=motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.';
+  if(noteLabel)noteLabel.textContent=unitCorrection?'Observação da correção':(motiveRequired?'Motivo *':'Observação da triagem');
+  if(note)note.placeholder=unitCorrection?'Opcional: informe por que a unidade foi corrigida.':(motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.');
   sectorField.style.display=directed?'block':'none';
 
-  if(directed){
+  if(unitCorrection){
+    title.textContent='Somente correção cadastral';
+    text.textContent='Será alterada apenas a Unidade da R.O. na planilha de origem. A decisão, o setor, o Status e o PDCA permanecerão inalterados.';
+  }else if(directed){
     title.textContent='PDCA obrigatório';
     text.textContent='Escolha o setor e, se necessário, uma pessoa específica. Sem pessoa selecionada, todos os usuários cadastrados no setor recebem a R.O.';
   }else if(decision==='record'){
@@ -11094,6 +11098,29 @@ async function saveTriageRecord(){
   if(['record','cancelled','obsolete'].includes(decision) && !note){
     alert('Informe o motivo desta decisão.');
     document.getElementById('triageNote')?.focus();
+    return;
+  }
+
+  // Correção de unidade NÃO é uma decisão de triagem. Ela existe para o SGQ
+  // corrigir um cadastro de outra unidade (ex.: Linhares) sem assumir a decisão.
+  // Portanto não cria/edita SGQ_TRIAGENS, não altera setor, Status, PDCA ou decisão.
+  if(decision==='unit_correction'){
+    if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+    updateNucleoLoading('Corrigindo somente a unidade da R.O. na planilha...','Processando');
+    await portalUpdateRoSheetConfirmed(String(key).split('::')[0],{unidade:roUnitValue});
+    updateRoUnitLocal(key,roUnitValue);
+    try{
+      updateNucleoLoading('Relendo a R.O. após a correção...','Processando');
+      await syncImportedRosFromConfiguredSources({silent:true,force:true});
+    }catch(syncErr){
+      console.warn('[NUCLEO TRIAGEM] unidade corrigida, mas a releitura imediata falhou',syncErr);
+    }
+    closeTriageModal();
+    populateTriageUnits();
+    renderTriage();
+    try{render()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    alert('Unidade corrigida. Nenhuma decisão de triagem, setor, Status ou PDCA foi alterado.');
     return;
   }
 
@@ -15708,11 +15735,11 @@ function collectAdminModuleForm(key,existing){
     supplier:val('admModSupplier')||(existing?.supplier||''),
     relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     rncReporter:val('admModRncReporter'), rncShift:val('admModRncShift'), rncSupervisor:val('admModRncSupervisor'), rncManager:val('admModRncManager'),
-    rncInvoice:val('admModRncInvoice'), rncIssueDate:val('admModRncIssueDate'), rncBlockRange:val('admModRncBlockRange'), rncBlockArea:val('admModRncBlockArea'),
-    rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'), rncDisposition:val('admModRncDisposition'),
+    rncInvoice:val('admModRncInvoice'), rncIssueDate:document.getElementById('admModRncIssueDate')?val('admModRncIssueDate'):(existing?.rncIssueDate||''), rncBlockRange:val('admModRncBlockRange'), rncBlockArea:val('admModRncBlockArea'),
+    rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'), rncDisposition:document.getElementById('admModRncDisposition')?val('admModRncDisposition'):(existing?.rncDisposition||''),
     rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'), rncResponseStatus:val('admModRncResponseStatus'),
     rncImmediateActions:val('admModRncImmediateActions')||val('admModAction'), rncCause:val('admModRncCause'), rncFiveWhys:val('admModRncFiveWhys'), rncSupplierConclusion:val('admModRncSupplierConclusion'),
-    rncCorrectiveActions:val('admModRncCorrectiveActions'), rncEffectiveness:val('admModRncEffectiveness'), rncPhotos:(()=>{const fresh=collectRncPhotos(),oldPhotos=(existing&&existing.rncPhotos&&typeof existing.rncPhotos==='object')?existing.rncPhotos:{};const merged={...oldPhotos};Object.keys(fresh||{}).forEach(k=>{const a=Array.isArray(fresh[k])?fresh[k]:[];if(a.length)merged[k]=a;else if(!Array.isArray(merged[k]))merged[k]=[]});return merged})(),
+    rncCorrectiveActions:val('admModRncCorrectiveActions'), rncEffectiveness:val('admModRncEffectiveness'), rncPhotos:(()=>{const fresh=collectRncPhotos(),oldPhotos=(existing&&existing.rncPhotos&&typeof existing.rncPhotos==='object')?existing.rncPhotos:{};const merged={...oldPhotos};Object.keys(fresh||{}).forEach(k=>{const a=Array.isArray(fresh[k])?fresh[k]:[];const old=Array.isArray(oldPhotos[k])?oldPhotos[k]:[];const all=[...old,...a],seen=new Set();merged[k]=all.filter(x=>{const sig=typeof x==='string'?x:String(x?.fileId||x?.dataUrl||x?.url||'');if(!sig||seen.has(sig))return false;seen.add(sig);return true})});return merged})(),
     title:val('admModTitle'),
     code:val('admModCode'),
     location:val('admModLocation'),
@@ -15742,12 +15769,14 @@ function collectAdminModuleForm(key,existing){
     updatedBy:getSession()?.name||'SGQ'
   };
 }
-function saveAdminOperationalRecord(key,id){
+async function saveAdminOperationalRecord(key,id){
   const existing=id?adminModuleRecord(id):null;
+  if(key==='nccapa'){try{await waitRncPhotoProcessing()}catch(e){hideNucleoLoading();return}}
   const r=collectAdminModuleForm(key,existing);
   if(!r.title){alert('Informe o título/nome principal do registro.');return}
   if(key==='nccapa'&&r.ncType==='supplier'){
     if(!r.supplier){alert('Informe o fornecedor da RNC.');return}
+    if(!r.rncIssueDate){alert('Informe a Data da emissão da RNC.');return}
     if(!r.rncNumber)r.rncNumber=nextRncNumber();
   }
   if(key==='documents'&&!r.code){alert('Selecione o documento solicitado.');return}
@@ -15909,12 +15938,17 @@ function normalizeRncTemplate(t){
   // Migração v4: remove a célula fantasma legado "@A" que podia surgir antes
   // do PORQUÊ 1 e normaliza os cinco campos dos 5 Porquês para ocupar 100% da linha.
   if(Number(src.gridVersion||0)<4){fieldLayout=fieldLayout.filter(x=>!(x.section==='fivewhys'&&String(x.source||'')==='@A'));const whys=fieldLayout.filter(x=>x.section==='fivewhys');if(whys.length===5)whys.forEach(x=>{x.width=20;x.row=1})}
+  // Migração v5: alguns modelos salvos tinham a célula "Disposição" presa como texto
+  // fixo @—. Isso ignorava rncDisposition mesmo quando o valor estava salvo na RNC.
+  // Corrige somente a célula identificada como Disposição; textos fixos intencionais
+  // em outros campos continuam intactos.
+  if(Number(src.gridVersion||0)<5){fieldLayout=fieldLayout.map(x=>{const rotulo=normalizeAnswer(x.label||'');if(x.section==='blocking'&&rotulo==='disposicao'&&String(x.source||'').startsWith('@'))return {...x,source:'rncDisposition'};return x;});}
   // Migração v2: nos modelos salvos antes do rodapé real, as três assinaturas podiam
   // continuar marcadas como fornecedor e por isso apareciam no meio da página 2.
   if(Number(src.ownershipVersion||0)<2){fieldLayout=fieldLayout.map(x=>x.section==='signatures'?{...x,owner:'footer'}:x);const sig=sections.find(x=>x.id==='signatures');if(sig)sig.owner='footer';}
   let headerLayout=Array.isArray(src.headerLayout)&&src.headerLayout.length?src.headerLayout.map(x=>({...x})):defaultRncHeaderLayout();
   if(!headerLayout.some(x=>x.source==='@logo')){headerLayout=headerLayout.map(x=>({...x,row:(Number(x.row)||1)+2}));headerLayout.unshift({id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},{id:'h-system',row:1,label:'',value:'SISTEMA DE GESTÃO INTEGRADO',source:'@SISTEMA DE GESTÃO INTEGRADO',width:80,height:13,align:'center',bold:true},{id:'h-form',row:2,label:'',value:'FORMULÁRIO DE REGISTRO',source:'@FORMULÁRIO DE REGISTRO',width:100,height:6,align:'center',bold:false});}
-  return {...d,...src,gridVersion:4,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
+  return {...d,...src,gridVersion:5,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
 }
 function getProcessTemplates(){
   try{const a=JSON.parse(localStorage.getItem(PROCESS_TEMPLATE_KEY)||'[]');if(Array.isArray(a)&&a.length)return a.map(x=>x.kind==='RNC'?normalizeRncTemplate(x):x)}catch(e){}
@@ -15940,7 +15974,9 @@ function removeRncPhotoField(i){const a=getTplJson('tplPhotoFieldsData');a.splic
 function rncTemplateMediaPreview(t){const fixed=(t.fixedImages||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555;text-align:center"><div style="font-size:7px;font-weight:700;margin-bottom:4px">${escapeHtml(x.label||'IMAGEM')}</div><img src="${x.dataUrl}" style="max-width:90%;max-height:70px;object-fit:contain"></div>`).join('');const photos=(t.photoFields||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555"><b style="font-size:8px">${escapeHtml(x.label)}</b><div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(x.maxPhotos)||4)},1fr);gap:4px;margin-top:6px">${Array.from({length:Math.min(4,Number(x.maxPhotos)||4)},()=>'<div style="height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div></div>`).join('');return fixed+photos}
 function rncPhotoInputsHtml(){const t=getRncProcessTemplate();return (t.photoFields||[]).map(f=>`<div style="grid-column:1/-1;border:1px solid #d9e1ee;border-radius:12px;padding:12px"><b>${escapeHtml(f.label)}</b><div class="small">Até ${Number(f.maxPhotos)||4} foto(s)${f.required?' · obrigatório':''}. Elas entram automaticamente no PDF.</div><input type="file" accept="image/*" multiple data-rnc-photo-field="${escapeHtml(f.id)}" data-max="${Number(f.maxPhotos)||4}" style="margin-top:8px"><input type="hidden" id="rncPhotos_${escapeHtml(f.id)}" value="[]"></div>`).join('')}
 function collectRncPhotos(){const out={};document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField;const hidden=document.getElementById('rncPhotos_'+id);try{out[id]=JSON.parse(hidden?.value||'[]')}catch(e){out[id]=[]}});return out}
-function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=()=>{let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) já armazenada(s) nesta RNC. Selecione novas fotos apenas para acrescentar.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()}})}
+const RNC_PHOTO_PENDING=new Set();
+async function waitRncPhotoProcessing(){if(!RNC_PHOTO_PENDING.size)return;showNucleoLoading('Processando fotos da RNC...');await Promise.all([...RNC_PHOTO_PENDING]);}
+function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=(msg='')=>{if(msg){info.textContent=msg;return}let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) anexada(s) nesta RNC.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=()=>{const task=(async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];updateInfo('Processando foto(s)...');for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()})().catch(e=>{inp.value='';updateInfo();alert('Não foi possível processar uma das fotos: '+(e?.message||e));throw e});RNC_PHOTO_PENDING.add(task);task.finally(()=>RNC_PHOTO_PENDING.delete(task));}})}
 function compressRncPhoto(file){return new Promise((resolve,reject)=>{const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const max=900,scale=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.65))};im.onerror=reject;im.src=rd.result};rd.onerror=reject;rd.readAsDataURL(file)})}
 function defaultRncHeaderLayout(){return [
 {id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},
@@ -18698,6 +18734,7 @@ document.addEventListener('DOMContentLoaded',()=>{
             <option value="record">Somente para registro</option>
             <option value="cancelled">Cancelar R.O.</option>
             <option value="obsolete">Obsoleto</option>
+             <option value="unit_correction">Correção de unidade</option>
           </select>
         </div>
 
