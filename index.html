@@ -15873,19 +15873,16 @@ async function sendRncEmailNow(){
   const sendFormat='both',cc=String(document.getElementById('rncSendCc')?.value||'').trim(),replyTo=String(document.getElementById('rncSendReplyTo')?.value||'').trim(),subject=String(document.getElementById('rncSendSubject')?.value||'').trim(),message=String(document.getElementById('rncSendMessage')?.value||'').trim();
   if(!portalBackendEnabled())return alert('Configure o Apps Script para realizar o envio.');
   const html=printRncStandard(id,true);if(!html)return alert('Não foi possível montar o PDF da RNC.');const docHtml=rncWordCompatibleHtml(html);
-  const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');btn.disabled=true;st.textContent='Confirmando RNC na base central...';showNucleoLoading('Confirmando RNC...');
-  const updated={...r,supplierEmail,rncEmailCc:cc,rncEmailStatus:'sending',rncEmailLastAttemptAt:new Date().toISOString()};let all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(id));if(ix>=0)all[ix]=updated;saveAdminModuleRecords(all);
-  try{
-    // O envio nunca corre em paralelo com o salvamento. Primeiro confirma que o
-    // mesmo ID está legível na base central; se necessário, grava e confirma.
-    let central=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id},15000).catch(()=>null);
-    if(!central?.sucesso||!central?.registro){
-      central=await portalBackendSaveConfirmedPost('admin_modules',id,updated,90000);
-    }
-    st.textContent='RNC confirmada. Enviando e-mail...';updateNucleoLoading('Enviando RNC...');
-  }catch(e){
-    hideNucleoLoading();btn.disabled=false;st.textContent='O envio não foi iniciado. '+String(e?.message||e);return;
-  }
+  const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');
+  btn.disabled=true;st.textContent='Enviando RNC...';showNucleoLoading('Enviando RNC...');
+  // Não tenta salvar a RNC novamente antes do envio. A tela "Enviar RNC" trabalha
+  // com uma RNC já existente; o próprio backend de envio é a autoridade que
+  // confirma o registro central pelo ID e devolve erro caso ele realmente não exista.
+  // Isso elimina o timeout falso de portal_save_status que bloqueava RNCs já salvas.
+  const updated={...r,supplierEmail,rncEmailCc:cc,rncEmailStatus:'sending',rncEmailLastAttemptAt:new Date().toISOString()};
+  let all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(id));
+  if(ix>=0)all[ix]=updated;
+  saveAdminModuleRecords(all);
   const submitted=portalPostForm({acao:'portal_send_rnc_email',id,email:supplierEmail,cc,replyTo,subject,message,html,docHtml,formato:'both',eventoId:eventId,ator:getSession()?.name||'SGQ'});
   if(!submitted){hideNucleoLoading();btn.disabled=false;st.textContent='Não foi possível iniciar o envio.';return}
   let result=null;for(let i=0;i<12&&!result;i++){await new Promise(res=>setTimeout(res,i?1000:700));try{const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);if(chk?.sucesso&&chk?.status&&chk.status!=='processing')result=chk}catch(e){}}
