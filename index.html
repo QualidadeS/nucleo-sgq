@@ -10472,6 +10472,22 @@ function triageKeyOf(ro){
   const sector=String(ro?.__assignedSector||ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
   return sector ? triageCompositeKey(base,sector) : base;
 }
+function baseTriageSituation(ro){
+  const sector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||'').trim();
+  const sectorNorm=normalizeAnswer(sector);
+  const hasSector=!!sector && !['nao direcionado','nao informado','sem setor','-'].includes(sectorNorm);
+  // A coluna Status da planilha-base é a fonte de verdade da situação da R.O.
+  // Apps Script a expõe como __statusOperacional. ro.status fica como fallback
+  // apenas para bases antigas que ainda não enviem o campo técnico.
+  const rawStatus=String(ro?.statusOperacional||ro?.raw?.__statusOperacional||ro?.status||'').trim();
+  const status=normalizeAnswer(rawStatus);
+
+  if(status.includes('cancel'))return {code:'cancelled',decision:'cancelled',sector,hasSector,rawStatus};
+  if(status.includes('registro'))return {code:'record',decision:'record',sector,hasSector,rawStatus};
+  if(hasSector && status.includes('enviado'))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
+  return {code:'new',decision:'',sector,hasSector,rawStatus};
+}
+
 function getTriageRecordsForRoNumber(roNumber,map=getSavedTriageMap()){
   const base=String(roNumber||'').trim();
   return [...map.values()].filter(t=>String(t?.roNumber||String(t?.roKey||'').split('::')[0]||'').trim()===base);
@@ -10494,23 +10510,18 @@ function resolvedTriageForRo(ro,map=getSavedTriageMap()){
   const decided=records.find(t=>String(t?.decision||'').trim()) || records[0] || null;
   if(decided)return decided;
 
-  // Recuperação da fonte original: se a coluna específica de Setor responsável
-  // ainda está preenchida, a R.O. JÁ FOI TRIADA. Não exigir status operacional
-  // aqui. Versões anteriores chegaram a limpar/alterar esse status e isso criava
-  // a dualidade: aparecia em "R.O.s atribuídas" e também em "Necessita triar".
-  // O PDCA (pendente/externo/respondido) é um estado posterior e não define triagem.
-  const sheetSector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||'').trim();
-  const sectorNorm=normalizeAnswer(sheetSector);
-  const hasAssignedSector=!!sheetSector &&
-    !['nao direcionado','nao informado','sem setor','-'].includes(sectorNorm);
-  if(hasAssignedSector){
+  // Se não há registro salvo em SGQ_TRIAGENS, a situação é lida literalmente
+  // da planilha-base: setor + Enviado = triada; Registro/Cancelada independem de setor.
+  const baseSituation=baseTriageSituation(ro);
+  if(baseSituation.decision){
     return {
-      roKey:triageCompositeKey(base,sheetSector),
+      roKey:baseSituation.decision==='directed' ? triageCompositeKey(base,baseSituation.sector) : base,
       roNumber:base,
-      decision:'directed',
-      responsibleSector:sheetSector,
+      decision:baseSituation.decision,
+      responsibleSector:baseSituation.decision==='directed'?baseSituation.sector:'',
       importedFromSheet:true,
-      __synthetic:true
+      __synthetic:true,
+      sourceStatus:baseSituation.rawStatus
     };
   }
   return null;
@@ -10593,27 +10604,16 @@ function getSavedTriageMap(){
       // Se a planilha ainda comprova setor/status, o direcionamento deve ser reconstruído.
       if(!key || map.has(key))return;
 
-      const setor=String(ro.setorResponsavelPlanilha||'').trim();
       const pessoa=String(ro.pessoaResponsavel||'').trim();
-      // A planilha é a fonte de verdade para saber se a R.O. já foi triada.
-      // Interna: Y = setor e AD = status. Externa: AB = setor e AE = status.
-      // Os dois marcadores chegam normalizados pelo Apps Script em
-      // __setorResponsavel e __statusOperacional.
-      const status=normalizeAnswer(ro.raw?.__statusOperacional||'');
-      const setorNorm=normalizeAnswer(setor);
-      const temSetor=!!setor &&
-        !['nao direcionado','nao informado','sem setor','-'].includes(setorNorm);
-      const temStatusPlanilha=!!status &&
-        !status.includes('nenhum email encontrado');
+      const baseSituation=baseTriageSituation(ro);
+      const setor=baseSituation.sector;
+      const decision=baseSituation.decision;
 
-      let decision='';
-      // Estados finais/especiais também comprovam que a R.O. já passou pela triagem.
-      if(temStatusPlanilha && status.includes('cancel'))decision='cancelled';
-      else if(temStatusPlanilha && (status.includes('registro') || status.includes('somente')))decision='record';
-      // Direcionamento normal só existe quando o combo da base está completo:
-      // setor + status operacional (Y+AD na Interna / AB+AE na Externa).
-      else if(temSetor && temStatusPlanilha)decision='directed';
-
+      // Regras literais da coluna Status:
+      // setor + Enviado = triada
+      // setor/sem setor + Registro = para registro
+      // setor/sem setor + Cancelada = cancelada
+      // qualquer outro caso = necessita triar
       if(!decision)return;
 
       let responsibleUserEmail='';
@@ -10653,7 +10653,11 @@ function getTriageRecords(){
   return getAllRoRecords().map(ro=>{
     const key=triageKeyOf(ro);
     const tri=resolvedTriageForRo(ro,saved)||{};
-    const decision=tri.decision||'';
+    const baseSituation=baseTriageSituation(ro);
+    // Para a situação da R.O., a coluna Status da base vence caches/triagens antigas.
+    // Só "setor + Enviado" é triada; Registro/Cancelada vencem com ou sem setor.
+    let decision=baseSituation.decision;
+    if(!decision && tri.decision==='obsolete')decision='obsolete';
     let triagemStatus='new';
     if(decision==='directed')triagemStatus='directed';
     if(decision==='record')triagemStatus='record';
@@ -11102,7 +11106,7 @@ async function saveTriageRecord(){
         // A pendência de PDCA é controlada separadamente pelo Núcleo e não deve sobrescrever este campo.
         status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
       });
-      await portalBackendSaveConfirmed('triage',record.roKey,record);
+      await portalBackendSaveConfirmedPost('triage',record.roKey,record,60000);
       const deletedKeys=getDeletedTriageKeys();
       if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
     }
@@ -14311,6 +14315,9 @@ function normalizeImportedRo(raw,index){
     data,
     prazo: prazo==='—'?'—':prazo,
     status,
+    // Valor literal da coluna Status da planilha-base (Interna: AD / Externa: AE).
+    // Não confundir com `status`, que é o rótulo transformado usado na interface.
+    statusOperacional:statusPlanilha,
     descricao,
     pdca,
     pdfUrl: '',
@@ -14648,7 +14655,8 @@ function saveImportedRosByOrigin(internas,externas){
     setorIdentificado:r?.setorIdentificado||'',
     setorResponsavelPlanilha:r?.setorResponsavelPlanilha||'',
     pessoaResponsavel:r?.pessoaResponsavel||'',
-    status:r?.status||''
+    status:r?.status||'',
+    statusOperacional:r?.statusOperacional||r?.raw?.__statusOperacional||''
   });
 
   // Salva apenas se couber; a persistência real já está no IndexedDB.
@@ -16691,7 +16699,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
       tri.pdcaExternalUpdatedAt=new Date().toISOString();
       tri.pdcaExternalUpdatedBy=getSession()?.name||'SGQ';
       if(portalBackendEnabled()){
-        await portalBackendSaveConfirmed('triage',key,tri);
+        await portalBackendSaveConfirmedPost('triage',key,tri,60000);
       }
       // Só altera o cache depois de a base central confirmar. Como usamos a mesma
       // roKey, a linha existente é substituída em vez de duplicada.
