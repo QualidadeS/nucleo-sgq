@@ -15868,10 +15868,24 @@ function openRncSendModal(id){
   document.getElementById('rncSendStatus').textContent='';
 }
 async function sendRncEmailNow(){
-  const ov=document.getElementById('rncSendOverlay'),id=ov?.dataset.rncId,r=adminModuleRecord(id);if(!r)return;
+  const ov=document.getElementById('rncSendOverlay'),id=ov?.dataset.rncId;let r=adminModuleRecord(id);if(!r)return;
   const supplierEmail=String(document.getElementById('rncSendSupplierEmail')?.value||'').trim();if(!supplierEmail||!supplierEmail.includes('@'))return alert('Informe o e-mail do fornecedor.');
   const sendFormat='both',cc=String(document.getElementById('rncSendCc')?.value||'').trim(),replyTo=String(document.getElementById('rncSendReplyTo')?.value||'').trim(),subject=String(document.getElementById('rncSendSubject')?.value||'').trim(),message=String(document.getElementById('rncSendMessage')?.value||'').trim();
   if(!portalBackendEnabled())return alert('Configure o Apps Script para realizar o envio.');
+  // Antes de montar PDF/DOCX, relê a RNC da base central. O documento não pode
+  // nascer de um cache antigo: disposição, datas e referências das fotos precisam
+  // ser exatamente as que o backend confirmou.
+  try{
+    showNucleoLoading('Atualizando dados da RNC...');
+    const read=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id:String(id||'')},20000);
+    if(read?.sucesso&&read?.registro){
+      r={...r,...read.registro};
+      const synced=getAdminModuleRecords(),ri=synced.findIndex(x=>String(x.id)===String(id));
+      if(ri>=0)synced[ri]=r;else synced.unshift(r);
+      saveAdminModuleRecords(synced);
+    }
+  }catch(e){hideNucleoLoading();return alert('Não foi possível atualizar a RNC pela base central: '+(e?.message||e));}
+  hideNucleoLoading();
   const html=printRncStandard(id,true);if(!html)return alert('Não foi possível montar o PDF da RNC.');const docHtml=rncWordCompatibleHtml(html);
   const eventId='RNCMAIL-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),btn=document.getElementById('rncSendNowBtn'),st=document.getElementById('rncSendStatus');
   btn.disabled=true;st.textContent='Enviando RNC...';showNucleoLoading('Enviando RNC...');
@@ -15973,7 +15987,7 @@ function rncPhotoInputsHtml(){const t=getRncProcessTemplate();return (t.photoFie
 function collectRncPhotos(){const out={};document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField;const hidden=document.getElementById('rncPhotos_'+id);try{out[id]=JSON.parse(hidden?.value||'[]')}catch(e){out[id]=[]}});return out}
 const RNC_PHOTO_PENDING=new Set();
 async function waitRncPhotoProcessing(){if(!RNC_PHOTO_PENDING.size)return;showNucleoLoading('Processando fotos da RNC...');await Promise.all([...RNC_PHOTO_PENDING]);}
-function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=(msg='')=>{if(msg){info.textContent=msg;return}let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) anexada(s) nesta RNC.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=()=>{const task=(async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];updateInfo('Processando foto(s)...');for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()})().catch(e=>{inp.value='';updateInfo();alert('Não foi possível processar uma das fotos: '+(e?.message||e));throw e});RNC_PHOTO_PENDING.add(task);task.finally(()=>RNC_PHOTO_PENDING.delete(task));}})}
+function bindRncPhotoInputs(existing={},record=null){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=(msg='')=>{if(msg){info.textContent=msg;return}let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) anexada(s) nesta RNC.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=()=>{const task=(async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];updateInfo('Processando foto(s)...');for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo();if(record?.id&&portalBackendEnabled()){updateInfo('Salvando foto(s) na base central...');const atual=collectAdminModuleForm('nccapa',record);const saved=await portalBackendSaveConfirmedPost('admin_modules',record.id,atual,90000);const central=saved?.registro||atual;const all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(record.id));if(ix>=0)all[ix]={...atual,...central};else all.unshift({...atual,...central});saveAdminModuleRecords(all);record={...record,...central};const refs=record.rncPhotos?.[id];if(h&&Array.isArray(refs))h.value=JSON.stringify(refs);updateInfo()}})().catch(e=>{inp.value='';updateInfo();alert('Não foi possível processar uma das fotos: '+(e?.message||e));throw e});RNC_PHOTO_PENDING.add(task);task.finally(()=>RNC_PHOTO_PENDING.delete(task));}})}
 function compressRncPhoto(file){return new Promise((resolve,reject)=>{const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const max=900,scale=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.65))};im.onerror=reject;im.src=rd.result};rd.onerror=reject;rd.readAsDataURL(file)})}
 function defaultRncHeaderLayout(){return [
 {id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},
@@ -16327,7 +16341,7 @@ function editAdminOperationalRecord(id){
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModRncNumber',r.rncNumber);set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
   [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncInvoice','rncInvoice'],['admModRncIssueDate','rncIssueDate'],['admModRncBlockRange','rncBlockRange'],['admModRncBlockArea','rncBlockArea'],['admModRncProductCode','rncProductCode'],['admModRncProduct','rncProduct'],['admModRncDimensions','rncDimensions'],['admModRncQuantity','rncQuantity'],['admModRncDisposition','rncDisposition'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect'],['admModRncResponseStatus','rncResponseStatus'],['admModRncImmediateActions','rncImmediateActions'],['admModRncCause','rncCause'],['admModRncFiveWhys','rncFiveWhys'],['admModRncSupplierConclusion','rncSupplierConclusion'],['admModRncCorrectiveActions','rncCorrectiveActions'],['admModRncEffectiveness','rncEffectiveness']].forEach(([id,k])=>set(id,r[k]));
-  bindRncPhotoInputs(r.rncPhotos||{});
+  bindRncPhotoInputs(r.rncPhotos||{},r);
   set('admModTitle',r.title);set('admModCode',r.code);set('admModLocation',r.location);set('admModSector',r.sector);
   set('admModResponsible',r.responsible);set('admModEventDate',r.eventDate);set('admModDueDate',r.dueDate);set('admModStatus',r.status);
   set('admModEffectiveness',r.effectiveness);set('admModSeverity',r.severity);set('admModCapa',r.capa);
