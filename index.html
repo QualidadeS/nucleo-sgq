@@ -10501,29 +10501,38 @@ function getTriageRecordForRoSector(roNumber,sector,map=getSavedTriageMap()){
 // Todas as telas que perguntam "já foi triada?" devem usar esta função.
 function resolvedTriageForRo(ro,map=getSavedTriageMap()){
   if(!ro)return null;
-  const exact=String(triageKeyOf(ro)||'').trim();
-  if(exact && map.has(exact))return map.get(exact);
   const base=String(triageBaseRoNumber(ro)||'').trim();
-  if(base && map.has(base))return map.get(base);
-  const records=getTriageRecordsForRoNumber(base,map);
-  // Uma decisão real em qualquer vínculo da R.O. prova que ela já passou pela triagem.
-  const decided=records.find(t=>String(t?.decision||'').trim()) || records[0] || null;
-  if(decided)return decided;
-
-  // Se não há registro salvo em SGQ_TRIAGENS, a situação é lida literalmente
-  // da planilha-base: setor + Enviado = triada; Registro/Cancelada independem de setor.
   const baseSituation=baseTriageSituation(ro);
+
+  // FONTE ÚNICA DA SITUAÇÃO DA R.O.: Setor (causa) + Status da planilha-base.
+  // SGQ_TRIAGENS fornece os detalhes da triagem (pessoa, motivo, prazo, PDCA),
+  // mas NÃO pode transformar Registro/Cancelada em triada nem fazer uma R.O.
+  // voltar para "Necessita triar" quando a base diz setor + Enviado.
   if(baseSituation.decision){
+    let saved=null;
+    if(baseSituation.decision==='directed'){
+      saved=getTriageRecordForRoSector(base,baseSituation.sector,map);
+      if(saved && saved.decision && saved.decision!=='directed')saved=null;
+    }else{
+      saved=map.get(base)||getTriageRecordsForRoNumber(base,map).find(t=>t?.decision===baseSituation.decision)||null;
+    }
     return {
+      ...(saved||{}),
       roKey:baseSituation.decision==='directed' ? triageCompositeKey(base,baseSituation.sector) : base,
       roNumber:base,
       decision:baseSituation.decision,
       responsibleSector:baseSituation.decision==='directed'?baseSituation.sector:'',
-      importedFromSheet:true,
-      __synthetic:true,
+      importedFromSheet:saved?.importedFromSheet??true,
+      __synthetic:!saved,
       sourceStatus:baseSituation.rawStatus
     };
   }
+
+  // Sem uma combinação válida na base, não reaproveitar uma triagem antiga para
+  // decidir a situação. A única exceção é Obsoleto, que é um estado do Núcleo.
+  const exact=String(triageKeyOf(ro)||'').trim();
+  const saved=(exact&&map.get(exact))||map.get(base)||getTriageRecordsForRoNumber(base,map)[0]||null;
+  if(saved?.decision==='obsolete')return saved;
   return null;
 }
 function roNeedsTriage(ro,map=getSavedTriageMap()){
@@ -11961,20 +11970,22 @@ function getAllRoRecords(){
 }
 
 function sgqIndicatorStatusCode(ro,triageMap){
-  const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
-  const tri=(triageMap instanceof Map?triageMap:getSavedTriageMap()).get(key)||{};
-  const decision=String(tri.decision||'').trim();
-  const status=normalizeAnswer(ro?.status||ro?.raw?.__statusOperacional||'');
+  const map=triageMap instanceof Map?triageMap:getSavedTriageMap();
+  const baseSituation=baseTriageSituation(ro);
+  if(baseSituation.code==='cancelled')return 'cancelled';
+  if(baseSituation.code==='record')return 'record';
+  if(baseSituation.code==='directed')return 'directed';
 
-  if(decision==='cancelled' || status.includes('cancel'))return 'cancelled';
-  if(decision==='obsolete' || status.includes('obsolet'))return 'obsolete';
-  if(decision==='record' || status.includes('registro'))return 'record';
+  const tri=resolvedTriageForRo(ro,map)||{};
+  if(tri.decision==='obsolete')return 'obsolete';
+
+  // Estados posteriores à triagem só são considerados quando a base não está
+  // classificando a R.O. como Registro/Cancelada/Enviada.
+  const status=normalizeAnswer(ro?.statusOperacional||ro?.raw?.__statusOperacional||'');
   if(status.includes('em analise') || status.includes('em análise') || status==='analise' || status==='análise')return 'analysis';
-  if(status.includes('conclu') || status.includes('retorno entregue') || status.includes('apresentado ao reclamante'))return 'done';
-  if(decision==='directed')return 'directed';
+  if(status.includes('conclu'))return 'done';
   return 'triage';
 }
-
 function sgqIndicatorDate(ro){
   const values=[
     ro?.data,
@@ -13366,8 +13377,7 @@ function getRoTriageRecord(ro){
     const base=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
     if(!base)return null;
     const map=getSavedTriageMap();
-    const sector=String(ro?.__assignedSector||ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||ro?.setor||'').trim();
-    return getTriageRecordForRoSector(base,sector,map)||getTriageRecordsForRoNumber(base,map)[0]||null;
+    return resolvedTriageForRo(ro,map);
   }catch(e){return null}
 }
 
