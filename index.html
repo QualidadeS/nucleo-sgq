@@ -10473,15 +10473,39 @@ function triageKeyOf(ro){
   return sector ? triageCompositeKey(base,sector) : base;
 }
 function baseTriageSituation(ro){
-  const sector=String(ro?.setorResponsavelPlanilha||ro?.raw?.__setorResponsavel||'').trim();
+  // Lê a FONTE ORIGINAL por todos os caminhos possíveis. Isso é importante porque
+  // registros restaurados do IndexedDB/localStorage podem não carregar os campos
+  // técnicos __setorResponsavel/__statusOperacional, embora ainda tenham Y/AD no raw.
+  const raw=ro?.raw||{};
+  const sector=String(
+    ro?.setorResponsavelPlanilha ||
+    raw?.__setorResponsavel ||
+    raw?.['Setor (causa)'] ||
+    raw?.['Setor causa'] ||
+    raw?.['Setor Responsável'] ||
+    raw?.['Setor responsável'] ||
+    // `ro.setor` em R.O. importada é justamente Setor (causa); só entra como último fallback.
+    ro?.setor ||
+    ''
+  ).trim();
   const sectorNorm=normalizeAnswer(sector);
   const hasSector=!!sector && !['nao direcionado','nao informado','sem setor','-'].includes(sectorNorm);
-  // A coluna Status da planilha-base é a fonte de verdade da situação da R.O.
-  // Apps Script a expõe como __statusOperacional. ro.status fica como fallback
-  // apenas para bases antigas que ainda não enviem o campo técnico.
-  const rawStatus=String(ro?.statusOperacional||ro?.raw?.__statusOperacional||ro?.status||'').trim();
+
+  // Status ORIGINAL da planilha. Não usar primeiro o rótulo visual de PDCA.
+  const rawStatus=String(
+    ro?.statusOperacional ||
+    raw?.__statusOperacional ||
+    raw?.['Status'] ||
+    raw?.['Status R.O.'] ||
+    raw?.['Status da R.O.'] ||
+    // Compatibilidade final com snapshots antigos.
+    ro?.status ||
+    ''
+  ).trim();
   const status=normalizeAnswer(rawStatus);
 
+  // Regra única definida pelo SGQ:
+  // Registro/Cancelada independem de setor; somente Setor + Enviado = Triada.
   if(status.includes('cancel'))return {code:'cancelled',decision:'cancelled',sector,hasSector,rawStatus};
   if(status.includes('registro'))return {code:'record',decision:'record',sector,hasSector,rawStatus};
   if(hasSector && status.includes('enviado'))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
