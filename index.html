@@ -14597,6 +14597,24 @@ async function restoreImportedRosDurable(){
     const restored=saved.map(normalizeRestoredRoRecord).filter(Boolean);
     if(!restored.length)return 0;
 
+    // Cache criado por versões antigas podia ter Setor (causa), mas não guardar
+    // a coluna Status operacional (Interna AD / Externa AE). Nesse cenário o
+    // Núcleo restaurava o cache e, por já possuir R.O.s, NÃO consultava a API
+    // novamente. Isso explica casos como RO-IN-00527: DT aparecia nas atribuídas,
+    // porém a fila de triagem via status vazio e mostrava Aguardando triagem.
+    // Se houver qualquer registro com setor responsável e sem o marcador de status,
+    // usamos o cache apenas para abrir rápido e obrigamos uma leitura fresca da base.
+    const cacheSemStatusOperacional=restored.some(r=>{
+      const setor=String(r?.setorResponsavelPlanilha||r?.raw?.__setorResponsavel||r?.setor||'').trim();
+      const setorValido=!!setor && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(setor));
+      const temMarcador=String(r?.statusOperacional||r?.raw?.__statusOperacional||'').trim()!=='';
+      return setorValido && !temMarcador;
+    });
+    if(cacheSemStatusOperacional){
+      importedRoCacheNeedsRefresh=true;
+      console.info('NÚCLEO: cache antigo sem Status operacional; atualização da planilha será forçada.');
+    }
+
     applySacRepresentativeOverridesToRos(restored);
     rebuildRoOriginRegistry(restored);
     ros.splice(0,ros.length,...restored);
