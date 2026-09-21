@@ -10505,7 +10505,9 @@ function baseTriageSituation(ro){
   const status=normalizeAnswer(rawStatus);
 
   // Regra única definida pelo SGQ:
-  // Registro/Cancelada independem de setor; somente Setor + Enviado = Triada.
+  // Registro/Cancelada/Obsoleto independem de setor; somente Setor + Enviado = Triada.
+  // Obsoleto é uma decisão terminal do SGQ: dispensa PDCA e NUNCA volta para a fila de triagem.
+  if(status.includes('obsolet'))return {code:'obsolete',decision:'obsolete',sector,hasSector,rawStatus};
   if(status.includes('cancel'))return {code:'cancelled',decision:'cancelled',sector,hasSector,rawStatus};
   if(status.includes('registro'))return {code:'record',decision:'record',sector,hasSector,rawStatus};
   if(hasSector && status.includes('enviado'))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
@@ -10764,6 +10766,7 @@ function triageStatusClass(status){
   if(status==='directed')return 'triage-status-directed';
   if(status==='record')return 'triage-status-record';
   if(status==='cancelled')return 'triage-status-cancelled';
+  if(status==='obsolete')return 'triage-status-record';
   return 'triage-status-new';
 }
 
