@@ -2479,6 +2479,24 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 .password-eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;cursor:pointer;padding:6px 8px;font-size:18px;line-height:1;color:#475467;z-index:2}
 .password-eye-btn:hover{color:#0b5cab}
 </style>
+
+<style id="nucleo-ncrnc-interactive-fix">
+#adminModuleView,
+#adminModuleContent,
+#adminModuleContent input,
+#adminModuleContent textarea,
+#adminModuleContent select,
+#adminModuleContent button{
+  pointer-events:auto!important;
+}
+#adminModuleContent input:not([type="hidden"]),
+#adminModuleContent textarea,
+#adminModuleContent select{
+  user-select:text!important;
+  -webkit-user-select:text!important;
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -15461,11 +15479,13 @@ function adminModuleFields(key){
         <label><span class="small">Turno</span><input id="admModRncShift" placeholder="Ex.: 1º turno"></label>
         <label><span class="small">Supervisor da área</span><input id="admModRncSupervisor" placeholder="Supervisor"></label>
         <label><span class="small">Gerente da área</span><input id="admModRncManager" placeholder="Gerente"></label>
+        <label style="grid-column:1/-1"><span class="small">Setor</span><input id="admModRncSector" placeholder="Setor de quem está registrando"></label>
 
         <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">BLOQUEIO</div>
 
         <label><span class="small">Fornecedor *</span><input id="admModSupplier" placeholder="Nome do fornecedor"></label>
         <label><span class="small">Área responsável pelo bloqueio</span><input id="admModRncBlockArea" placeholder="Área / setor"></label>
+        <label style="grid-column:1/-1"><span class="small">Etapa da área responsável pelo bloqueio</span><input id="admModRncBlockStage" placeholder="Etapa / processo em que o desvio foi identificado"></label>
 
         <div style="grid-column:1/-1">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 8px">
@@ -15614,10 +15634,52 @@ function filterAdminModuleRecords(key,mode){
   if(mode==='doc_ready')return list.filter(r=>r.status==='doc_ready');
   return list;
 }
+
+function canOperateNcCapa(){
+  if(isAdmin())return true;
+  const session=getSession()||{};
+  const sector=normalizeAnswer(session.sector||'');
+  return sector==='sgq' || sector==='sistema de gestao da qualidade' || sector==='qualidade';
+}
+
+function activateNcCapaForm(){
+  const host=document.getElementById('adminModuleContent');
+  const viewEl=document.getElementById('adminModuleView');
+  if(!host)return;
+
+  // Garante que o formulário não fique travado por estado residual,
+  // atributo herdado ou camada de bloqueio.
+  try{ host.removeAttribute('inert'); }catch(e){}
+  try{ viewEl?.removeAttribute('inert'); }catch(e){}
+
+  host.style.pointerEvents='auto';
+  if(viewEl)viewEl.style.pointerEvents='auto';
+
+  host.querySelectorAll('input,textarea,select,button').forEach(el=>{
+    el.style.pointerEvents='auto';
+
+    // Campos automáticos/ocultos continuam ocultos; todo campo visível
+    // da abertura da NC/RNC precisa aceitar interação.
+    if(el.type!=='hidden'){
+      try{ el.disabled=false; }catch(e){}
+      try{ el.readOnly=false; }catch(e){}
+      el.removeAttribute('aria-disabled');
+    }
+
+    // Evita que algum container pai capture o clique do campo.
+    if(!el.dataset.ncInteractiveBound){
+      el.dataset.ncInteractiveBound='1';
+      el.addEventListener('pointerdown',ev=>ev.stopPropagation());
+      el.addEventListener('click',ev=>ev.stopPropagation());
+    }
+  });
+}
+
 function showAdminOperationalModule(key){
   const documentsUserAccess=key==='documents' && canRequestDocuments();
-  if(!isAdmin()&&!documentsUserAccess){
-    alert(key==='documents'?'Solicitação de Documentos não está disponível para este setor.':'Acesso exclusivo para administradores.');
+  const ncCapaAccess=key==='nccapa' && canOperateNcCapa();
+  if(!isAdmin()&&!documentsUserAccess&&!ncCapaAccess){
+    alert(key==='documents'?'Solicitação de Documentos não está disponível para este setor.':'Este módulo está disponível para o SGQ.');
     return;
   }
   const m=ADMIN_OPERATIONAL_MODULES[key]; if(!m)return;
@@ -15656,7 +15718,11 @@ function showAdminOperationalModule(key){
   </div>`;
 }
 function openAdminOperationalWorkspace(key,index){
-  if(!isAdmin() && (key!=='documents' || !canRequestDocuments()))return;
+  const canOpen =
+    isAdmin() ||
+    (key==='documents' && canRequestDocuments()) ||
+    (key==='nccapa' && canOperateNcCapa());
+  if(!canOpen)return;
   const m=ADMIN_OPERATIONAL_MODULES[key], c=m?.cards?.[index]; if(!c)return;
   if(!isAdmin()&&key==='documents'&&index>1)return;
   const mode=c[2]||'history';
@@ -15688,6 +15754,12 @@ function openAdminOperationalWorkspace(key,index){
       const type=document.getElementById('admModNcType');
       if(type)type.value=mode==='new_rnc'?'supplier':'internal';
       updateNcCapaFormType();
+      if(mode==='new_rnc'){
+        const setor=document.getElementById('admModRncSector');
+        if(setor&&!setor.value)setor.value=String(getSession()?.sector||'');
+      }
+      activateNcCapaForm();
+      setTimeout(activateNcCapaForm,0);
     }
     if(key==='documents'&&!isAdmin()){
       const st=document.getElementById('admModStatus');if(st){st.value='open';st.disabled=true}
@@ -15853,7 +15925,7 @@ function collectAdminModuleForm(key,existing){
     relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     rncReporter:val('admModRncReporter'), rncShift:val('admModRncShift'), rncSupervisor:val('admModRncSupervisor'), rncManager:val('admModRncManager'),
     rncBlockItems:blockItems,
-    rncInvoice:firstBlockItem.invoice||'', rncIssueDate:firstBlockItem.issueDate||'', rncBlockRange:(existing?.rncBlockRange||''), rncBlockArea:val('admModRncBlockArea'),
+    rncInvoice:firstBlockItem.invoice||'', rncIssueDate:firstBlockItem.issueDate||'', rncBlockRange:(existing?.rncBlockRange||''), rncBlockArea:val('admModRncBlockArea'), rncBlockStage:val('admModRncBlockStage'),
     rncProductCode:firstBlockItem.productCode||'', rncProduct:firstBlockItem.product||'', rncDimensions:firstBlockItem.dimensions||'', rncQuantity:firstBlockItem.quantity||'', rncDisposition:firstBlockItem.disposition||'',
     rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'),
     rncResponseStatus:(existing?.rncResponseStatus||'none'),
@@ -15866,7 +15938,7 @@ function collectAdminModuleForm(key,existing){
     title:val('admModTitle'),
     code:val('admModCode'),
     location:val('admModLocation'),
-    sector:val('admModSector'),
+    sector:(val('admModNcType')==='supplier'?val('admModRncSector'):val('admModSector')),
     responsible:val('admModResponsible'),
     eventDate:val('admModEventDate')||(val('admModNcType')==='supplier'?(existing?.eventDate||new Date().toISOString().slice(0,10)):''),
     dueDate:val('admModDueDate'),
@@ -16090,7 +16162,62 @@ function removeRncPhotoField(i){const a=getTplJson('tplPhotoFieldsData');a.splic
 function rncTemplateMediaPreview(t){const fixed=(t.fixedImages||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555;text-align:center"><div style="font-size:7px;font-weight:700;margin-bottom:4px">${escapeHtml(x.label||'IMAGEM')}</div><img src="${x.dataUrl}" style="max-width:90%;max-height:70px;object-fit:contain"></div>`).join('');const photos=(t.photoFields||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555"><b style="font-size:8px">${escapeHtml(x.label)}</b><div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(x.maxPhotos)||4)},1fr);gap:4px;margin-top:6px">${Array.from({length:Math.min(4,Number(x.maxPhotos)||4)},()=>'<div style="height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div></div>`).join('');return fixed+photos}
 function rncPhotoInputsHtml(){const t=getRncProcessTemplate();return (t.photoFields||[]).map(f=>`<div style="grid-column:1/-1;border:1px solid #d9e1ee;border-radius:12px;padding:12px"><b>${escapeHtml(f.label)}</b><div class="small">Até ${Number(f.maxPhotos)||4} foto(s)${f.required?' · obrigatório':''}. Elas entram automaticamente no PDF.</div><input type="file" accept="image/*" multiple data-rnc-photo-field="${escapeHtml(f.id)}" data-max="${Number(f.maxPhotos)||4}" style="margin-top:8px"><input type="hidden" id="rncPhotos_${escapeHtml(f.id)}" value="[]"></div>`).join('')}
 function collectRncPhotos(){const out={};document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField;const hidden=document.getElementById('rncPhotos_'+id);try{out[id]=JSON.parse(hidden?.value||'[]')}catch(e){out[id]=[]}});return out}
-function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=()=>{let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) já armazenada(s) nesta RNC. Selecione novas fotos apenas para acrescentar.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()}})}
+function bindRncPhotoInputs(existing={}){
+  document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{
+    const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);
+    let saved=Array.isArray(existing[id])?existing[id]:[];
+    if(h)h.value=JSON.stringify(saved);
+
+    let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');
+    if(!info){
+      info=document.createElement('div');
+      info.dataset.rncPhotoInfo='1';
+      info.className='small';
+      info.style.marginTop='6px';
+      inp.insertAdjacentElement('afterend',info);
+    }
+
+    let preview=inp.parentElement?.querySelector('[data-rnc-photo-preview]');
+    if(!preview){
+      preview=document.createElement('div');
+      preview.dataset.rncPhotoPreview='1';
+      preview.style.cssText='display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px';
+      info.insertAdjacentElement('afterend',preview);
+    }
+
+    const updateInfo=()=>{
+      let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}
+      info.textContent=a.length?`${a.length} foto(s) fixada(s) nesta RNC.`:'Nenhuma foto fixada ainda.';
+      preview.innerHTML=a.map((photo,i)=>{
+        const src=rncPhotoSrc(photo);
+        return src?`<div style="position:relative;border:1px solid #d8e0ec;border-radius:8px;padding:4px;background:#fff"><img src="${escapeHtml(src)}" style="display:block;width:100%;height:90px;object-fit:contain"><button type="button" class="btn danger" onclick="removeRncPhoto('${escapeHtml(id)}',${i})" style="position:absolute;right:4px;top:4px;padding:3px 6px;font-size:10px">×</button></div>`:'';
+      }).join('');
+    };
+
+    updateInfo();
+
+    inp.onchange=async()=>{
+      const max=Number(inp.dataset.max)||4;
+      let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}
+      const files=[...(inp.files||[])];
+      for(const f of files){
+        if(arr.length>=max)break;
+        if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}
+        arr.push(await compressRncPhoto(f));
+      }
+      if(h)h.value=JSON.stringify(arr.slice(0,max));
+      inp.value='';
+      updateInfo();
+    };
+  });
+}
+function removeRncPhoto(fieldId,index){
+  const h=document.getElementById('rncPhotos_'+fieldId);if(!h)return;
+  let arr=[];try{arr=JSON.parse(h.value||'[]')}catch(e){}
+  arr.splice(index,1);
+  h.value=JSON.stringify(arr);
+  bindRncPhotoInputs({[fieldId]:arr});
+}
 function compressRncPhoto(file){return new Promise((resolve,reject)=>{const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const max=900,scale=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.65))};im.onerror=reject;im.src=rd.result};rd.onerror=reject;rd.readAsDataURL(file)})}
 function defaultRncHeaderLayout(){return [
 {id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},
@@ -16150,7 +16277,7 @@ function defaultRncFieldLayout(){return [
 {id:'photo-main',section:'photos',label:'Fotos da ocorrência',source:'photo:registro-fotografico',width:100,row:1,height:28,display:'stack'},
 {id:'sign-elab',section:'signatures',label:'ELABORADOR',source:'@SGQ',width:33.33,row:1,height:13,display:'stack'},{id:'sign-ver',section:'signatures',label:'VERIFICADOR',source:'@',width:33.33,row:1,height:13,display:'stack'},{id:'sign-app',section:'signatures',label:'APROVADOR',source:'@',width:33.34,row:1,height:13,display:'stack'}
 ]}
-const RNC_FIELD_SOURCES=[['rncReporter','Responsável'],['rncShift','Turno'],['eventDate','Data de abertura'],['rncIssueDate','Data de emissão'],['rncSupervisor','Supervisor'],['rncManager','Gerente'],['rncNumber','Nº RNC'],['supplier','Fornecedor'],['rncInvoice','Nota fiscal'],['rncProductCode','Código produto'],['rncProduct','Produto'],['rncDimensions','Dimensões'],['rncQuantity','Quantidade'],['rncDisposition','Disposição'],['rncBlockArea','Área bloqueio'],['relatedRo','R.O. relacionada'],['sector','Setor'],['title','Título'],['description','Descrição'],['rncSummary','Resumo do desvio'],['rncDetailedDescription','Descrição detalhada'],['rncEffect','Efeito do desvio'],['rncImmediateActions','Ações imediatas'],['rncFiveWhys','5 Porquês'],['rncSupplierConclusion','Conclusão da causa'],['rncCause','Causa'],['rncCorrectiveActions','Ações corretivas/preventivas'],['rncEffectiveness','Verificação de eficácia'],['photo:registro-fotografico','Fotos da RNC'],['@RNC','Texto fixo: RNC'],['@—','Texto fixo: —'],['@','Em branco'],['@A','Texto fixo: A'],['@SGQ','Texto fixo: SGQ']];
+const RNC_FIELD_SOURCES=[['rncReporter','Responsável'],['rncShift','Turno'],['eventDate','Data de abertura'],['rncIssueDate','Data de emissão'],['rncSupervisor','Supervisor'],['rncManager','Gerente'],['rncNumber','Nº RNC'],['supplier','Fornecedor'],['rncInvoice','Nota fiscal'],['rncProductCode','Código produto'],['rncProduct','Produto'],['rncDimensions','Dimensões'],['rncQuantity','Quantidade'],['rncDisposition','Disposição'],['rncBlockArea','Área bloqueio'],['rncBlockStage','Etapa da área responsável pelo bloqueio'],['relatedRo','R.O. relacionada'],['sector','Setor'],['title','Título'],['description','Descrição'],['rncSummary','Resumo do desvio'],['rncDetailedDescription','Descrição detalhada'],['rncEffect','Efeito do desvio'],['rncImmediateActions','Ações imediatas'],['rncFiveWhys','5 Porquês'],['rncSupplierConclusion','Conclusão da causa'],['rncCause','Causa'],['rncCorrectiveActions','Ações corretivas/preventivas'],['rncEffectiveness','Verificação de eficácia'],['photo:registro-fotografico','Fotos da RNC'],['@RNC','Texto fixo: RNC'],['@—','Texto fixo: —'],['@','Em branco'],['@A','Texto fixo: A'],['@SGQ','Texto fixo: SGQ']];
 let rncGridSelectedFieldId='';
 let rncGridSelectedHeaderId='';
 function rncGridFields(){return getTplJson('tplFieldLayoutData',defaultRncFieldLayout())}
@@ -16196,9 +16323,11 @@ function rncGridToolbarHtml(){const h=selectedRncHeaderCell();if(h)return `<div 
 function rncPhotoSrc(photo){
   if(!photo)return '';
   if(typeof photo==='string')return photo;
-  if(photo.fileId)return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(photo.fileId)+'&sz=w1600';return String(photo.url||photo.dataUrl||photo.src||'');
+  if(photo.dataUrl)return String(photo.dataUrl);
+  if(photo.fileId)return 'https://drive.google.com/uc?export=view&id='+encodeURIComponent(photo.fileId);
+  return String(photo.url||photo.src||'');
 }
-function rncFieldValue(obj,source,preview=false){if(String(source||'').startsWith('@'))return String(source).slice(1);if(!preview&&source==='eventDate'&&!String(obj?.eventDate||'').trim()){const d=String(obj?.createdAt||'').slice(0,10);if(d)return d;}if(!preview&&source==='rncIssueDate'){const v=obj?.rncIssueDate||obj?.issueDate||obj?.dataEmissao||obj?.emissionDate||'';if(String(v).trim())return v;}if(!preview&&source==='rncDisposition'){const v=obj?.rncDisposition||obj?.disposition||obj?.disposicao||'';if(String(v).trim())return v;}if(preview){const ex={rncReporter:'Maria',rncShift:'1º turno',eventDate:'17/09/2026',rncIssueDate:'17/09/2026',rncSupervisor:'Supervisor',rncManager:'Gerente',rncNumber:'RNC-2026-0001',supplier:'Fornecedor ABC',rncInvoice:'3215',rncProductCode:'000123',rncProduct:'Produto exemplo',rncDimensions:'Especificação',rncQuantity:'250 un.',rncDisposition:'Segregação / devolução',rncBlockArea:'Qualidade',relatedRo:'Não vinculada',sector:'Qualidade',title:'RNC',description:'Descrição'};return ex[source]||'—'}return obj?.[source]??'—'}
+function rncFieldValue(obj,source,preview=false){if(String(source||'').startsWith('@'))return String(source).slice(1);if(!preview&&source==='eventDate'&&!String(obj?.eventDate||'').trim()){const d=String(obj?.createdAt||'').slice(0,10);if(d)return d;}if(!preview&&source==='rncIssueDate'){const v=obj?.rncIssueDate||obj?.issueDate||obj?.dataEmissao||obj?.emissionDate||'';if(String(v).trim())return v;}if(!preview&&source==='rncDisposition'){const v=obj?.rncDisposition||obj?.disposition||obj?.disposicao||'';if(String(v).trim())return v;}if(preview){const ex={rncReporter:'Maria',rncShift:'1º turno',eventDate:'17/09/2026',rncIssueDate:'17/09/2026',rncSupervisor:'Supervisor',rncManager:'Gerente',rncNumber:'RNC-2026-0001',supplier:'Fornecedor ABC',rncInvoice:'3215',rncProductCode:'000123',rncProduct:'Produto exemplo',rncDimensions:'Especificação',rncQuantity:'250 un.',rncDisposition:'Segregação / devolução',rncBlockArea:'Qualidade',rncBlockStage:'Recebimento',relatedRo:'Não vinculada',sector:'Qualidade',title:'RNC',description:'Descrição'};return ex[source]||'—'}return obj?.[source]??'—'}
 function rncLayoutRowsHtml(t,section,obj={},preview=false,cellClass='',ownerFilter=''){
   const all=t.fieldLayout||defaultRncFieldLayout(),secOwner=(t.sections||[]).find(z=>z.id===section)?.owner||'sgq',fields=all.filter(x=>x.section===section&&(!ownerFilter||((x.owner&&x.owner!=='inherit')?x.owner:secOwner)===ownerFilter));if(!fields.length)return'';
   const rows=[...new Set(fields.map(x=>Number(x.row)||1))].sort((a,b)=>a-b),maxRow=Math.max(...rows,...fields.map(x=>(Number(x.row)||1)+Math.max(1,Number(x.rowSpan)||1)-1)),baseH=Number(t.layout?.rowHeight)||7,rbw=Math.max(.4,Number(t.layout?.borderWidth)||.65);
@@ -16208,7 +16337,7 @@ function rncLayoutRowsHtml(t,section,obj={},preview=false,cellClass='',ownerFilt
   return `<div data-rnc-grid-section="${section}" style="display:grid;grid-template-columns:repeat(1000,minmax(0,1fr));grid-template-rows:${rowTpl};border-bottom:${rbw}px solid #777">${fields.map(x=>{
       const idx=all.findIndex(z=>z.id===x.id),selected=preview&&x.id===rncGridSelectedFieldId,[l,r]=positions.get(x.id)||[0,100],cs=Math.max(1,Math.round(l*10)+1),ce=Math.max(cs+1,Math.round(r*10)+1),rs=Number(x.row)||1,re=Math.min(maxRow+1,rs+Math.max(1,Number(x.rowSpan)||1));
       const label=preview?`<span contenteditable="true" spellcheck="false" title="Clique para editar o texto" oninput="previewEditRncFieldLabel(${idx},this.textContent)" onclick="event.stopPropagation()" style="font-size:7px;font-weight:700;outline:none;cursor:text;border-radius:3px">${escapeHtml(x.label||'')}</span>`:`<span style="font-size:6.5px;font-weight:700">${escapeHtml(x.label||'')}</span>`;
-      const isPhoto=String(x.source||'').startsWith('photo:'),photoId=isPhoto?String(x.source).slice(6):'',pf=(t.photoFields||[]).find(f=>f.id===photoId),imgs=!preview&&isPhoto?((obj?.rncPhotos||{})[photoId]||Object.values(obj?.rncPhotos||{}).find(v=>Array.isArray(v)&&v.length)||[]):[],photoVal=isPhoto?(preview?`<div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(pf?.maxPhotos)||4)},1fr);gap:4px;width:100%;margin-top:4px">${Array.from({length:Math.min(4,Number(pf?.maxPhotos)||4)},()=>'<div style="min-height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div>`:(imgs.length?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;width:100%">${imgs.map(photo=>{const src=rncPhotoSrc(photo);return src?`<img src="${escapeHtml(src)}" style="width:100%;max-height:60mm;object-fit:contain;border:1px solid #ddd">`:''}).join('')}</div>`:'—')):'',val=isPhoto?photoVal:`<b style="font-size:8px;font-weight:500;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(String(rncFieldValue(obj,x.source,preview)||'—'))}</b>`,inline=(x.display||'stack')==='inline';
+      const isPhoto=String(x.source||'').startsWith('photo:'),photoId=isPhoto?String(x.source).slice(6):'',pf=(t.photoFields||[]).find(f=>f.id===photoId),imgs=!preview&&isPhoto?((obj?.rncPhotos||{})[photoId]||Object.values(obj?.rncPhotos||{}).find(v=>Array.isArray(v)&&v.length)||[]):[],photoVal=isPhoto?(preview?`<div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(pf?.maxPhotos)||4)},1fr);gap:4px;width:100%;margin-top:4px">${Array.from({length:Math.min(4,Number(pf?.maxPhotos)||4)},()=>'<div style="min-height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div>`:(imgs.length?`<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:2mm;width:100%">${imgs.map(photo=>{const src=rncPhotoSrc(photo);return src?`<img src="${escapeHtml(src)}" style="width:100%;max-height:60mm;object-fit:contain;border:1px solid #ddd">`:''}).join('')}</div>`:'—')):'',val=isPhoto?photoVal:`<span class="rncAnswer" style="font-size:8px;font-weight:400;min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word">${escapeHtml(String(rncFieldValue(obj,x.source,preview)||'—'))}</span>`,inline=(x.display||'stack')==='inline';
       return `<div class="${cellClass}" data-rnc-grid-cell="${x.id}" ${preview?`onclick="selectRncGridField('${x.id}')"`:''} style="grid-column:${cs}/${ce};grid-row:${rs}/${re};position:relative;min-width:0;overflow:hidden;overflow-wrap:anywhere;word-break:break-word;white-space:normal;text-align:${['left','center','right'].includes(x.align)?x.align:'left'};padding:${preview?'4px 5px':'1mm'};border-right:${rbw}px solid #777;border-top:${rs>1?rbw:0}px solid #777;${selected?'box-shadow:inset 0 0 0 2px #2f6fed;background:#eef5ff;':''};cursor:${preview?'pointer':'default'}"><div style="display:${inline?'flex':'block'};align-items:${inline?'flex-start':'stretch'};justify-content:${inline?(x.align==='center'?'center':x.align==='right'?'flex-end':'flex-start'):'initial'};gap:${inline?'5px':'0'};height:100%;min-width:0;max-width:100%;overflow:hidden;overflow-wrap:anywhere;word-break:break-word;white-space:normal">${label}${inline?'<span style="font-weight:700">:</span>':''}${inline?val:`<div style="margin-top:${preview?'4px':'1.2mm'}">${val}</div>`}</div>${preview?`<span title="Arraste para mudar a largura" onpointerdown="startRncCellResize(event,'${x.id}')" style="position:absolute;right:-3px;top:0;width:7px;height:100%;cursor:col-resize;z-index:3"></span><span title="Arraste para mudar a altura da linha" onpointerdown="startRncRowResize(event,'${x.id}')" style="position:absolute;left:0;bottom:-4px;width:100%;height:8px;cursor:row-resize;z-index:4"></span>`:''}</div>`;
     }).join('')}</div>`
 }
@@ -16399,7 +16528,8 @@ function rncBlockingRowsHtml(r={}){
   const safeItems=items.length?items:[{}];
   const supplier=String(r.supplier||'').trim();
   const area=String(r.rncBlockArea||'').trim();
-  const head=['Fornecedor','Nota Fiscal','Data da emissão','Código do produto','Produto / descrição','Dimensões / especificação','Qtd. Não Conforme','Área responsável pelo Bloqueio','Disposição'];
+  const etapa=String(r.rncBlockStage||'').trim();
+  const head=['Fornecedor','Nota Fiscal','Data da emissão','Código do produto','Produto / descrição','Dimensões / especificação','Qtd. Não Conforme','Área responsável pelo Bloqueio','Etapa da área responsável pelo bloqueio','Disposição'];
   return `<table class="rncBlockingItems" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0">
     <tr>${head.map(h=>`<td style="border:1px solid #777;background:#b7dde8;font-size:6.5px;font-weight:700;padding:1mm;text-align:center">${e(h)}</td>`).join('')}</tr>
     ${safeItems.map(item=>`<tr>
@@ -16411,6 +16541,7 @@ function rncBlockingRowsHtml(r={}){
       <td style="border:1px solid #777;padding:1mm">${e(item.dimensions||'—')}</td>
       <td style="border:1px solid #777;padding:1mm">${e(item.quantity||'—')}</td>
       <td style="border:1px solid #777;padding:1mm">${e(area||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(etapa||'—')}</td>
       <td style="border:1px solid #777;padding:1mm">${e(item.disposition||'—')}</td>
     </tr>`).join('')}
   </table>`;
@@ -16421,7 +16552,7 @@ function printRncStandard(id,returnHtml=false){
   const e=v=>escapeHtml(String(v??'')).replace(/\n/g,'<br>'); const v=(x,empty='')=>String(x??'').trim()||empty; const tpl=getRncProcessTemplate();
   const responseLabel={none:'SEM RESPOSTA',partial:'RESPOSTA PARCIAL',complete:'RESPOSTA COMPLETA'}[r.rncResponseStatus]||'SEM RESPOSTA';
   const enabled=id=>tpl.sections.find(x=>x.id===id)?.enabled!==false;
-  const cell=(label,value)=>`<div class="cell"><span>${e(label)}</span><b>${e(v(value,'—'))}</b></div>`;
+  const cell=(label,value)=>`<div class="cell"><span>${e(label)}</span><span class="rncAnswer">${e(v(value,'—'))}</span></div>`;
   const long=(label,value)=>`<div class="long"><div class="lbl">${e(label)}</div><div class="answer">${e(v(value,'—'))}</div></div>`;
   const logo=tpl.logoDataUrl?`<img src="${tpl.logoDataUrl}" alt="Logo" class="logo">`:`<b class="logoText" style="color:${e(tpl.accent)}">${e(tpl.logoText||'SETA')}</b>`;
   const L={...defaultRncProcessTemplate().layout,...(tpl.layout||{})},bw=Math.max(.4,Number(L.borderWidth)||.65),fs=(Number(L.fontScale)||100)/100;
@@ -16449,7 +16580,7 @@ function printRncStandard(id,returnHtml=false){
     ? `<section class="rncPage"><div class="doc">${pageHeader(1,totalPages)}<div class="pageContent">${internalContent}${extraImages}</div>${tpl.repeatFooterOnPages!==false?footerHtml():''}</div></section><section class="rncPage pageBreak"><div class="doc">${tpl.repeatHeaderOnPages!==false?pageHeader(2,totalPages):''}<div class="pageContent">${supplierContent}</div>${tpl.repeatFooterOnPages!==false?footerHtml():''}</div></section>`
     : `<section class="rncPage"><div class="doc">${pageHeader(1,1)}<div class="pageContent">${internalContent}${extraImages}${supplierContent}</div>${footerHtml()}</div></section>`;
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>${e(v(r.rncNumber,'RNC'))}</title><style>
-  @page{size:A4 portrait;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:8px;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.rncPage{width:100%;min-height:285mm;display:flex;break-inside:avoid;page-break-inside:avoid}.rncPage.pageBreak{break-before:page;page-break-before:always}.doc{width:100%;height:285mm;min-height:285mm;border:${bw}px solid #111;display:flex;flex-direction:column;overflow:hidden}.pageContent{width:100%;flex:0 0 auto}.pageFooter{margin-top:auto;border-top:${bw}px solid #111;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;flex:0 0 auto}.pageFooter>[data-rnc-grid-section]{border-bottom:0!important}.footerText{padding:2mm}.head{display:grid;grid-template-columns:${L.logoWidth}% 1fr;min-height:${L.headerHeight}mm;border-bottom:${bw}px solid #111}.logoBox{display:flex;align-items:center;justify-content:center;border-right:${bw}px solid #111;padding:1.5mm}.logo{max-width:92%;max-height:${Math.max(7,L.headerHeight-2)}mm;object-fit:contain}.logoText{font-size:${18*fs}px}.sys{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.sys b{font-size:${10*fs}px}.sys span{margin-top:1mm}.meta{display:grid;grid-template-columns:1fr 1fr}.meta div{padding:1mm;border-right:${bw}px solid #777;border-bottom:${bw}px solid #777}.meta div:nth-child(even){border-right:0}.titleRow{display:grid;grid-template-columns:18mm 1fr;border-bottom:1px solid #111}.titleRow>*{padding:1.5mm}.titleRow b:first-child{border-right:1px solid #777}.report{text-align:center;font-weight:800}.bar{color:#fff!important;font-weight:800;min-height:${L.sectionHeight}mm;display:flex;align-items:center;padding:.7mm 1.5mm;border-top:${bw}px solid #111;border-bottom:${bw}px solid #111;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.grid3,.grid4,.grid5,.grid6{display:grid;border-bottom:1px solid #777}.grid3{grid-template-columns:1.1fr 1fr 1fr}.grid4{grid-template-columns:1.1fr .6fr .9fr 1fr}.grid5{grid-template-columns:1.3fr .8fr .9fr 1fr 1fr}.grid6{grid-template-columns:1.1fr .7fr .8fr .9fr .8fr 1fr}.cell{min-height:${L.rowHeight}mm;padding:1mm;border-right:${bw}px solid #777}.cell:last-child{border-right:0}.cell span{display:block;font-size:6.5px;font-weight:700;margin-bottom:1.5mm}.cell b{font-size:8px;font-weight:500}.long{border-bottom:1px solid #777;min-height:13mm}.lbl{font-weight:700;padding:1.4mm 2mm;border-bottom:1px solid #bbb}.answer{padding:2mm;min-height:9mm}.supplierNote{padding:1.8mm 2mm;background:#f2f4f7;border-bottom:1px solid #111}.matrix{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #777}.matrix div{padding:2mm;min-height:9mm;border-right:1px solid #777}.sign{display:grid;grid-template-columns:repeat(3,1fr);min-height:13mm}.sign div{text-align:center;padding:2mm;border-right:1px solid #777}.toolbar{margin-bottom:8px}.toolbar button{padding:7px 12px}@media screen{body{background:#dfe3e8}.rncPage{width:198mm;margin:8px auto;background:#fff;box-shadow:0 2px 8px #0002}}@media print{.toolbar{display:none}.rncPage{margin:0;box-shadow:none}}
+  @page{size:A4 portrait;margin:6mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;font-size:8px;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.rncPage{width:100%;min-height:285mm;display:flex;break-inside:avoid;page-break-inside:avoid}.rncPage.pageBreak{break-before:page;page-break-before:always}.doc{width:100%;height:285mm;min-height:285mm;border:${bw}px solid #111;display:flex;flex-direction:column;overflow:hidden}.pageContent{width:100%;flex:0 0 auto}.pageFooter{margin-top:auto;border-top:${bw}px solid #111;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;flex:0 0 auto}.pageFooter>[data-rnc-grid-section]{border-bottom:0!important}.footerText{padding:2mm}.head{display:grid;grid-template-columns:${L.logoWidth}% 1fr;min-height:${L.headerHeight}mm;border-bottom:${bw}px solid #111}.logoBox{display:flex;align-items:center;justify-content:center;border-right:${bw}px solid #111;padding:1.5mm}.logo{max-width:92%;max-height:${Math.max(7,L.headerHeight-2)}mm;object-fit:contain}.logoText{font-size:${18*fs}px}.sys{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.sys b{font-size:${10*fs}px}.sys span{margin-top:1mm}.meta{display:grid;grid-template-columns:1fr 1fr}.meta div{padding:1mm;border-right:${bw}px solid #777;border-bottom:${bw}px solid #777}.meta div:nth-child(even){border-right:0}.titleRow{display:grid;grid-template-columns:18mm 1fr;border-bottom:1px solid #111}.titleRow>*{padding:1.5mm}.titleRow b:first-child{border-right:1px solid #777}.report{text-align:center;font-weight:800}.bar{color:#fff!important;font-weight:800;min-height:${L.sectionHeight}mm;display:flex;align-items:center;padding:.7mm 1.5mm;border-top:${bw}px solid #111;border-bottom:${bw}px solid #111;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.grid3,.grid4,.grid5,.grid6{display:grid;border-bottom:1px solid #777}.grid3{grid-template-columns:1.1fr 1fr 1fr}.grid4{grid-template-columns:1.1fr .6fr .9fr 1fr}.grid5{grid-template-columns:1.3fr .8fr .9fr 1fr 1fr}.grid6{grid-template-columns:1.1fr .7fr .8fr .9fr .8fr 1fr}.cell{min-height:${L.rowHeight}mm;padding:1mm;border-right:${bw}px solid #777}.cell:last-child{border-right:0}.cell span{display:block;font-size:6.5px;font-weight:700;margin-bottom:1.5mm}.cell b{font-size:8px;font-weight:400}.rncAnswer{font-weight:400!important}.long{border-bottom:1px solid #777;min-height:13mm}.lbl{font-weight:700;padding:1.4mm 2mm;border-bottom:1px solid #bbb}.answer{padding:2mm;min-height:9mm}.supplierNote{padding:1.8mm 2mm;background:#f2f4f7;border-bottom:1px solid #111}.matrix{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #777}.matrix div{padding:2mm;min-height:9mm;border-right:1px solid #777}.sign{display:grid;grid-template-columns:repeat(3,1fr);min-height:13mm}.sign div{text-align:center;padding:2mm;border-right:1px solid #777}.toolbar{margin-bottom:8px}.toolbar button{padding:7px 12px}@media screen{body{background:#dfe3e8}.rncPage{width:198mm;margin:8px auto;background:#fff;box-shadow:0 2px 8px #0002}}@media print{.toolbar{display:none}.rncPage{margin:0;box-shadow:none}}
   </style></head><body><div class="toolbar"><button onclick="window.print()">Salvar como PDF / Imprimir</button></div>${pages}</body></html>`;
   if(returnHtml)return html;
   let frame=document.getElementById('nucleoRncPrintFrame');if(frame)frame.remove();frame=document.createElement('iframe');frame.id='nucleoRncPrintFrame';frame.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;background:#fff;';document.body.appendChild(frame);const d=frame.contentDocument||frame.contentWindow.document;d.open();d.write(html);d.close();const doPrint=()=>{try{frame.contentWindow.focus();frame.contentWindow.print()}catch(err){console.error(err);alert('Não foi possível abrir a impressão do PDF.')}};if(d.readyState==='complete')setTimeout(doPrint,250);else frame.onload=()=>setTimeout(doPrint,250);
@@ -16476,7 +16607,7 @@ function editAdminOperationalRecord(id){
   </div>`;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
-  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncBlockArea','rncBlockArea'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
+  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncSector','sector'],['admModRncBlockArea','rncBlockArea'],['admModRncBlockStage','rncBlockStage'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
   renderRncBlockItems(legacyRncBlockItems(r));
   bindRncPhotoInputs(r.rncPhotos||{});
   set('admModTitle',r.title);set('admModCode',r.code);set('admModLocation',r.location);set('admModSector',r.sector);
@@ -16486,7 +16617,11 @@ function editAdminOperationalRecord(id){
   set('admModProduct',r.product);set('admModOrder',r.order);set('admModInvoice',r.invoice);
   set('admModQuantity',r.quantity);set('admModLanguage',r.language);set('admModRecipient',r.recipient);
   set('admModRecipientEmail',r.recipientEmail);set('admModDocType',r.docType);set('admModRevision',r.revision);
-  if(key==='nccapa')updateNcCapaFormType();
+  if(key==='nccapa'){
+    updateNcCapaFormType();
+    activateNcCapaForm();
+    setTimeout(activateNcCapaForm,0);
+  }
   if(key==='documents'&&!isAdmin()){
     const st=document.getElementById('admModStatus');if(st)st.disabled=true;
     const resp=document.getElementById('admModResponsible');if(resp)resp.disabled=true;
