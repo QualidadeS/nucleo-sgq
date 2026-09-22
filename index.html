@@ -4864,25 +4864,101 @@ async function portalBackendSaveConfirmed(collection,id,data){
   return res;
 }
 
-async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=60000){
+async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=150000){
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+
   const eventoId='PORTALSAVE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+  const expectedUpdatedAt=String(data?.updatedAt||'').trim();
+  const expectedRnc=String(data?.rncNumber||'').trim();
+
   const submitted=portalPostForm({
-    acao:'portal_save',colecao:String(collection||''),id:String(id||''),
-    dados:JSON.stringify(data||{}),ator:getSession()?.name||'Sistema',eventoId
+    acao:'portal_save',
+    colecao:String(collection||''),
+    id:String(id||''),
+    dados:JSON.stringify(data||{}),
+    ator:getSession()?.name||'Sistema',
+    eventoId
   });
+
   if(!submitted)throw new Error('Não foi possível enviar o registro para a base central.');
-  const started=Date.now();
-  while(Date.now()-started<timeoutMs){
-    await new Promise(resolve=>setTimeout(resolve,700));
-    const chk=await portalJsonp({acao:'portal_save_status',eventoId},15000).catch(()=>null);
-    if(chk?.status==='done'){
-      const read=await portalJsonp({acao:'portal_get_record',colecao:String(collection||''),id:String(id||'')},15000).catch(()=>null);
-      if(read?.sucesso&&read?.registro)return {sucesso:true,registro:read.registro};
+
+  const recordMatches=(registro)=>{
+    if(!registro)return false;
+
+    // O updatedAt é criado no exato momento deste salvamento.
+    // Isso impede que uma versão antiga já existente na planilha seja
+    // confundida com a nova gravação.
+    if(expectedUpdatedAt){
+      return String(registro.updatedAt||'').trim()===expectedUpdatedAt;
     }
-    if(chk?.status==='error')throw new Error(chk.erro||'A base central recusou o salvamento.');
+
+    // Fallback para registros antigos que não possuam updatedAt.
+    if(expectedRnc){
+      return String(registro.rncNumber||'').trim()===expectedRnc;
+    }
+
+    return String(registro.id||id)===String(id);
+  };
+
+  const started=Date.now();
+  let ultimoStatus='processing';
+
+  while(Date.now()-started<timeoutMs){
+    await new Promise(resolve=>setTimeout(resolve,1200));
+
+    // Não depende mais exclusivamente do PORTALSAVE_.
+    // Confirma diretamente se a versão recém-salva já existe na base.
+    const [chk,read]=await Promise.all([
+      portalJsonp({acao:'portal_save_status',eventoId},12000).catch(()=>null),
+      portalJsonp({
+        acao:'portal_get_record',
+        colecao:String(collection||''),
+        id:String(id||'')
+      },12000).catch(()=>null)
+    ]);
+
+    if(chk?.status)ultimoStatus=String(chk.status);
+
+    if(read?.sucesso&&recordMatches(read.registro)){
+      return {sucesso:true,registro:read.registro};
+    }
+
+    if(chk?.status==='error'){
+      throw new Error(chk.erro||'A base central recusou o salvamento.');
+    }
+
+    // Mesmo quando o status já marcou "done", aguarda alguns instantes
+    // até a leitura devolver exatamente a versão recém-gravada.
+    if(chk?.status==='done'){
+      await new Promise(resolve=>setTimeout(resolve,300));
+      const finalRead=await portalJsonp({
+        acao:'portal_get_record',
+        colecao:String(collection||''),
+        id:String(id||'')
+      },12000).catch(()=>null);
+
+      if(finalRead?.sucesso&&recordMatches(finalRead.registro)){
+        return {sucesso:true,registro:finalRead.registro};
+      }
+    }
   }
-  throw new Error('A base central não confirmou o salvamento dentro do tempo esperado.');
+
+  // Última conferência direta antes de declarar falha.
+  const finalRead=await portalJsonp({
+    acao:'portal_get_record',
+    colecao:String(collection||''),
+    id:String(id||'')
+  },15000).catch(()=>null);
+
+  if(finalRead?.sucesso&&recordMatches(finalRead.registro)){
+    return {sucesso:true,registro:finalRead.registro};
+  }
+
+  throw new Error(
+    ultimoStatus==='processing'
+      ? 'O registro foi enviado, mas a versão nova ainda não apareceu na base central.'
+      : 'A base central não confirmou a versão recém-salva.'
+  );
 }
 
 async function portalBackendDeleteConfirmed(collection,id){
@@ -16019,7 +16095,7 @@ async function finishRncCreation(r,wasExisting){
   try{
     // Usa POST confirmado para toda RNC. A rota GET não é usada para gravar e
     // fotos podem tornar o registro grande demais para uma URL.
-    const saved=await portalBackendSaveConfirmedPost('admin_modules',r.id,r,90000);
+    const saved=await portalBackendSaveConfirmedPost('admin_modules',r.id,r,150000);
     const central=saved?.registro||r;
     // Atualiza o cache local com a versão realmente devolvida pela base (inclusive refs das fotos).
     const all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(r.id));
