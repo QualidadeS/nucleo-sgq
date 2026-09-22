@@ -15218,7 +15218,8 @@ const ADMIN_OPERATIONAL_MODULES={
     title:'Não conformidades e CAPA',
     desc:'Central de não conformidades internas e de fornecedor. NC de cliente continua no fluxo de SAC; NC de fornecedor é registrada como RNC e pode ou não estar vinculada a uma R.O.',
     cards:[
-      ['Nova NC / RNC','Registrar uma NC interna ou uma RNC de fornecedor. O vínculo com R.O. é opcional.','new'],
+      ['Nova NC interna','Registrar uma não conformidade interna. O vínculo com R.O. é opcional.','new_internal'],
+      ['Nova RNC de fornecedor','Registrar uma RNC de fornecedor. O vínculo com R.O. é opcional.','new_rnc'],
       ['Em tratamento','Acompanhar NCs e RNCs abertas, contenções e responsáveis.','active'],
       ['RNC de fornecedores','Consultar as não conformidades de fornecedor e seus vínculos.','rnc'],
       ['Enviar RNC','Selecionar uma RNC já pronta, conferir o PDF e realizar o envio por e-mail.','rnc_send'],
@@ -15431,14 +15432,9 @@ function adminModuleFields(key){
         <div class="small" style="margin-top:4px">Cliente = SAC (continua no Controle de SAC) • Fornecedor = RNC • Interna = NC interna. RNC e NC interna podem existir sem R.O.</div>
       </div>
 
-      <label><span class="small">Tipo de não conformidade *</span>
-        <select id="admModNcType" onchange="updateNcCapaFormType()">
-          <option value="internal">NC interna</option>
-          <option value="supplier">Fornecedor (RNC)</option>
-        </select>
-      </label>
+      <input type="hidden" id="admModNcType" value="internal">
 
-      <label><span class="small">Título do desvio *</span><input id="admModTitle" placeholder="Título do desvio"></label>
+      <label style="grid-column:1/-1"><span class="small">Título do desvio *</span><input id="admModTitle" placeholder="Título do desvio"></label>
 
       <label><span class="small">Origem</span>
         <select id="admModNcOrigin">
@@ -15469,14 +15465,18 @@ function adminModuleFields(key){
         <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">BLOQUEIO</div>
 
         <label><span class="small">Fornecedor *</span><input id="admModSupplier" placeholder="Nome do fornecedor"></label>
-        <label><span class="small">Nota Fiscal</span><input id="admModRncInvoice" placeholder="Nº da NF"></label>
-        <label><span class="small">Data da emissão</span><input id="admModRncIssueDate" type="date"></label>
-        <label><span class="small">Código do produto</span><input id="admModRncProductCode" placeholder="Código"></label>
-        <label><span class="small">Quantidade não conforme</span><input id="admModRncQuantity" placeholder="Quantidade e unidade"></label>
-        <label><span class="small">Produto / descrição</span><input id="admModRncProduct" placeholder="Produto ou matéria-prima"></label>
-        <label><span class="small">Dimensões / especificação</span><input id="admModRncDimensions" placeholder="Quando aplicável"></label>
         <label><span class="small">Área responsável pelo bloqueio</span><input id="admModRncBlockArea" placeholder="Área / setor"></label>
-        <label><span class="small">Disposição</span><input id="admModRncDisposition" placeholder="Ex.: devolução, segregação, retrabalho..."></label>
+
+        <div style="grid-column:1/-1">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 8px">
+            <div>
+              <b>Itens do bloqueio</b>
+              <div class="small">Pode haver mais de um produto / item na mesma RNC.</div>
+            </div>
+            <button class="btn secondary" type="button" onclick="addRncBlockItem()">＋ Adicionar item</button>
+          </div>
+          <div id="admModRncBlockItems" style="display:grid;gap:10px"></div>
+        </div>
 
         <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">DESVIO EVIDENCIADO / DESCRIÇÃO</div>
 
@@ -15649,7 +15649,9 @@ function showAdminOperationalModule(key){
     </div>
     <div class="card" style="padding:20px;display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap">
       <div><b>Espaço de trabalho</b><p class="muted" style="margin:8px 0 0">Escolha um subtópico acima ou abra um novo registro agora.</p></div>
-      <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>
+      ${key==='nccapa'
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn secondary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova NC interna</button><button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',1)">＋ Nova RNC fornecedor</button></div>`
+        : `<button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>`}
     </div>
   </div>`;
 }
@@ -15668,7 +15670,7 @@ function openAdminOperationalWorkspace(key,index){
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
   if(key==='processes'&&mode==='templates'){renderProcessTemplatesWorkspace();return}
   if(key==='nccapa'&&mode==='rnc_send'){renderRncSendWorkspace();return}
-  if(mode==='new'){
+  if(mode==='new'||mode==='new_internal'||mode==='new_rnc'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
       <div class="card" style="margin-top:14px;padding:20px">
         <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px">
@@ -15682,7 +15684,11 @@ function openAdminOperationalWorkspace(key,index){
         </div>
       </div>
     </div>`;
-    if(key==='nccapa')updateNcCapaFormType();
+    if(key==='nccapa'){
+      const type=document.getElementById('admModNcType');
+      if(type)type.value=mode==='new_rnc'?'supplier':'internal';
+      updateNcCapaFormType();
+    }
     if(key==='documents'&&!isAdmin()){
       const st=document.getElementById('admModStatus');if(st){st.value='open';st.disabled=true}
       const resp=document.getElementById('admModResponsible');if(resp)resp.closest('label')?.classList.add('hidden');
@@ -15739,10 +15745,88 @@ function renderRncSendWorkspaceList(records){
     <td><div style="display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Ver PDF</button><button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar RNC</button></div></td>
   </tr>`).join('')}</tbody></table></div>`;
 }
+
+function rncBlockItemRowHtml(item={},index=0){
+  const e=v=>escapeHtml(String(v??''));
+  return `<div class="rnc-block-item" data-rnc-block-index="${index}" style="border:1px solid #d8e0ec;border-radius:10px;padding:12px;background:#fff">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+      <b>Item ${index+1}</b>
+      <button class="btn danger" type="button" onclick="removeRncBlockItem(this)" style="padding:6px 9px">Remover</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+      <label><span class="small">Nota Fiscal</span><input data-rnc-block-field="invoice" value="${e(item.invoice||item.notaFiscal||'')}" placeholder="Nº da NF"></label>
+      <label><span class="small">Data da emissão</span><input data-rnc-block-field="issueDate" type="date" value="${e(item.issueDate||item.dataEmissao||'')}"></label>
+      <label><span class="small">Código do produto</span><input data-rnc-block-field="productCode" value="${e(item.productCode||item.codigoProduto||'')}" placeholder="Código"></label>
+      <label><span class="small">Quantidade não conforme</span><input data-rnc-block-field="quantity" value="${e(item.quantity||item.qtd||'')}" placeholder="Quantidade e unidade"></label>
+      <label><span class="small">Produto / descrição</span><input data-rnc-block-field="product" value="${e(item.product||item.produto||'')}" placeholder="Produto ou matéria-prima"></label>
+      <label><span class="small">Dimensões / especificação</span><input data-rnc-block-field="dimensions" value="${e(item.dimensions||item.dimensoes||'')}" placeholder="Quando aplicável"></label>
+      <label style="grid-column:1/-1"><span class="small">Disposição</span><input data-rnc-block-field="disposition" value="${e(item.disposition||item.disposicao||'')}" placeholder="Ex.: devolução, segregação, retrabalho..."></label>
+    </div>
+  </div>`;
+}
+function normalizeRncBlockItems(items){
+  const list=Array.isArray(items)?items.filter(Boolean):[];
+  return list.length?list:[{}];
+}
+function renderRncBlockItems(items){
+  const host=document.getElementById('admModRncBlockItems');if(!host)return;
+  host.innerHTML=normalizeRncBlockItems(items).map((item,i)=>rncBlockItemRowHtml(item,i)).join('');
+  renumberRncBlockItems();
+}
+function renumberRncBlockItems(){
+  const rows=[...document.querySelectorAll('#admModRncBlockItems .rnc-block-item')];
+  rows.forEach((row,i)=>{
+    row.dataset.rncBlockIndex=i;
+    const b=row.querySelector('b');if(b)b.textContent='Item '+(i+1);
+    const remove=row.querySelector('button.danger');if(remove)remove.style.display=rows.length>1?'inline-flex':'none';
+  });
+}
+function addRncBlockItem(item={}){
+  const host=document.getElementById('admModRncBlockItems');if(!host)return;
+  const wrap=document.createElement('div');
+  wrap.innerHTML=rncBlockItemRowHtml(item,host.querySelectorAll('.rnc-block-item').length);
+  host.appendChild(wrap.firstElementChild);
+  renumberRncBlockItems();
+}
+function removeRncBlockItem(btn){
+  const host=document.getElementById('admModRncBlockItems');if(!host)return;
+  const rows=host.querySelectorAll('.rnc-block-item');if(rows.length<=1)return;
+  btn.closest('.rnc-block-item')?.remove();
+  renumberRncBlockItems();
+}
+function collectRncBlockItems(){
+  return [...document.querySelectorAll('#admModRncBlockItems .rnc-block-item')].map(row=>{
+    const get=k=>String(row.querySelector(`[data-rnc-block-field="${k}"]`)?.value||'').trim();
+    return {
+      invoice:get('invoice'),
+      issueDate:get('issueDate'),
+      productCode:get('productCode'),
+      product:get('product'),
+      dimensions:get('dimensions'),
+      quantity:get('quantity'),
+      disposition:get('disposition')
+    };
+  }).filter(item=>Object.values(item).some(v=>String(v||'').trim()));
+}
+function legacyRncBlockItems(r={}){
+  if(Array.isArray(r.rncBlockItems)&&r.rncBlockItems.length)return r.rncBlockItems;
+  const legacy={
+    invoice:r.rncInvoice||'',
+    issueDate:r.rncIssueDate||'',
+    productCode:r.rncProductCode||'',
+    product:r.rncProduct||'',
+    dimensions:r.rncDimensions||'',
+    quantity:r.rncQuantity||'',
+    disposition:r.rncDisposition||''
+  };
+  return Object.values(legacy).some(v=>String(v||'').trim())?[legacy]:[{}];
+}
+
 function updateNcCapaFormType(){
   const type=String(document.getElementById('admModNcType')?.value||'internal');
   document.getElementById('admModRncOpening')?.classList.toggle('hidden',type!=='supplier');
   document.getElementById('admModNcInternalFields')?.classList.toggle('hidden',type==='supplier');
+  if(type==='supplier'&&document.getElementById('admModRncBlockItems')&&!document.querySelector('#admModRncBlockItems .rnc-block-item'))renderRncBlockItems([{}]);
 }
 function nextRncNumber(){
   const year=new Date().getFullYear();
@@ -15755,6 +15839,8 @@ function nextRncNumber(){
 }
 function collectAdminModuleForm(key,existing){
   const val=id=>String(document.getElementById(id)?.value||'').trim();
+  const blockItems=key==='nccapa'&&val('admModNcType')==='supplier'?collectRncBlockItems():[];
+  const firstBlockItem=blockItems[0]||{};
   const now=new Date().toISOString();
   return {
     ...(existing||{}),
@@ -15766,8 +15852,9 @@ function collectAdminModuleForm(key,existing){
     supplier:val('admModSupplier')||(existing?.supplier||''),
     relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     rncReporter:val('admModRncReporter'), rncShift:val('admModRncShift'), rncSupervisor:val('admModRncSupervisor'), rncManager:val('admModRncManager'),
-    rncInvoice:val('admModRncInvoice'), rncIssueDate:val('admModRncIssueDate'), rncBlockRange:(existing?.rncBlockRange||''), rncBlockArea:val('admModRncBlockArea'),
-    rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'), rncDisposition:val('admModRncDisposition'),
+    rncBlockItems:blockItems,
+    rncInvoice:firstBlockItem.invoice||'', rncIssueDate:firstBlockItem.issueDate||'', rncBlockRange:(existing?.rncBlockRange||''), rncBlockArea:val('admModRncBlockArea'),
+    rncProductCode:firstBlockItem.productCode||'', rncProduct:firstBlockItem.product||'', rncDimensions:firstBlockItem.dimensions||'', rncQuantity:firstBlockItem.quantity||'', rncDisposition:firstBlockItem.disposition||'',
     rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'),
     rncResponseStatus:(existing?.rncResponseStatus||'none'),
     rncImmediateActions:(existing?.rncImmediateActions||''),
@@ -16305,6 +16392,30 @@ function downloadRncEditableDoc(id){
   if(!r)return;
   openRncSendModal(id);
 }
+
+function rncBlockingRowsHtml(r={}){
+  const e=v=>escapeHtml(String(v??''));
+  const items=legacyRncBlockItems(r).filter(item=>Object.values(item||{}).some(v=>String(v||'').trim()));
+  const safeItems=items.length?items:[{}];
+  const supplier=String(r.supplier||'').trim();
+  const area=String(r.rncBlockArea||'').trim();
+  const head=['Fornecedor','Nota Fiscal','Data da emissão','Código do produto','Produto / descrição','Dimensões / especificação','Qtd. Não Conforme','Área responsável pelo Bloqueio','Disposição'];
+  return `<table class="rncBlockingItems" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0">
+    <tr>${head.map(h=>`<td style="border:1px solid #777;background:#b7dde8;font-size:6.5px;font-weight:700;padding:1mm;text-align:center">${e(h)}</td>`).join('')}</tr>
+    ${safeItems.map(item=>`<tr>
+      <td style="border:1px solid #777;padding:1mm">${e(supplier||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.invoice||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.issueDate||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.productCode||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.product||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.dimensions||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.quantity||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(area||'—')}</td>
+      <td style="border:1px solid #777;padding:1mm">${e(item.disposition||'—')}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
 function printRncStandard(id,returnHtml=false){
   const r=adminModuleRecord(id); if(!r||r.module!=='nccapa'||r.ncType!=='supplier')return;
   const e=v=>escapeHtml(String(v??'')).replace(/\n/g,'<br>'); const v=(x,empty='')=>String(x??'').trim()||empty; const tpl=getRncProcessTemplate();
@@ -16317,7 +16428,16 @@ function printRncStandard(id,returnHtml=false){
   const bar=(id,fallback)=>{const sx=tpl.sections.find(x=>x.id===id)||{},al=['left','center','right'].includes(sx.align)?sx.align:'left',jc=al==='center'?'center':al==='right'?'flex-end':'flex-start';return enabled(id)?`<div class="bar" style="background:${e(tpl.accent)};justify-content:${jc};text-align:${al}">${e(sx.label||fallback)}</div>`:''};
   const pageHeader=(page,total)=>{const pt={...tpl,headerLayout:(tpl.headerLayout||defaultRncHeaderLayout()).map(x=>x.id==='h-page'?{...x,source:'@'+page+' de '+total}:{...x})};return rncHeaderRowsHtml(pt,false,r)};
   const sectionFallback={identification:'IDENTIFICAÇÃO',blocking:'BLOQUEIO',problem:'DESVIO EVIDENCIADO / DESCRIÇÃO',effect:'EFEITO DO DESVIO',participants:'PARTICIPANTES DO PREENCHIMENTO',immediate:'AÇÕES IMEDIATAS',ishikawa:'ISHIKAWA',fivewhys:'ANÁLISE DOS 5 PORQUÊS',cause:'CONCLUSÃO DA INVESTIGAÇÃO DE CAUSA',corrective:'AÇÕES CORRETIVAS E PREVENTIVAS',effectiveness:'VERIFICAÇÃO DE EFICÁCIA',photos:'REGISTRO FOTOGRÁFICO',signatures:'ELABORADOR · VERIFICADOR · APROVADOR'};
-  const sectionForOwner=(sx,owner)=>{if(!sx||sx.enabled===false)return'';const fields=rncLayoutRowsHtml(tpl,sx.id,r,false,'cell',owner);if(!fields)return'';return `${bar(sx.id,sectionFallback[sx.id]||sx.label)}${fields}`};
+  const sectionForOwner=(sx,owner)=>{
+    if(!sx||sx.enabled===false)return'';
+    if(owner==='sgq'&&sx.id==='blocking'){
+      const fields=rncBlockingRowsHtml(r);
+      return `${bar(sx.id,sectionFallback[sx.id]||sx.label)}${fields}`;
+    }
+    const fields=rncLayoutRowsHtml(tpl,sx.id,r,false,'cell',owner);
+    if(!fields)return'';
+    return `${bar(sx.id,sectionFallback[sx.id]||sx.label)}${fields}`;
+  };
   const ownerContent=owner=>(tpl.sections||[]).map(sx=>sectionForOwner(sx,owner)).join('');
   const internalContent=ownerContent('sgq');
   const supplierContent=`<div class="supplierNote"><b>${e(tpl.supplierResponseTitle||'RESPOSTA DO FORNECEDOR')} — ${e(responseLabel)}</b>${tpl.supplierResponseNote?`<br>${e(tpl.supplierResponseNote)}`:''}</div>${ownerContent('supplier')}`;
@@ -16356,7 +16476,8 @@ function editAdminOperationalRecord(id){
   </div>`;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
-  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncInvoice','rncInvoice'],['admModRncIssueDate','rncIssueDate'],['admModRncBlockArea','rncBlockArea'],['admModRncProductCode','rncProductCode'],['admModRncProduct','rncProduct'],['admModRncDimensions','rncDimensions'],['admModRncQuantity','rncQuantity'],['admModRncDisposition','rncDisposition'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
+  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncBlockArea','rncBlockArea'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
+  renderRncBlockItems(legacyRncBlockItems(r));
   bindRncPhotoInputs(r.rncPhotos||{});
   set('admModTitle',r.title);set('admModCode',r.code);set('admModLocation',r.location);set('admModSector',r.sector);
   set('admModResponsible',r.responsible);set('admModEventDate',r.eventDate);set('admModDueDate',r.dueDate);set('admModStatus',r.status);
