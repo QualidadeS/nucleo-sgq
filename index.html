@@ -15426,54 +15426,87 @@ function adminModuleFields(key){
       <label><span class="small">Eficácia</span><select id="admModEffectiveness"><option value="">A avaliar</option><option value="effective">Eficaz</option><option value="ineffective">Não eficaz</option></select></label>
       <label style="grid-column:1/-1"><span class="small">Observações / evidências</span><textarea id="admModDescription" placeholder="Conteúdo, certificado, avaliação de eficácia..."></textarea></label>`,
     nccapa:`
-      <div style="grid-column:1/-1;padding:12px 14px;border:1px solid #dbe6ff;background:#f7faff;border-radius:12px"><b>Como o Núcleo trata as NCs</b><div class="small" style="margin-top:4px">Cliente = SAC (continua no Controle de SAC) • Fornecedor = RNC • Interna = NC interna. RNC e NC interna podem existir sem R.O.</div></div>
-      <label><span class="small">Tipo de não conformidade *</span><select id="admModNcType" onchange="updateNcCapaFormType()"><option value="internal">NC interna</option><option value="supplier">Fornecedor (RNC)</option></select></label>
-      <label id="admModRncNumberWrap" class="hidden"><span class="small">Número da RNC</span><input id="admModRncNumber" readonly placeholder="Gerado ao salvar"></label>
+      <div style="grid-column:1/-1;padding:12px 14px;border:1px solid #dbe6ff;background:#f7faff;border-radius:12px">
+        <b>Como o Núcleo trata as NCs</b>
+        <div class="small" style="margin-top:4px">Cliente = SAC (continua no Controle de SAC) • Fornecedor = RNC • Interna = NC interna. RNC e NC interna podem existir sem R.O.</div>
+      </div>
+
+      <label><span class="small">Tipo de não conformidade *</span>
+        <select id="admModNcType" onchange="updateNcCapaFormType()">
+          <option value="internal">NC interna</option>
+          <option value="supplier">Fornecedor (RNC)</option>
+        </select>
+      </label>
+
       <label><span class="small">Título do desvio *</span><input id="admModTitle" placeholder="Título do desvio"></label>
-      <label><span class="small">Origem</span><select id="admModNcOrigin"><option value="direct">Registro direto</option><option value="ro">R.O.</option><option value="receiving">Recebimento / inspeção</option><option value="audit">Auditoria</option><option value="process">Processo interno</option><option value="other">Outra</option></select></label>
-      <label id="admModSupplierWrap" class="hidden"><span class="small">Fornecedor *</span><input id="admModSupplier" placeholder="Nome do fornecedor"></label>
-      <label><span class="small">R.O. relacionada (opcional)</span><input id="admModRelatedRo" placeholder="Ex.: RO-IN-00476"></label>
-      <div id="admModRncOpening" class="hidden" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:16px;border:1px solid #d9e1ee;border-radius:14px;background:#fff">
-        <div style="grid-column:1/-1"><b>Abertura da RNC — preenchimento SGQ</b><div class="small">Campos baseados no padrão FOR-COR-QUA-0003. Preencha apenas o relato e a identificação do problema.</div></div>
+
+      <label><span class="small">Origem</span>
+        <select id="admModNcOrigin">
+          <option value="direct">Registro direto</option>
+          <option value="ro">R.O.</option>
+          <option value="receiving">Recebimento / inspeção</option>
+          <option value="audit">Auditoria</option>
+          <option value="process">Processo interno</option>
+          <option value="other">Outra</option>
+        </select>
+      </label>
+
+      <label><span class="small">R.O. vinculada (opcional)</span><input id="admModRelatedRo" placeholder="Ex.: RO-IN-00476"></label>
+
+      <!-- ==========================================================
+           RNC DE FORNECEDOR — SOMENTE O QUE O SGQ PREENCHE
+           Nº da RNC, data de abertura e tipo são automáticos.
+           ========================================================== -->
+      <div id="admModRncOpening" class="hidden" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+
+        <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center">IDENTIFICAÇÃO</div>
+
         <label><span class="small">Responsável pela identificação</span><input id="admModRncReporter" placeholder="Quem identificou / registrou"></label>
         <label><span class="small">Turno</span><input id="admModRncShift" placeholder="Ex.: 1º turno"></label>
         <label><span class="small">Supervisor da área</span><input id="admModRncSupervisor" placeholder="Supervisor"></label>
         <label><span class="small">Gerente da área</span><input id="admModRncManager" placeholder="Gerente"></label>
+
+        <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">BLOQUEIO</div>
+
+        <label><span class="small">Fornecedor *</span><input id="admModSupplier" placeholder="Nome do fornecedor"></label>
         <label><span class="small">Nota Fiscal</span><input id="admModRncInvoice" placeholder="Nº da NF"></label>
         <label><span class="small">Data da emissão</span><input id="admModRncIssueDate" type="date"></label>
-        <label><span class="small">Intervalo / identificação do bloqueio</span><input id="admModRncBlockRange" placeholder="Lote, período ou intervalo"></label>
-        <label><span class="small">Área responsável pelo bloqueio</span><input id="admModRncBlockArea" placeholder="Área / setor"></label>
         <label><span class="small">Código do produto</span><input id="admModRncProductCode" placeholder="Código"></label>
+        <label><span class="small">Quantidade não conforme</span><input id="admModRncQuantity" placeholder="Quantidade e unidade"></label>
         <label><span class="small">Produto / descrição</span><input id="admModRncProduct" placeholder="Produto ou matéria-prima"></label>
         <label><span class="small">Dimensões / especificação</span><input id="admModRncDimensions" placeholder="Quando aplicável"></label>
-        <label><span class="small">Quantidade bloqueada / não conforme</span><input id="admModRncQuantity" placeholder="Quantidade e unidade"></label>
+        <label><span class="small">Área responsável pelo bloqueio</span><input id="admModRncBlockArea" placeholder="Área / setor"></label>
         <label><span class="small">Disposição</span><input id="admModRncDisposition" placeholder="Ex.: devolução, segregação, retrabalho..."></label>
+
+        <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">DESVIO EVIDENCIADO / DESCRIÇÃO</div>
+
         <label style="grid-column:1/-1"><span class="small">Desvio evidenciado — resumo</span><textarea id="admModRncSummary" placeholder="Resumo curto do problema"></textarea></label>
         <label style="grid-column:1/-1"><span class="small">Descrição detalhada da ocorrência</span><textarea id="admModRncDetailedDescription" placeholder="Relate objetivamente o problema encontrado"></textarea></label>
+
+        <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">EFEITO DO DESVIO</div>
+
         <label style="grid-column:1/-1"><span class="small">Efeito observado / impacto do desvio</span><textarea id="admModRncEffect" placeholder="Informe o efeito ou impacto observado"></textarea></label>
-        ${rncPhotoInputsHtml()}
+
+        <div style="grid-column:1/-1;padding:10px 12px;background:#1f4e78;color:#fff;border-radius:8px;font-weight:700;text-align:center;margin-top:4px">REGISTRO FOTOGRÁFICO</div>
+        <div style="grid-column:1/-1">${rncPhotoInputsHtml()}</div>
       </div>
-      <div id="admModRncSupplierResponse" class="hidden" style="grid-column:1/-1;padding:16px;border:1px dashed #cbd5e1;border-radius:14px;background:#fafcff">
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><b>Resposta do fornecedor</b><div class="small">Opcional. Registre somente o que o fornecedor efetivamente devolveu.</div></div><select id="admModRncResponseStatus" style="max-width:220px"><option value="none">Sem resposta</option><option value="partial">Resposta parcial</option><option value="complete">Resposta completa</option></select></div>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-          <label style="grid-column:1/-1"><span class="small">Ações imediatas informadas</span><textarea id="admModRncImmediateActions"></textarea></label>
-          <label style="grid-column:1/-1"><span class="small">Identificação / investigação da causa</span><textarea id="admModRncCause"></textarea></label>
-          <label style="grid-column:1/-1"><span class="small">5 Porquês / análise apresentada</span><textarea id="admModRncFiveWhys"></textarea></label>
-          <label style="grid-column:1/-1"><span class="small">Conclusão do fornecedor</span><textarea id="admModRncSupplierConclusion"></textarea></label>
-          <label style="grid-column:1/-1"><span class="small">Ações corretivas / preventivas</span><textarea id="admModRncCorrectiveActions"></textarea></label>
-          <label style="grid-column:1/-1"><span class="small">Verificação de eficácia / retorno</span><textarea id="admModRncEffectiveness"></textarea></label>
-        </div>
+
+      <!-- ==========================================================
+           NC INTERNA — CAMPOS PRÓPRIOS DA NC INTERNA
+           ========================================================== -->
+      <div id="admModNcInternalFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+        <label><span class="small">Processo / requisito / fonte</span><input id="admModCode" placeholder="Processo, requisito, norma ou fonte"></label>
+        <label><span class="small">Unidade</span><input id="admModLocation" placeholder="Unidade"></label>
+        <label><span class="small">Setor responsável</span><input id="admModSector" placeholder="Setor responsável"></label>
+        <label><span class="small">Responsável</span><input id="admModResponsible" placeholder="Responsável pelo tratamento"></label>
+        <label><span class="small">Prazo</span><input id="admModDueDate" type="date"></label>
+        ${commonStatus}
+        <label><span class="small">Gravidade</span><select id="admModSeverity"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></label>
+        <label><span class="small">CAPA vinculada?</span><select id="admModCapa"><option value="no">Não</option><option value="yes">Sim</option></select></label>
+        <label style="grid-column:1/-1"><span class="small">Descrição objetiva da não conformidade</span><textarea id="admModDescription" placeholder="Descreva o desvio..."></textarea></label>
+        <label style="grid-column:1/-1"><span class="small">Contenção / ação / evidência</span><textarea id="admModAction" placeholder="Contenção, ação e evidências..."></textarea></label>
       </div>
-      <label><span class="small">Processo / requisito / fonte</span><input id="admModCode" placeholder="Processo, requisito, norma ou fonte"></label>
-      <label><span class="small">Unidade</span><input id="admModLocation" placeholder="Unidade"></label>
-      <label><span class="small">Setor responsável</span><input id="admModSector" placeholder="Setor responsável"></label>
-      <label><span class="small">Responsável</span><input id="admModResponsible" placeholder="Responsável pelo tratamento"></label>
-      <label><span class="small">Prazo</span><input id="admModDueDate" type="date"></label>
-      ${commonStatus}
-      <label><span class="small">Gravidade</span><select id="admModSeverity"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></label>
-      <label><span class="small">CAPA vinculada?</span><select id="admModCapa"><option value="no">Não</option><option value="yes">Sim</option></select></label>
-      <label style="grid-column:1/-1"><span class="small">Descrição objetiva da não conformidade</span><textarea id="admModDescription" placeholder="Descreva o desvio..."></textarea></label>
-      <label style="grid-column:1/-1"><span class="small">Contenção / ação / evidência</span><textarea id="admModAction" placeholder="Contenção imediata, ação corretiva/preventiva e evidências..."></textarea></label>`,
+    `,
     documents:`
       <label><span class="small">Documento solicitado *</span>
         <select id="admModCode">
@@ -15708,10 +15741,8 @@ function renderRncSendWorkspaceList(records){
 }
 function updateNcCapaFormType(){
   const type=String(document.getElementById('admModNcType')?.value||'internal');
-  document.getElementById('admModSupplierWrap')?.classList.toggle('hidden',type!=='supplier');
-  document.getElementById('admModRncNumberWrap')?.classList.toggle('hidden',type!=='supplier');
   document.getElementById('admModRncOpening')?.classList.toggle('hidden',type!=='supplier');
-  document.getElementById('admModRncSupplierResponse')?.classList.toggle('hidden',type!=='supplier');
+  document.getElementById('admModNcInternalFields')?.classList.toggle('hidden',type==='supplier');
 }
 function nextRncNumber(){
   const year=new Date().getFullYear();
@@ -15730,16 +15761,21 @@ function collectAdminModuleForm(key,existing){
     id:existing?.id||('ADM-'+key.toUpperCase()+'-'+Date.now()),
     module:key,
     ncType:val('admModNcType')||(existing?.ncType||''),
-    rncNumber:val('admModRncNumber')||(existing?.rncNumber||''),
+    rncNumber:(existing?.rncNumber||''),
     ncOrigin:val('admModNcOrigin')||(existing?.ncOrigin||''),
     supplier:val('admModSupplier')||(existing?.supplier||''),
     relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     rncReporter:val('admModRncReporter'), rncShift:val('admModRncShift'), rncSupervisor:val('admModRncSupervisor'), rncManager:val('admModRncManager'),
-    rncInvoice:val('admModRncInvoice'), rncIssueDate:document.getElementById('admModRncIssueDate')?val('admModRncIssueDate'):(existing?.rncIssueDate||''), rncBlockRange:val('admModRncBlockRange'), rncBlockArea:val('admModRncBlockArea'),
-    rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'), rncDisposition:document.getElementById('admModRncDisposition')?val('admModRncDisposition'):(existing?.rncDisposition||''),
-    rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'), rncResponseStatus:val('admModRncResponseStatus'),
-    rncImmediateActions:val('admModRncImmediateActions')||val('admModAction'), rncCause:val('admModRncCause'), rncFiveWhys:val('admModRncFiveWhys'), rncSupplierConclusion:val('admModRncSupplierConclusion'),
-    rncCorrectiveActions:val('admModRncCorrectiveActions'), rncEffectiveness:val('admModRncEffectiveness'), rncPhotos:(()=>{const fresh=collectRncPhotos(),oldPhotos=(existing&&existing.rncPhotos&&typeof existing.rncPhotos==='object')?existing.rncPhotos:{};const merged={...oldPhotos};Object.keys(fresh||{}).forEach(k=>{const a=Array.isArray(fresh[k])?fresh[k]:[];const old=Array.isArray(oldPhotos[k])?oldPhotos[k]:[];const all=[...old,...a],seen=new Set();merged[k]=all.filter(x=>{const sig=typeof x==='string'?x:String(x?.fileId||x?.dataUrl||x?.url||'');if(!sig||seen.has(sig))return false;seen.add(sig);return true})});return merged})(),
+    rncInvoice:val('admModRncInvoice'), rncIssueDate:val('admModRncIssueDate'), rncBlockRange:(existing?.rncBlockRange||''), rncBlockArea:val('admModRncBlockArea'),
+    rncProductCode:val('admModRncProductCode'), rncProduct:val('admModRncProduct'), rncDimensions:val('admModRncDimensions'), rncQuantity:val('admModRncQuantity'), rncDisposition:val('admModRncDisposition'),
+    rncSummary:val('admModRncSummary')||val('admModDescription'), rncDetailedDescription:val('admModRncDetailedDescription')||val('admModDescription'), rncEffect:val('admModRncEffect'),
+    rncResponseStatus:(existing?.rncResponseStatus||'none'),
+    rncImmediateActions:(existing?.rncImmediateActions||''),
+    rncCause:(existing?.rncCause||''),
+    rncFiveWhys:(existing?.rncFiveWhys||''),
+    rncSupplierConclusion:(existing?.rncSupplierConclusion||''),
+    rncCorrectiveActions:(existing?.rncCorrectiveActions||''),
+    rncEffectiveness:(existing?.rncEffectiveness||''), rncPhotos:(()=>{const fresh=collectRncPhotos(),oldPhotos=(existing&&existing.rncPhotos&&typeof existing.rncPhotos==='object')?existing.rncPhotos:{};const merged={...oldPhotos};Object.keys(fresh||{}).forEach(k=>{const a=Array.isArray(fresh[k])?fresh[k]:[];if(a.length)merged[k]=a;else if(!Array.isArray(merged[k]))merged[k]=[]});return merged})(),
     title:val('admModTitle'),
     code:val('admModCode'),
     location:val('admModLocation'),
@@ -15769,14 +15805,12 @@ function collectAdminModuleForm(key,existing){
     updatedBy:getSession()?.name||'SGQ'
   };
 }
-async function saveAdminOperationalRecord(key,id){
+function saveAdminOperationalRecord(key,id){
   const existing=id?adminModuleRecord(id):null;
-  if(key==='nccapa'){try{await waitRncPhotoProcessing()}catch(e){hideNucleoLoading();return}}
   const r=collectAdminModuleForm(key,existing);
   if(!r.title){alert('Informe o título/nome principal do registro.');return}
   if(key==='nccapa'&&r.ncType==='supplier'){
     if(!r.supplier){alert('Informe o fornecedor da RNC.');return}
-    if(!r.rncIssueDate){alert('Informe a Data da emissão da RNC.');return}
     if(!r.rncNumber)r.rncNumber=nextRncNumber();
   }
   if(key==='documents'&&!r.code){alert('Selecione o documento solicitado.');return}
@@ -15888,22 +15922,7 @@ async function sendRncEmailNow(){
   }
   const submitted=portalPostForm({acao:'portal_send_rnc_email',id,email:supplierEmail,cc,replyTo,subject,message,html,docHtml,formato:'both',eventoId:eventId,ator:getSession()?.name||'SGQ'});
   if(!submitted){hideNucleoLoading();btn.disabled=false;st.textContent='Não foi possível iniciar o envio.';return}
-  let result=null;
-  const inicioEspera=Date.now(),limiteEspera=120000;
-  while(!result && (Date.now()-inicioEspera)<limiteEspera){
-    await new Promise(res=>setTimeout(res,1500));
-    try{
-      const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);
-      if(chk?.sucesso){
-        if(chk.status==='sent'||chk.status==='error') result=chk;
-        else {
-          const segundos=Math.max(1,Math.round((Date.now()-inicioEspera)/1000));
-          st.textContent='Enviando RNC... '+segundos+'s';
-          updateNucleoLoading('Gerando PDF e documento editável... '+segundos+'s');
-        }
-      }
-    }catch(e){}
-  }
+  let result=null;for(let i=0;i<12&&!result;i++){await new Promise(res=>setTimeout(res,i?1000:700));try{const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);if(chk?.sucesso&&chk?.status&&chk.status!=='processing')result=chk}catch(e){}}
   hideNucleoLoading();btn.disabled=false;
   if(!result||result.status!=='sent'){st.textContent='O envio não foi confirmado.'+(result?.erro?' '+result.erro:'');return}
   const done={...updated,rncEmailStatus:'sent',rncEmailSentAt:result.at||new Date().toISOString(),rncEmailTo:supplierEmail,rncEmailCc:cc};all=getAdminModuleRecords();ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=done;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,done);st.textContent='RNC enviada com sucesso.';setTimeout(()=>{ov.classList.add('hidden');openRncSuccessModal(done,'RNC enviada com sucesso.');},650);
@@ -15953,17 +15972,12 @@ function normalizeRncTemplate(t){
   // Migração v4: remove a célula fantasma legado "@A" que podia surgir antes
   // do PORQUÊ 1 e normaliza os cinco campos dos 5 Porquês para ocupar 100% da linha.
   if(Number(src.gridVersion||0)<4){fieldLayout=fieldLayout.filter(x=>!(x.section==='fivewhys'&&String(x.source||'')==='@A'));const whys=fieldLayout.filter(x=>x.section==='fivewhys');if(whys.length===5)whys.forEach(x=>{x.width=20;x.row=1})}
-  // Migração v5: alguns modelos salvos tinham a célula "Disposição" presa como texto
-  // fixo @—. Isso ignorava rncDisposition mesmo quando o valor estava salvo na RNC.
-  // Corrige somente a célula identificada como Disposição; textos fixos intencionais
-  // em outros campos continuam intactos.
-  if(Number(src.gridVersion||0)<5){fieldLayout=fieldLayout.map(x=>{const rotulo=normalizeAnswer(x.label||'');if(x.section==='blocking'&&rotulo==='disposicao'&&String(x.source||'').startsWith('@'))return {...x,source:'rncDisposition'};return x;});}
   // Migração v2: nos modelos salvos antes do rodapé real, as três assinaturas podiam
   // continuar marcadas como fornecedor e por isso apareciam no meio da página 2.
   if(Number(src.ownershipVersion||0)<2){fieldLayout=fieldLayout.map(x=>x.section==='signatures'?{...x,owner:'footer'}:x);const sig=sections.find(x=>x.id==='signatures');if(sig)sig.owner='footer';}
   let headerLayout=Array.isArray(src.headerLayout)&&src.headerLayout.length?src.headerLayout.map(x=>({...x})):defaultRncHeaderLayout();
   if(!headerLayout.some(x=>x.source==='@logo')){headerLayout=headerLayout.map(x=>({...x,row:(Number(x.row)||1)+2}));headerLayout.unshift({id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},{id:'h-system',row:1,label:'',value:'SISTEMA DE GESTÃO INTEGRADO',source:'@SISTEMA DE GESTÃO INTEGRADO',width:80,height:13,align:'center',bold:true},{id:'h-form',row:2,label:'',value:'FORMULÁRIO DE REGISTRO',source:'@FORMULÁRIO DE REGISTRO',width:100,height:6,align:'center',bold:false});}
-  return {...d,...src,gridVersion:5,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
+  return {...d,...src,gridVersion:4,ownershipVersion:2,layout,sections,headerLayout,logoDataUrl:String(src.logoDataUrl||''),fixedImages:Array.isArray(src.fixedImages)?src.fixedImages:[],photoFields:Array.isArray(src.photoFields)&&src.photoFields.length?src.photoFields:d.photoFields,fieldLayout};
 }
 function getProcessTemplates(){
   try{const a=JSON.parse(localStorage.getItem(PROCESS_TEMPLATE_KEY)||'[]');if(Array.isArray(a)&&a.length)return a.map(x=>x.kind==='RNC'?normalizeRncTemplate(x):x)}catch(e){}
@@ -15989,9 +16003,7 @@ function removeRncPhotoField(i){const a=getTplJson('tplPhotoFieldsData');a.splic
 function rncTemplateMediaPreview(t){const fixed=(t.fixedImages||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555;text-align:center"><div style="font-size:7px;font-weight:700;margin-bottom:4px">${escapeHtml(x.label||'IMAGEM')}</div><img src="${x.dataUrl}" style="max-width:90%;max-height:70px;object-fit:contain"></div>`).join('');const photos=(t.photoFields||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555"><b style="font-size:8px">${escapeHtml(x.label)}</b><div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(x.maxPhotos)||4)},1fr);gap:4px;margin-top:6px">${Array.from({length:Math.min(4,Number(x.maxPhotos)||4)},()=>'<div style="height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div></div>`).join('');return fixed+photos}
 function rncPhotoInputsHtml(){const t=getRncProcessTemplate();return (t.photoFields||[]).map(f=>`<div style="grid-column:1/-1;border:1px solid #d9e1ee;border-radius:12px;padding:12px"><b>${escapeHtml(f.label)}</b><div class="small">Até ${Number(f.maxPhotos)||4} foto(s)${f.required?' · obrigatório':''}. Elas entram automaticamente no PDF.</div><input type="file" accept="image/*" multiple data-rnc-photo-field="${escapeHtml(f.id)}" data-max="${Number(f.maxPhotos)||4}" style="margin-top:8px"><input type="hidden" id="rncPhotos_${escapeHtml(f.id)}" value="[]"></div>`).join('')}
 function collectRncPhotos(){const out={};document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField;const hidden=document.getElementById('rncPhotos_'+id);try{out[id]=JSON.parse(hidden?.value||'[]')}catch(e){out[id]=[]}});return out}
-const RNC_PHOTO_PENDING=new Set();
-async function waitRncPhotoProcessing(){if(!RNC_PHOTO_PENDING.size)return;showNucleoLoading('Processando fotos da RNC...');await Promise.all([...RNC_PHOTO_PENDING]);}
-function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=(msg='')=>{if(msg){info.textContent=msg;return}let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) anexada(s) nesta RNC.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=()=>{const task=(async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];updateInfo('Processando foto(s)...');for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()})().catch(e=>{inp.value='';updateInfo();alert('Não foi possível processar uma das fotos: '+(e?.message||e));throw e});RNC_PHOTO_PENDING.add(task);task.finally(()=>RNC_PHOTO_PENDING.delete(task));}})}
+function bindRncPhotoInputs(existing={}){document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);let saved=Array.isArray(existing[id])?existing[id]:[];if(h)h.value=JSON.stringify(saved);let info=inp.parentElement?.querySelector('[data-rnc-photo-info]');if(!info){info=document.createElement('div');info.dataset.rncPhotoInfo='1';info.className='small';info.style.marginTop='6px';inp.insertAdjacentElement('afterend',info)}const updateInfo=()=>{let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}info.textContent=a.length?`${a.length} foto(s) já armazenada(s) nesta RNC. Selecione novas fotos apenas para acrescentar.`:'Nenhuma foto armazenada ainda.'};updateInfo();inp.onchange=async()=>{const max=Number(inp.dataset.max)||4;let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}const files=[...(inp.files||[])];for(const f of files){if(arr.length>=max)break;if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}arr.push(await compressRncPhoto(f))}if(h)h.value=JSON.stringify(arr.slice(0,max));inp.value='';updateInfo()}})}
 function compressRncPhoto(file){return new Promise((resolve,reject)=>{const rd=new FileReader();rd.onload=()=>{const im=new Image();im.onload=()=>{const max=900,scale=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(im.width*scale));c.height=Math.max(1,Math.round(im.height*scale));c.getContext('2d').drawImage(im,0,0,c.width,c.height);resolve(c.toDataURL('image/jpeg',.65))};im.onerror=reject;im.src=rd.result};rd.onerror=reject;rd.readAsDataURL(file)})}
 function defaultRncHeaderLayout(){return [
 {id:'h-logo',row:1,label:'',value:'',source:'@logo',width:20,height:13,align:'center',bold:true},
@@ -16343,8 +16355,8 @@ function editAdminOperationalRecord(id){
     </div>
   </div>`;
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
-  set('admModNcType',r.ncType||'internal');set('admModRncNumber',r.rncNumber);set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
-  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncInvoice','rncInvoice'],['admModRncIssueDate','rncIssueDate'],['admModRncBlockRange','rncBlockRange'],['admModRncBlockArea','rncBlockArea'],['admModRncProductCode','rncProductCode'],['admModRncProduct','rncProduct'],['admModRncDimensions','rncDimensions'],['admModRncQuantity','rncQuantity'],['admModRncDisposition','rncDisposition'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect'],['admModRncResponseStatus','rncResponseStatus'],['admModRncImmediateActions','rncImmediateActions'],['admModRncCause','rncCause'],['admModRncFiveWhys','rncFiveWhys'],['admModRncSupplierConclusion','rncSupplierConclusion'],['admModRncCorrectiveActions','rncCorrectiveActions'],['admModRncEffectiveness','rncEffectiveness']].forEach(([id,k])=>set(id,r[k]));
+  set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
+  [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncInvoice','rncInvoice'],['admModRncIssueDate','rncIssueDate'],['admModRncBlockArea','rncBlockArea'],['admModRncProductCode','rncProductCode'],['admModRncProduct','rncProduct'],['admModRncDimensions','rncDimensions'],['admModRncQuantity','rncQuantity'],['admModRncDisposition','rncDisposition'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
   bindRncPhotoInputs(r.rncPhotos||{});
   set('admModTitle',r.title);set('admModCode',r.code);set('admModLocation',r.location);set('admModSector',r.sector);
   set('admModResponsible',r.responsible);set('admModEventDate',r.eventDate);set('admModDueDate',r.dueDate);set('admModStatus',r.status);
