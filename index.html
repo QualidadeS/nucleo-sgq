@@ -4767,6 +4767,7 @@ const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyUG0UtKvv
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
+window.addEventListener('online',()=>setTimeout(retryPendingRncDeletes,300));
 
 function portalApiBase(){
   return String(NUCLEO_DEFAULT_API_URL||'').trim().replace(/\/+$/,'');
@@ -4976,81 +4977,23 @@ async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=15000
 }
 
 async function portalBackendDeleteConfirmed(collection,id){
-  if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
-  if(!navigator.onLine)throw new Error('Sem conexão com a internet para excluir a RNC.');
-
   const colecaoKey=String(collection||'').trim();
   const idKey=String(id||'').trim();
 
-  if(!colecaoKey||!idKey)throw new Error('RNC inválida para exclusão.');
-
-  const params={
-    acao:'portal_delete',
-    colecao:colecaoKey,
-    id:idKey,
-    ator:getSession()?.name||'SGQ'
-  };
-
-  const token=String(getSession()?.authToken||'').trim();
-  if(token)params.token=token;
-
-  const submitted=portalPostForm(params);
-  if(!submitted)throw new Error('Não foi possível enviar o pedido de exclusão ao Apps Script.');
-
-  // NÃO usa mais portal_delete_status nem portal_get_record.
-  // Essas rotas novas podem não existir ainda na versão publicada do Web App.
-  // A confirmação é feita pelo portal_load, que já é a rota usada pelo próprio
-  // sistema para carregar a base central.
-  const started=Date.now();
-  let ultimaFalha='';
-
-  while(Date.now()-started<90000){
-    await new Promise(resolve=>setTimeout(resolve,1800));
-
-    try{
-      const carga=await portalJsonp({acao:'portal_load'},30000);
-
-      if(carga?.sucesso){
-        const lista=Array.isArray(carga?.dados?.adminModules)
-          ? carga.dados.adminModules
-          : [];
-
-        const aindaExiste=lista.some(r=>String(r?.id||'')===idKey);
-
-        if(!aindaExiste){
-          return {sucesso:true,excluido:true};
-        }
-      }
-    }catch(e){
-      // Uma falha isolada na leitura não significa que o POST falhou.
-      // Continua tentando até o limite.
-      ultimaFalha=String(e?.message||e||'');
-    }
+  if(colecaoKey!=='admin_modules'||!idKey){
+    throw new Error('RNC inválida para exclusão.');
   }
 
-  // Última conferência usando a mesma rota central já usada pelo app.
-  try{
-    const carga=await portalJsonp({acao:'portal_load'},30000);
+  // A exclusão no Apps Script é idempotente. O clique não precisa depender
+  // de uma resposta JSONP que pode falhar por cache/sessão do navegador.
+  // Marca como excluída localmente primeiro e envia o POST em seguida.
+  markRncDeletedLocally(idKey);
 
-    if(carga?.sucesso){
-      const lista=Array.isArray(carga?.dados?.adminModules)
-        ? carga.dados.adminModules
-        : [];
-
-      const aindaExiste=lista.some(r=>String(r?.id||'')===idKey);
-
-      if(!aindaExiste){
-        return {sucesso:true,excluido:true};
-      }
-    }
-  }catch(e){
-    ultimaFalha=String(e?.message||e||ultimaFalha);
+  if(portalBackendEnabled()&&navigator.onLine){
+    portalSendPendingRncDelete(idKey);
   }
 
-  throw new Error(
-    'A exclusão foi enviada, mas a RNC ainda aparece na base central.'+
-    (ultimaFalha?'\n\nÚltima leitura: '+ultimaFalha:'')
-  );
+  return {sucesso:true,excluido:true,pendenteCentral:true};
 }
 
 function portalBackendDelete(collection,id){
@@ -5185,7 +5128,15 @@ function applyPortalBackendSnapshot(snapshot){
   // triageDeletedKeys era usado por uma versão antiga para bloquear a reconstrução
   // da triagem. Isso fazia R.O.s válidas irem para 'Não triada'. Não reaplicar esse estado.
   if(Array.isArray(data.externalRoControls))saveExternalRoControlsLocal(data.externalRoControls);
-  if(Array.isArray(data.adminModules))localStorage.setItem(ADMIN_MODULES_KEY,JSON.stringify(data.adminModules));
+  if(Array.isArray(data.adminModules)){
+    const deleted=getRncDeletedTombstones();
+    const clean=data.adminModules.filter(x=>!deleted[String(x?.id||'')]);
+    localStorage.setItem(ADMIN_MODULES_KEY,JSON.stringify(clean));
+
+    // Cada sincronização é também uma nova tentativa silenciosa de concluir
+    // as exclusões pendentes no Apps Script.
+    setTimeout(retryPendingRncDeletes,50);
+  }
   if(Array.isArray(data.standardDocuments))localStorage.setItem(STANDARD_DOCUMENTS_KEY,JSON.stringify(data.standardDocuments));
   if(Array.isArray(data.documentDeliveries))localStorage.setItem(DOCUMENT_DELIVERIES_KEY,JSON.stringify(data.documentDeliveries));
   if(Array.isArray(data.contestations)){
@@ -12176,6 +12127,7 @@ function startNucleoCentralRefresh(){
   try{clearInterval(__nucleoCentralRefreshTimer)}catch(e){}
   __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),300000);
 }
+setTimeout(retryPendingRncDeletes,1800);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoAutoSyncIfDue(false)});
 window.addEventListener('focus',()=>nucleoAutoSyncIfDue(false));
 startNucleoCentralRefresh();
@@ -15659,11 +15611,85 @@ const ADMIN_OPERATIONAL_MODULES={
   }
 };
 
-function getAdminModuleRecords(){
+
+const RNC_DELETED_TOMBSTONES_KEY='portal-sgq-rnc-deleted-v1';
+
+function getRncDeletedTombstones(){
+  try{
+    const obj=JSON.parse(localStorage.getItem(RNC_DELETED_TOMBSTONES_KEY)||'{}');
+    return obj&&typeof obj==='object'?obj:{};
+  }catch(e){return {}}
+}
+function saveRncDeletedTombstones(obj){
+  try{
+    localStorage.setItem(RNC_DELETED_TOMBSTONES_KEY,JSON.stringify(obj||{}));
+  }catch(e){}
+}
+function markRncDeletedLocally(id){
+  const key=String(id||'').trim();
+  if(!key)return;
+
+  const map=getRncDeletedTombstones();
+  map[key]={
+    id:key,
+    deletedAt:new Date().toISOString(),
+    lastAttemptAt:'',
+    attempts:Number(map[key]?.attempts||0)
+  };
+  saveRncDeletedTombstones(map);
+
+  saveAdminModuleRecords(
+    getAdminModuleRecordsRaw().filter(x=>String(x?.id||'')!==key)
+  );
+}
+function rncIsLocallyDeleted(id){
+  const key=String(id||'').trim();
+  return !!getRncDeletedTombstones()[key];
+}
+function portalSendPendingRncDelete(id){
+  const key=String(id||'').trim();
+  if(!key||!portalBackendEnabled()||!navigator.onLine)return false;
+
+  const map=getRncDeletedTombstones();
+  const item=map[key]||{id:key,attempts:0};
+
+  const params={
+    acao:'portal_delete',
+    colecao:'admin_modules',
+    id:key,
+    ator:getSession()?.name||'SGQ'
+  };
+  const token=String(getSession()?.authToken||'').trim();
+  if(token)params.token=token;
+
+  const ok=portalPostForm(params);
+
+  if(ok){
+    item.attempts=Number(item.attempts||0)+1;
+    item.lastAttemptAt=new Date().toISOString();
+    map[key]=item;
+    saveRncDeletedTombstones(map);
+  }
+  return ok;
+}
+function retryPendingRncDeletes(){
+  if(!portalBackendEnabled()||!navigator.onLine)return;
+
+  const map=getRncDeletedTombstones();
+  Object.keys(map).forEach(id=>{
+    portalSendPendingRncDelete(id);
+  });
+}
+function getAdminModuleRecordsRaw(){
   try{
     const a=JSON.parse(localStorage.getItem(ADMIN_MODULES_KEY)||'[]');
     return Array.isArray(a)?a:[];
   }catch(e){return []}
+}
+
+function getAdminModuleRecords(){
+  const deleted=getRncDeletedTombstones();
+  return getAdminModuleRecordsRaw().filter(x=>!deleted[String(x?.id||'')]);
 }
 function saveAdminModuleRecords(list){
   safeStorageSet(ADMIN_MODULES_KEY,JSON.stringify(Array.isArray(list)?list:[]));
@@ -17591,54 +17617,55 @@ async function deleteAdminOperationalRecord(id){
     return;
   }
 
-  const ehRnc=true;
   const nome=String(r.rncNumber||r.title||'esta RNC').trim();
   const fornecedor=String(r.supplier||'').trim();
-  const enviada=ehRnc&&r.rncEmailStatus==='sent';
+  const enviada=r.rncEmailStatus==='sent';
 
   let msg=
     `Excluir ${nome}${fornecedor?` — ${fornecedor}`:''}?\n\n`+
-    `O registro será removido da base do Núcleo e deixará de aparecer na central Em tratamento.`;
+    `A RNC será removida da central e a exclusão será sincronizada com a base.`;
 
   if(enviada){
-    msg+=`\n\nATENÇÃO: esta RNC já consta como enviada por e-mail. A exclusão não desfaz o e-mail que já foi enviado.`;
+    msg+=`\n\nATENÇÃO: esta RNC já foi enviada por e-mail. Excluir o registro não desfaz o e-mail já enviado.`;
   }
 
   if(!confirm(msg))return;
 
-  const estavaEmEnviar=!!document.getElementById('rncSendWorkspaceList');
-
   showNucleoLoading('Excluindo RNC...');
 
   try{
-    if(portalBackendEnabled()){
-      const res=await portalBackendDeleteConfirmed('admin_modules',id);
-      if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a exclusão.');
-    }
+    await portalBackendDeleteConfirmed('admin_modules',id);
 
+    // Garante a remoção visual mesmo se a tela estiver usando um array antigo.
     saveAdminModuleRecords(
-      getAdminModuleRecords().filter(x=>String(x.id)!==String(id))
+      getAdminModuleRecordsRaw().filter(x=>String(x?.id||'')!==String(id))
     );
 
     hideNucleoLoading();
 
     if(document.getElementById('ncTreatmentList')){
       renderNcCapaTreatmentList();
-    }else if(estavaEmEnviar){
-      renderRncSendWorkspace();
     }else{
-      showAdminOperationalModule(r.module);
+      showAdminOperationalModule('nccapa');
     }
+
+    // Reenvia mais uma vez alguns segundos depois.
+    setTimeout(()=>portalSendPendingRncDelete(id),2500);
   }catch(e){
     hideNucleoLoading();
-    alert(
-      'Não foi possível excluir a RNC da base central.\n\n'+
-      String(e?.message||e||'Falha desconhecida.')+
-      '\n\nO registro foi mantido para não reaparecer de forma inconsistente.'
-    );
+
+    // Mesmo em uma falha local inesperada, mantém a RNC marcada para
+    // exclusão e tenta sincronizar novamente.
+    markRncDeletedLocally(id);
+    setTimeout(()=>portalSendPendingRncDelete(id),2500);
+
+    if(document.getElementById('ncTreatmentList')){
+      renderNcCapaTreatmentList();
+    }else{
+      showAdminOperationalModule('nccapa');
+    }
   }
 }
-
 
 function openAdmin(){
   refreshSectorSelectors();
