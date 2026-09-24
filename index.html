@@ -4981,73 +4981,36 @@ async function portalBackendDeleteConfirmed(collection,id){
 
   const colecaoKey=String(collection||'').trim();
   const idKey=String(id||'').trim();
+
   if(!colecaoKey||!idKey)throw new Error('Registro inválido para exclusão.');
 
-  // IMPORTANTE:
-  // portal_delete existe no doPost do Apps Script. Não deve ser chamado por JSONP/GET.
-  // A versão anterior tentava executar portal_delete via GET e o navegador acabava
-  // recebendo uma resposta que não era JavaScript, gerando o erro de "retorno do login".
-  const params={
-    acao:'portal_delete',
+  // Exclusão confirmada em uma única chamada.
+  // A própria resposta só volta depois que o Apps Script marcou o registro
+  // como inativo na base e tratou os arquivos vinculados.
+  const res=await portalJsonp({
+    acao:'portal_delete_confirmed',
     colecao:colecaoKey,
     id:idKey,
-    ator:getSession()?.name||'Sistema'
-  };
+    ator:getSession()?.name||'SGQ'
+  },90000);
 
-  const token=String(getSession()?.authToken||'').trim();
-  if(token)params.token=token;
-
-  const submitted=portalPostForm(params);
-  if(!submitted)throw new Error('Não foi possível enviar o pedido de exclusão ao Apps Script.');
-
-  // Confirma pela própria base central: quando portal_get_record devolver null,
-  // a exclusão já foi efetivamente aplicada.
-  const started=Date.now();
-  let ultimoErro='';
-
-  while(Date.now()-started<90000){
-    await new Promise(resolve=>setTimeout(resolve,1200));
-
-    try{
-      const chk=await portalJsonp({
-        acao:'portal_get_record',
-        colecao:colecaoKey,
-        id:idKey
-      },15000);
-
-      if(chk?.sucesso && !chk.registro){
-        return {sucesso:true,excluido:true};
-      }
-
-      if(chk && chk.sucesso===false){
-        ultimoErro=String(chk.erro||'');
-      }
-    }catch(e){
-      // Uma falha isolada de leitura não significa que a exclusão falhou.
-      // Continua tentando até o limite.
-      ultimoErro=String(e?.message||e||'');
-    }
+  if(!res?.sucesso){
+    throw new Error(res?.erro||'A base central não confirmou a exclusão.');
   }
 
-  // Última leitura antes de declarar falha.
-  try{
-    const finalRead=await portalJsonp({
-      acao:'portal_get_record',
-      colecao:colecaoKey,
-      id:idKey
-    },15000);
+  // Confirma também pela leitura normal da coleção.
+  // Registro inativo não pode mais voltar em portal_get_record.
+  const check=await portalJsonp({
+    acao:'portal_get_record',
+    colecao:colecaoKey,
+    id:idKey
+  },20000).catch(()=>null);
 
-    if(finalRead?.sucesso && !finalRead.registro){
-      return {sucesso:true,excluido:true};
-    }
-  }catch(e){
-    ultimoErro=String(e?.message||e||ultimoErro);
+  if(check?.sucesso && check.registro){
+    throw new Error('A base respondeu à exclusão, mas o registro ainda aparece como ativo.');
   }
 
-  throw new Error(
-    'O pedido de exclusão foi enviado, mas a base central ainda devolve este registro.'+
-    (ultimoErro?'\n\nÚltima resposta: '+ultimoErro:'')
-  );
+  return {sucesso:true,excluido:true};
 }
 
 function portalBackendDelete(collection,id){
@@ -15618,13 +15581,12 @@ const ADMIN_OPERATIONAL_MODULES={
     ]
   },
   nccapa:{
-    eyebrow:'NÃO CONFORMIDADES',
-    title:'Não conformidades',
-    desc:'Central única para acompanhar NCs e RNCs. RNC é usada para fornecedor; ocorrências de cliente continuam no fluxo de SAC. CAPA fica apenas como informação/filtro neste momento.',
+    eyebrow:'RNC',
+    title:'RNC de fornecedores',
+    desc:'Central para registrar e acompanhar RNCs de fornecedor. Reclamações de cliente continuam exclusivamente no fluxo de SAC. CAPA fica apenas como informação/filtro neste momento.',
     cards:[
-      ['Nova NC interna','Registrar uma não conformidade interna. O vínculo com R.O. é opcional.','new_internal'],
       ['Nova RNC de fornecedor','Registrar uma RNC de fornecedor. O vínculo com R.O. é opcional.','new_rnc'],
-      ['Em tratamento','Central única para visualizar, filtrar, enviar, acompanhar e excluir NCs/RNCs.','active']
+      ['Em tratamento','Visualizar, filtrar, enviar, acompanhar e excluir RNCs de fornecedor.','active']
     ]
   },
   documents:{
@@ -15829,11 +15791,11 @@ function adminModuleFields(key){
       <label style="grid-column:1/-1"><span class="small">Observações / evidências</span><textarea id="admModDescription" placeholder="Conteúdo, certificado, avaliação de eficácia..."></textarea></label>`,
     nccapa:`
       <div style="grid-column:1/-1;padding:12px 14px;border:1px solid #dbe6ff;background:#f7faff;border-radius:12px">
-        <b>Como o Núcleo trata as NCs</b>
-        <div class="small" style="margin-top:4px">Cliente = SAC (continua no Controle de SAC) • Fornecedor = RNC • Interna = NC interna. RNC e NC interna podem existir sem R.O.</div>
+        <b>RNC de fornecedor</b>
+        <div class="small" style="margin-top:4px">Este módulo é exclusivo para RNC de fornecedor. Reclamações de cliente permanecem no fluxo de SAC. A RNC pode existir com ou sem R.O. vinculada.</div>
       </div>
 
-      <input type="hidden" id="admModNcType" value="internal">
+      <input type="hidden" id="admModNcType" value="supplier">
 
       <label style="grid-column:1/-1"><span class="small">Título do desvio *</span><input id="admModTitle" placeholder="Título do desvio"></label>
 
@@ -15897,7 +15859,7 @@ function adminModuleFields(key){
       <!-- ==========================================================
            NC INTERNA — CAMPOS PRÓPRIOS DA NC INTERNA
            ========================================================== -->
-      <div id="admModNcInternalFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      <div id="admModNcInternalFields" style="display:none!important">
         <label><span class="small">Processo / requisito / fonte</span><input id="admModCode" placeholder="Processo, requisito, norma ou fonte"></label>
         <label><span class="small">Unidade</span><input id="admModLocation" placeholder="Unidade"></label>
         <label><span class="small">Setor responsável</span><input id="admModSector" placeholder="Setor responsável"></label>
@@ -16092,13 +16054,15 @@ function showAdminOperationalModule(key){
         <span style="display:block;color:#1455ff;font-size:12px;margin-top:14px">Abrir operação →</span>
       </button>`).join('')}
     </div>
-    <div class="card" style="padding:20px;display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap">
-      <div><b>Espaço de trabalho</b><p class="muted" style="margin:8px 0 0">Escolha um subtópico acima ou abra um novo registro agora.</p></div>
-      ${key==='nccapa'
-        ? `<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn secondary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova NC interna</button><button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',1)">＋ Nova RNC fornecedor</button></div>`
-        : `<button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>`}
-    </div>
+    ${key==='nccapa'
+      ? `<div id="ncModuleInlineOverview"></div>`
+      : `<div class="card" style="padding:20px;display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap">
+          <div><b>Espaço de trabalho</b><p class="muted" style="margin:8px 0 0">Escolha um subtópico acima ou abra um novo registro agora.</p></div>
+          <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>
+        </div>`}
   </div>`;
+
+  if(key==='nccapa')renderNcCapaHomeOverview();
 }
 function openAdminOperationalWorkspace(key,index){
   const canOpen =
@@ -16135,7 +16099,7 @@ function openAdminOperationalWorkspace(key,index){
     </div>`;
     if(key==='nccapa'){
       const type=document.getElementById('admModNcType');
-      if(type)type.value=mode==='new_rnc'?'supplier':'internal';
+      if(type)type.value='supplier';
       updateNcCapaFormType();
       if(mode==='new_rnc'){
         window.__rncPhotoUploadKey='RNC-TEMP-'+Date.now();
@@ -16164,7 +16128,7 @@ function openAdminOperationalWorkspace(key,index){
     <div class="card" style="margin-top:14px;padding:0;overflow:hidden">
       ${records.length?`<table style="width:100%"><thead><tr><th>${key==='processes'?'Documento interno':key==='documents'?'Solicitação':'Registro'}</th><th>${key==='documents'?'Solicitante / área':'Responsável / área'}</th><th>Prazo</th><th>Status</th><th>Ações</th></tr></thead><tbody>
         ${records.map(r=>`<tr>
-          <td><b>${escapeHtml(key==='nccapa'&&r.rncNumber?(r.rncNumber+' · '+(r.title||'Sem título')):(r.title||'Sem título'))}</b><div class="small">${escapeHtml(key==='nccapa'?(r.ncType==='supplier'?('Fornecedor: '+(r.supplier||'—')+(r.relatedRo?' • R.O.: '+r.relatedRo:'')):('NC interna'+(r.relatedRo?' • R.O.: '+r.relatedRo:''))):(r.code||r.description||''))}</div></td>
+          <td><b>${escapeHtml(key==='nccapa'&&r.rncNumber?(r.rncNumber+' · '+(r.title||'Sem título')):(r.title||'Sem título'))}</b><div class="small">${escapeHtml(key==='nccapa'?('Fornecedor: '+(r.supplier||'—')+(r.relatedRo?' • R.O.: '+r.relatedRo:'')):(r.code||r.description||''))}</div></td>
           <td>${escapeHtml(key==='documents'?(r.createdBy||r.sector||'—'):(r.responsible||r.sector||r.location||'—'))}</td>
           <td>${escapeHtml(adminModuleDate(r.dueDate))}</td>
           <td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td>
@@ -16202,6 +16166,66 @@ function ncCapaCapaLabel(r){
 function ncCapaRecordDate(r){
   return r?.updatedAt||r?.createdAt||r?.eventDate||r?.rncIssueDate||'';
 }
+
+function renderNcCapaHomeOverview(){
+  const host=document.getElementById('ncModuleInlineOverview');if(!host)return;
+
+  host.innerHTML=`<div class="card" style="padding:20px">
+    <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      <div>
+        <b style="font-size:16px">Todas as RNCs</b>
+        <div class="small" style="margin-top:5px">As RNCs de fornecedor ficam expostas aqui. Filtre por CAPA, situação ou envio e use as ações direto na linha.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova RNC fornecedor</button>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:16px">
+      <label><span class="small">CAPA</span>
+        <select id="ncTreatmentCapa" onchange="renderNcCapaTreatmentList()">
+          <option value="all">Todas</option>
+          <option value="yes">Com CAPA</option>
+          <option value="no">Sem CAPA</option>
+        </select>
+      </label>
+
+      <label><span class="small">Situação</span>
+        <select id="ncTreatmentStatus" onchange="renderNcCapaTreatmentList()">
+          <option value="all">Todas</option>
+          <option value="open">Em aberto</option>
+          <option value="done">Concluídas</option>
+        </select>
+      </label>
+
+      <label><span class="small">Envio da RNC</span>
+        <select id="ncTreatmentEmail" onchange="renderNcCapaTreatmentList()">
+          <option value="all">Todos</option>
+          <option value="sent">Enviadas</option>
+          <option value="not_sent">Não enviadas</option>
+        </select>
+      </label>
+
+      <label><span class="small">Organizar</span>
+        <select id="ncTreatmentSort" onchange="renderNcCapaTreatmentList()">
+          <option value="recent">Mais recentes</option>
+          <option value="old">Mais antigas</option>
+          <option value="number">Número / título</option>
+        </select>
+      </label>
+
+      <label style="grid-column:span 2"><span class="small">Buscar</span>
+        <input id="ncTreatmentSearch" placeholder="Número, título, fornecedor, setor, R.O..." oninput="renderNcCapaTreatmentList()">
+      </label>
+    </div>
+
+    <div id="ncTreatmentSummary" class="small" style="margin-top:14px"></div>
+    <div id="ncTreatmentList" style="margin-top:12px"></div>
+  </div>`;
+
+  renderNcCapaTreatmentList();
+}
+
 function renderNcCapaTreatmentWorkspace(){
   const host=document.getElementById('adminModuleContent');if(!host)return;
 
@@ -16212,24 +16236,14 @@ function renderNcCapaTreatmentWorkspace(){
       <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div>
           <h3 style="margin:0">Em tratamento</h3>
-          <div class="small" style="margin-top:5px">Todas as NCs e RNCs ficam nesta central. Use os filtros para separar fornecedor, interna, cliente/SAC, CAPA e situação.</div>
+          <div class="small" style="margin-top:5px">Todas as RNCs ficam nesta central. Use os filtros para separar fornecedor, interna, cliente/SAC, CAPA e situação.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn secondary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova NC interna</button>
-          <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',1)">＋ Nova RNC fornecedor</button>
+            <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova RNC fornecedor</button>
         </div>
       </div>
 
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-top:18px">
-        <label><span class="small">Tipo</span>
-          <select id="ncTreatmentType" onchange="renderNcCapaTreatmentList()">
-            <option value="all">Todos</option>
-            <option value="supplier">RNC fornecedor</option>
-            <option value="internal">NC interna</option>
-            <option value="client">Cliente / SAC</option>
-          </select>
-        </label>
-
         <label><span class="small">CAPA</span>
           <select id="ncTreatmentCapa" onchange="renderNcCapaTreatmentList()">
             <option value="all">Todas</option>
@@ -16259,8 +16273,7 @@ function renderNcCapaTreatmentWorkspace(){
             <option value="recent">Mais recentes</option>
             <option value="old">Mais antigas</option>
             <option value="number">Número / título</option>
-            <option value="type">Tipo</option>
-          </select>
+            </select>
         </label>
 
         <label style="grid-column:span 2"><span class="small">Buscar</span>
@@ -16278,19 +16291,20 @@ function renderNcCapaTreatmentWorkspace(){
 function renderNcCapaTreatmentList(){
   const host=document.getElementById('ncTreatmentList');if(!host)return;
 
-  const type=document.getElementById('ncTreatmentType')?.value||'all';
   const capa=document.getElementById('ncTreatmentCapa')?.value||'all';
   const status=document.getElementById('ncTreatmentStatus')?.value||'all';
   const email=document.getElementById('ncTreatmentEmail')?.value||'all';
   const sort=document.getElementById('ncTreatmentSort')?.value||'recent';
   const q=normalizeAnswer(document.getElementById('ncTreatmentSearch')?.value||'');
 
-  let rows=getAdminModuleRecords().filter(r=>r.module==='nccapa');
+  let rows=getAdminModuleRecords().filter(r=>
+    r.module==='nccapa' &&
+    ncCapaTypeKey(r)==='supplier'
+  );
 
   rows=rows.filter(r=>{
-    const tk=ncCapaTypeKey(r);
+    const tk='supplier';
 
-    if(type!=='all'&&tk!==type)return false;
     if(capa!=='all'&&String(r.capa||'no')!==capa)return false;
 
     const concluida=['done','published','closed','concluded'].includes(String(r.status||''));
@@ -16306,7 +16320,7 @@ function renderNcCapaTreatmentList(){
     if(q){
       const hay=normalizeAnswer([
         r.rncNumber,r.title,r.supplier,r.sector,r.responsible,r.relatedRo,
-        r.rncProduct,r.rncSummary,r.description,ncCapaTypeLabel(r)
+        r.rncProduct,r.rncSummary,r.description
       ].filter(Boolean).join(' '));
       if(!hay.includes(q))return false;
     }
@@ -16317,18 +16331,15 @@ function renderNcCapaTreatmentList(){
     rows.sort((a,b)=>String(ncCapaRecordDate(a)).localeCompare(String(ncCapaRecordDate(b))));
   }else if(sort==='number'){
     rows.sort((a,b)=>String(a.rncNumber||a.title||'').localeCompare(String(b.rncNumber||b.title||''),'pt-BR',{numeric:true,sensitivity:'base'}));
-  }else if(sort==='type'){
-    rows.sort((a,b)=>ncCapaTypeLabel(a).localeCompare(ncCapaTypeLabel(b),'pt-BR',{sensitivity:'base'}));
   }else{
     rows.sort((a,b)=>String(ncCapaRecordDate(b)).localeCompare(String(ncCapaRecordDate(a))));
   }
 
   const summary=document.getElementById('ncTreatmentSummary');
   if(summary){
-    const rncs=rows.filter(r=>ncCapaTypeKey(r)==='supplier').length;
-    const ncs=rows.filter(r=>ncCapaTypeKey(r)==='internal').length;
     const capas=rows.filter(r=>String(r.capa||'no')==='yes').length;
-    summary.textContent=`${rows.length} registro(s) • ${rncs} RNC fornecedor • ${ncs} NC interna • ${capas} com CAPA`;
+    const enviadas=rows.filter(r=>r.rncEmailStatus==='sent').length;
+    summary.textContent=`${rows.length} RNC(s) • ${enviadas} enviada(s) • ${capas} com CAPA`;
   }
 
   if(!rows.length){
@@ -16339,30 +16350,26 @@ function renderNcCapaTreatmentList(){
   host.innerHTML=`<div style="overflow:auto;border:1px solid #e5e7eb;border-radius:12px">
     <table style="width:100%;min-width:1080px">
       <thead><tr>
-        <th>Registro</th>
-        <th>Tipo</th>
-        <th>Parte / setor</th>
+        <th>RNC</th>
+        <th>Fornecedor</th>
         <th>CAPA</th>
         <th>Situação</th>
         <th>Envio</th>
         <th style="text-align:right">Ações</th>
       </tr></thead>
       <tbody>${rows.map(r=>{
-        const tk=ncCapaTypeKey(r);
-        const ehRnc=tk==='supplier';
-        const registro=ehRnc?(r.rncNumber||'RNC sem número'):(r.title||'NC sem título');
-        const complemento=ehRnc?(r.title||r.rncSummary||''):(r.relatedRo?('R.O.: '+r.relatedRo):(r.description||''));
-        const parte=ehRnc?(r.supplier||'—'):(r.sector||r.responsible||'—');
+        const registro=r.rncNumber||'RNC sem número';
+        const complemento=r.title||r.rncSummary||'';
+        const fornecedor=r.supplier||'—';
         return `<tr>
           <td><b>${escapeHtml(registro)}</b>${complemento?`<div class="small">${escapeHtml(complemento)}</div>`:''}</td>
-          <td><span class="pill">${escapeHtml(ncCapaTypeLabel(r))}</span></td>
-          <td>${escapeHtml(parte)}</td>
+          <td>${escapeHtml(fornecedor)}</td>
           <td><span class="pill">${escapeHtml(ncCapaCapaLabel(r))}</span></td>
           <td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td>
-          <td>${ehRnc?`<span class="pill">${escapeHtml(ncCapaEmailLabel(r))}</span>`:'—'}</td>
+          <td><span class="pill">${escapeHtml(ncCapaEmailLabel(r))}</span></td>
           <td><div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap">
-            ${ehRnc?`<button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Visualizar</button>`:''}
-            ${ehRnc?`<button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar</button>`:''}
+            <button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Visualizar</button>
+            <button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar</button>
             <button class="btn secondary" type="button" onclick="showNcCapaStatus('${escapeHtml(r.id)}')">Situação</button>
             <button class="btn secondary" type="button" onclick="editAdminOperationalRecord('${escapeHtml(r.id)}')">Abrir</button>
             <button class="btn danger" type="button" onclick="deleteAdminOperationalRecord('${escapeHtml(r.id)}')">Excluir</button>
@@ -16375,19 +16382,18 @@ function renderNcCapaTreatmentList(){
 function showNcCapaStatus(id){
   const r=adminModuleRecord(id);if(!r)return;
 
-  const tipo=ncCapaTypeLabel(r);
   const situacao=adminModuleStatusLabel(r.status);
   const capa=ncCapaCapaLabel(r);
   const envio=ncCapaEmailLabel(r);
-  const numero=r.rncNumber||r.title||'Registro';
+  const numero=r.rncNumber||r.title||'RNC';
   const vinculo=r.relatedRo||'Não vinculada';
 
   alert(
     `${numero}\n\n`+
-    `Tipo: ${tipo}\n`+
+    `Fornecedor: ${r.supplier||'—'}\n`+
     `Situação: ${situacao}\n`+
     `CAPA: ${capa}\n`+
-    (ncCapaTypeKey(r)==='supplier'?`Envio da RNC: ${envio}\n`:'')+
+    `Envio da RNC: ${envio}\n`+
     `R.O. vinculada: ${vinculo}`
   );
 }
@@ -16506,10 +16512,20 @@ function legacyRncBlockItems(r={}){
 }
 
 function updateNcCapaFormType(){
-  const type=String(document.getElementById('admModNcType')?.value||'internal');
-  document.getElementById('admModRncOpening')?.classList.toggle('hidden',type!=='supplier');
-  document.getElementById('admModNcInternalFields')?.classList.toggle('hidden',type==='supplier');
-  if(type==='supplier'&&document.getElementById('admModRncBlockItems')&&!document.querySelector('#admModRncBlockItems .rnc-block-item'))renderRncBlockItems([{}]);
+  const type=document.getElementById('admModNcType');
+  if(type)type.value='supplier';
+
+  document.getElementById('admModRncOpening')?.classList.remove('hidden');
+
+  const internal=document.getElementById('admModNcInternalFields');
+  if(internal){
+    internal.classList.add('hidden');
+    internal.style.display='none';
+  }
+
+  if(document.getElementById('admModRncBlockItems')&&!document.querySelector('#admModRncBlockItems .rnc-block-item')){
+    renderRncBlockItems([{}]);
+  }
 }
 function nextRncNumber(){
   const year=new Date().getFullYear();
@@ -17448,12 +17464,12 @@ async function deleteAdminOperationalRecord(id){
   const r=adminModuleRecord(id);if(!r)return;
 
   if(r.module==='nccapa'&&!canOperateNcCapa()){
-    alert('Somente o SGQ/ADM pode excluir este registro.');
+    alert('Somente o SGQ/ADM pode excluir uma RNC.');
     return;
   }
 
-  const ehRnc=ncCapaTypeKey(r)==='supplier';
-  const nome=String(r.rncNumber||r.title||(ehRnc?'esta RNC':'esta NC')).trim();
+  const ehRnc=true;
+  const nome=String(r.rncNumber||r.title||'esta RNC').trim();
   const fornecedor=String(r.supplier||'').trim();
   const enviada=ehRnc&&r.rncEmailStatus==='sent';
 
