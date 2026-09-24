@@ -11235,7 +11235,7 @@ function addTriageAssignment(sector='',selectedEmail='',reason='',originalSector
   row.dataset.sector=chosen;
   row.dataset.originalSector=String(originalSector||chosen).trim();
   row.style.cssText='display:grid;grid-template-columns:minmax(140px,.7fr) minmax(200px,1fr) minmax(260px,1.35fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef';
-  const sectorOptions=getConfiguredSectorList().map(sec=>`<option value="${escapeHtml(sec)}" ${normalizeAnswer(sec)===normalizeAnswer(chosen)?'selected':''}>${escapeHtml(sec)}</option>`).join('');
+  const sectorOptions=getConfiguredSectorsForTriage().map(sec=>`<option value="${escapeHtml(sec)}" ${normalizeAnswer(sec)===normalizeAnswer(chosen)?'selected':''}>${escapeHtml(sec)}</option>`).join('');
   row.innerHTML=`<select class="triage-assignment-sector" aria-label="Setor responsável" style="font-weight:700">${sectorOptions}</select><select class="triage-assignment-user">${triageAssignmentUserOptions(chosen,selectedEmail)}</select><input class="triage-assignment-reason" value="${escapeHtml(reason||'')}" placeholder="Motivo deste setor *" aria-label="Motivo do direcionamento para ${escapeHtml(chosen)}"><button class="btn secondary" type="button" onclick="this.closest('.triage-assignment-row').remove()" style="padding:8px 10px">Remover</button>`;
   const sectorSelect=row.querySelector('.triage-assignment-sector');
   sectorSelect?.addEventListener('change',()=>{
