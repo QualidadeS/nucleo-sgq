@@ -16108,7 +16108,10 @@ function openAdminOperationalWorkspace(key,index){
           <td>${escapeHtml(key==='documents'?(r.createdBy||r.sector||'—'):(r.responsible||r.sector||r.location||'—'))}</td>
           <td>${escapeHtml(adminModuleDate(r.dueDate))}</td>
           <td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td>
-          <td><button class="btn secondary" type="button" onclick="editAdminOperationalRecord('${escapeHtml(r.id)}')">Abrir</button></td>
+          <td><div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn secondary" type="button" onclick="editAdminOperationalRecord('${escapeHtml(r.id)}')">Abrir</button>
+            ${key==='nccapa'&&r.ncType==='supplier'?`<button class="btn danger" type="button" onclick="deleteAdminOperationalRecord('${escapeHtml(r.id)}')">Excluir RNC</button>`:''}
+          </div></td>
         </tr>`).join('')}
       </tbody></table>`:`<div style="padding:28px"><b>Nenhum registro nesta visão.</b><div class="small" style="margin-top:6px">Quando houver registros compatíveis com este status, eles aparecerão aqui.</div></div>`}
     </div>
@@ -16143,7 +16146,11 @@ function renderRncSendWorkspaceList(records){
     <td>${escapeHtml(r.supplier||'—')}</td>
     <td><span class="pill">${escapeHtml(r.rncEmailStatus==='sent'?'Enviada':r.rncEmailStatus==='sending'?'Enviando':'Não enviada')}</span>${r.supplierEmail?`<div class="small" style="margin-top:4px">${escapeHtml(r.supplierEmail)}</div>`:''}</td>
     <td>${escapeHtml(formatDateTimeBR(r.rncEmailSentAt||'')||'—')}</td>
-    <td><div style="display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap"><button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Ver PDF</button><button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar RNC</button></div></td>
+    <td><div style="display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Ver PDF</button>
+      <button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar RNC</button>
+      <button class="btn danger" type="button" onclick="deleteAdminOperationalRecord('${escapeHtml(r.id)}')">Excluir RNC</button>
+    </div></td>
   </tr>`).join('')}</tbody></table></div>`;
 }
 
@@ -17121,7 +17128,9 @@ function editAdminOperationalRecord(id){
   const r=adminModuleRecord(id); if(!r)return;
   const key=r.module, m=ADMIN_OPERATIONAL_MODULES[key];
   if(!isAdmin()){
-    if(key!=='documents'||normalizeAnswer(r.createdBy||'')!==normalizeAnswer(getSession()?.name||''))return;
+    const podeDocumento=key==='documents'&&normalizeAnswer(r.createdBy||'')===normalizeAnswer(getSession()?.name||'');
+    const podeRnc=key==='nccapa'&&canOperateNcCapa();
+    if(!podeDocumento&&!podeRnc)return;
   }
   view('adminModuleView');
   const title=document.getElementById('adminModuleTitle'), sub=document.getElementById('adminModuleSubtitle'), list=document.getElementById('adminModuleContent'), eyebrow=document.getElementById('adminModuleEyebrow');
@@ -17160,12 +17169,57 @@ function editAdminOperationalRecord(id){
     const link=document.getElementById('admModLink');if(link)link.disabled=true;
   }
 }
-function deleteAdminOperationalRecord(id){
+async function deleteAdminOperationalRecord(id){
   const r=adminModuleRecord(id);if(!r)return;
-  if(!confirm('Excluir este registro?'))return;
-  saveAdminModuleRecords(getAdminModuleRecords().filter(x=>String(x.id)!==String(id)));
-  portalBackendDelete('admin_modules',id);
-  showAdminOperationalModule(r.module);
+
+  if(r.module==='nccapa'&&!canOperateNcCapa()){
+    alert('Somente o SGQ/ADM pode excluir uma RNC.');
+    return;
+  }
+
+  const nome=String(r.rncNumber||r.title||'esta RNC').trim();
+  const fornecedor=String(r.supplier||'').trim();
+  const enviada=r.rncEmailStatus==='sent';
+
+  let msg=
+    `Excluir ${nome}${fornecedor?` — ${fornecedor}`:''}?\n\n`+
+    `Ela será removida da base do Núcleo e deixará de aparecer nas listas.`;
+
+  if(enviada){
+    msg+=`\n\nATENÇÃO: esta RNC já consta como enviada por e-mail. A exclusão não desfaz o e-mail que já foi enviado.`;
+  }
+
+  if(!confirm(msg))return;
+
+  const estavaEmEnviar=!!document.getElementById('rncSendWorkspaceList');
+
+  showNucleoLoading('Excluindo RNC...');
+
+  try{
+    if(portalBackendEnabled()){
+      const res=await portalBackendDeleteConfirmed('admin_modules',id);
+      if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a exclusão.');
+    }
+
+    saveAdminModuleRecords(
+      getAdminModuleRecords().filter(x=>String(x.id)!==String(id))
+    );
+
+    hideNucleoLoading();
+
+    if(estavaEmEnviar){
+      renderRncSendWorkspace();
+    }else{
+      showAdminOperationalModule(r.module);
+    }
+  }catch(e){
+    hideNucleoLoading();
+    alert(
+      'Não foi possível excluir a RNC da base central.\n\n'+
+      String(e?.message||e||'Falha desconhecida.')+
+      '\n\nO registro foi mantido para não reaparecer de forma inconsistente.'
+    );
+  }
 }
 
 
