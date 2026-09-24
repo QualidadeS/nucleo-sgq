@@ -4201,7 +4201,7 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v5';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v6';
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -5355,6 +5355,49 @@ async function importPortalConfiguration(input){
   }finally{
     if(input)input.value='';
   }
+}
+
+
+let __nucleoTriageFastSyncTimer=null;
+let __nucleoTriageFastSyncBusy=false;
+
+async function syncTriageCentralFast(forceRender=false){
+  if(__nucleoTriageFastSyncBusy||!portalBackendEnabled()||!navigator.onLine||!getSession()?.authToken)return false;
+  if(document.visibilityState==='hidden')return false;
+
+  __nucleoTriageFastSyncBusy=true;
+  try{
+    const res=await portalJsonp({acao:'portal_triage_load'},15000);
+    if(!res?.sucesso||!Array.isArray(res.triage))return false;
+
+    const before=localStorage.getItem(TRIAGE_KEY)||'[]';
+    const after=JSON.stringify(res.triage);
+
+    if(before!==after){
+      localStorage.setItem(TRIAGE_KEY,after);
+
+      try{renderTriage()}catch(e){}
+      try{refreshRoSummary()}catch(e){}
+      try{refreshMenuNotificationBadges()}catch(e){}
+      try{renderCurrentOverview()}catch(e){}
+
+      const roListView=document.getElementById('roListView');
+      if(forceRender || (roListView && !roListView.classList.contains('hidden'))){
+        try{render()}catch(e){}
+      }
+    }
+    return true;
+  }catch(e){
+    console.warn('[NUCLEO TRIAGEM] sincronização rápida falhou',e);
+    return false;
+  }finally{
+    __nucleoTriageFastSyncBusy=false;
+  }
+}
+
+function startTriageCentralFastSync(){
+  try{clearInterval(__nucleoTriageFastSyncTimer)}catch(e){}
+  __nucleoTriageFastSyncTimer=setInterval(()=>syncTriageCentralFast(false),15000);
 }
 
 function scheduleBackendSync(){
@@ -11667,7 +11710,9 @@ async function saveTriageRecord(){
       assignmentReason:decision==='directed'?String(assignment.reason||'').trim():'',
       previousResponsibleSector:decision==='directed'?String(assignment.originalSector||sec).trim():'',
       pdcaRequired:decision==='directed',pdcaDeadline:decision==='directed'?pdcaDeadline:'',criticality,note,
-      triagedAt:new Date().toISOString(),triagedBy:getSession()?.name||'SGQ'
+      triagedAt:new Date().toISOString(),
+      updatedAt:new Date().toISOString(),
+      triagedBy:getSession()?.name||'SGQ'
     };
     map.set(recordKey,record);savedRecords.push(record);
   }
@@ -11709,7 +11754,17 @@ async function saveTriageRecord(){
         );
       }
 
-      portalBackendSave('triage',record.roKey,record);
+      try{
+        await portalBackendSaveConfirmedPost('triage',record.roKey,record,25000);
+      }catch(centralErr){
+        console.warn('[NUCLEO TRIAGEM] base central não confirmou a triagem',centralErr);
+        // Reenvia em segundo plano, mas deixa aviso explícito.
+        portalBackendSave('triage',record.roKey,record);
+        syncWarnings.push(
+          'A base central não confirmou a triagem agora: '+
+          String(centralErr?.message||centralErr||'erro não informado')
+        );
+      }
 
       const deletedKeys=getDeletedTriageKeys();
       if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
@@ -11740,6 +11795,7 @@ async function saveTriageRecord(){
   // A interface já foi atualizada localmente. A releitura completa da planilha
   // acontece em segundo plano e não mantém o usuário preso no carregamento.
   setTimeout(()=>{
+    syncTriageCentralFast(true).catch(()=>{});
     syncImportedRosFromConfiguredSources({silent:true,force:true})
       .then(()=>{
         try{renderTriage()}catch(e){}
@@ -12374,9 +12430,22 @@ function startNucleoCentralRefresh(){
   __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),300000);
 }
 setTimeout(retryPendingRncDeletes,1800);
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoAutoSyncIfDue(false)});
-window.addEventListener('focus',()=>nucleoAutoSyncIfDue(false));
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    nucleoAutoSyncIfDue(false);
+    syncTriageCentralFast(true);
+  }
+});
+
+window.addEventListener('focus',()=>{
+  nucleoAutoSyncIfDue(false);
+  syncTriageCentralFast(true);
+});
+
 startNucleoCentralRefresh();
+startTriageCentralFastSync();
+setTimeout(()=>syncTriageCentralFast(true),1800);
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
 const ARCHIVED_RO_KEY='portal-sgq-archived-ro-v1';
@@ -20349,7 +20418,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v5</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v6</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
