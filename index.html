@@ -3161,17 +3161,17 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 
 <section id="externalRoControlView" class="card hidden">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-    <div class="small" style="margin:8px 0 12px;padding:10px 12px;border:1px solid #dbe4ee;border-radius:10px;background:#f8fafc"><b>Dados recebidos do SAC — somente leitura.</b> O SGQ deve usar as informações abaixo para classificar a reclamação e definir o encaminhamento.</div><div>
-      <h2 style="margin:0">Controle de SAC</h2>
-      <p class="small" style="margin:5px 0 0">Controle da R.O. Externa/SAC conforme o formulário FOR-GER-ADM-001, integrado à triagem, PDCA, tratativa e acompanhamento.</p>
+    <div class="small" style="margin:8px 0 12px;padding:10px 12px;border:1px solid #dbe4ee;border-radius:10px;background:#f8fafc"><b>Análise iniciada em 24/09/2026.</b> A partir desta data, toda R.O. Externa aparece primeiro para avaliação. Se não exigir atendimento de SAC, marque <b>Somente R.O.</b> e ela sai desta visualização. Se exigir SAC, crie o SAC e siga a tratativa normal.</div><div>
+      <h2 style="margin:0">Análise e acompanhamento de SAC</h2>
+      <p class="small" style="margin:5px 0 0">R.O. Externa continua sendo R.O. até o SGQ confirmar que há necessidade de SAC.</p>
     </div>
     
   </div>
 
   <div id="sacQuickTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px">
-    <button id="sacTabAll" class="btn primary" type="button" onclick="setSacQuickTab('all')">Todos</button>
-    <button id="sacTabUnclassified" class="btn secondary" type="button" onclick="setSacQuickTab('unclassified')">A classificar</button>
-    <button id="sacTabDefined" class="btn secondary" type="button" onclick="setSacQuickTab('defined')" title="Já possuem tratativa, setor e prazo definidos">Classificados</button>
+    <button id="sacTabAll" class="btn primary" type="button" onclick="setSacQuickTab('all')">Visão geral</button>
+    <button id="sacTabUnclassified" class="btn secondary" type="button" onclick="setSacQuickTab('unclassified')">R.O.s para avaliar</button>
+    <button id="sacTabDefined" class="btn secondary" type="button" onclick="setSacQuickTab('defined')" title="SACs que já possuem tratativa, setor e prazo definidos">SACs classificados</button>
     <button id="sacTabForm" class="btn secondary" type="button" onclick="setSacQuickTab('form')" title="Ficha SAC com pelo menos metade dos campos preenchidos">Ficha preenchida</button>
     <button id="sacTabActive" class="btn secondary" type="button" onclick="setSacQuickTab('active')">Em andamento</button>
     <button id="sacTabDone" class="btn secondary" type="button" onclick="setSacQuickTab('done')">Concluídos</button>
@@ -8867,6 +8867,49 @@ function refreshRoPdfAccess(){
 
 const EXTERNAL_RO_CONTROL_KEY='portal-sgq-external-ro-control-v1';
 
+
+const SAC_CLASSIFICATION_START_DATE='2026-09-24';
+
+function sacDateKey(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  let m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m)return `${m[1]}-${m[2]}-${m[3]}`;
+  m=raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m)return `${m[3]}-${m[2]}-${m[1]}`;
+  m=raw.match(/^(\d{2})-(\d{2})-(\d{4})/);
+  if(m)return `${m[3]}-${m[2]}-${m[1]}`;
+  const d=new Date(raw);
+  if(!Number.isNaN(d.getTime())){
+    const y=d.getFullYear(),mo=String(d.getMonth()+1).padStart(2,'0'),da=String(d.getDate()).padStart(2,'0');
+    return `${y}-${mo}-${da}`;
+  }
+  return '';
+}
+function sacSourceDate(record){
+  return sacDateKey(
+    record?.sourceRoDate ||
+    record?.data ||
+    record?.dataReclamacao ||
+    record?.officialForm?.complaintDate ||
+    record?.createdAt ||
+    record?.updatedAt ||
+    ''
+  );
+}
+function sacIsCurrentCycle(record){
+  const d=sacSourceDate(record);
+  return !!d && d>=SAC_CLASSIFICATION_START_DATE;
+}
+function sacDecision(record){
+  return String(record?.sacDecision||'pending').trim().toLowerCase();
+}
+function sacIsPendingCandidate(record){
+  return sacDecision(record)==='pending';
+}
+function sacIsRealSac(record){
+  return sacDecision(record)==='sac';
+}
 function getExternalRoControls(){
   let stored=[];
   try{
@@ -8877,12 +8920,11 @@ function getExternalRoControls(){
   const canonicalRo=value=>appRoNumber(value,'Externa');
   const byRo=new Map();
 
-  // Consolida registros antigos RO-00000 e novos RO-EX-00000.
-  // Quando existem os dois, preserva os dados mais completos/mais recentes.
+  // Mantém o histórico técnico no cache, mas a tela atual só trabalha com
+  // R.O.s externas a partir de 24/09/2026.
   stored.forEach(record=>{
     const key=canonicalRo(record?.ro||record?.sourceRo||record?.id||'');
     if(!key)return;
-
     const normalized={
       ...(record||{}),
       ro:key,
@@ -8891,10 +8933,7 @@ function getExternalRoControls(){
     };
 
     const previous=byRo.get(key);
-    if(!previous){
-      byRo.set(key,normalized);
-      return;
-    }
+    if(!previous){byRo.set(key,normalized);return}
 
     const previousTime=String(previous.updatedAt||previous.createdAt||'');
     const currentTime=String(normalized.updatedAt||normalized.createdAt||'');
@@ -8902,8 +8941,7 @@ function getExternalRoControls(){
     const older=newer===normalized?previous:normalized;
 
     byRo.set(key,{
-      ...older,
-      ...newer,
+      ...older,...newer,
       ro:key,
       sourceRoOrigin:'Externa',
       autoLinked:true,
@@ -8922,13 +8960,17 @@ function getExternalRoControls(){
     });
   });
 
-  const externals=getAllRoRecords().filter(r=>r?.ehSac===true||String(r?.origemBase||'')==='Externa');
+  const externals=getAllRoRecords().filter(r=>
+    (r?.ehSac===true||String(r?.origemBase||'')==='Externa') &&
+    sacIsCurrentCycle(r)
+  );
 
   externals.forEach(ro=>{
     const key=canonicalRo(ro.numero||ro.id||ro.codigo||'');
     if(!key)return;
 
     const existing=byRo.get(key);
+    const sourceRoDate=ro.data||ro.dataReclamacao||existing?.sourceRoDate||'';
     const autoOfficial={
       complaintDate:ro.dataReclamacao||ro.data||'',
       fiscalInvoice:ro.notaFiscal||'',
@@ -8940,6 +8982,7 @@ function getExternalRoControls(){
       representative:ro.representante||'',
       sentDate:ro.data||''
     };
+
     const base={
       id:existing?.id||('SAC-'+key.replace(/[^A-Za-z0-9_-]/g,'')),
       ro:key,
@@ -8947,26 +8990,42 @@ function getExternalRoControls(){
       product:ro.produto||'',
       order:ro.pedido||'',
       sourceRoOrigin:'Externa',
+      sourceRoDate,
       autoLinked:true,
+      sacDecision:existing?.sacDecision||'pending',
       representative:String(existing?.representative||existing?.officialForm?.representative||ro.representante||'').trim(),
       officialForm:{...autoOfficial,...(existing?.officialForm||{})},
       status:existing?.status||'new',
-      treatmentStatus:existing?.treatmentStatus||'defined',
-      pdcaRequired:existing?.pdcaRequired!==false,
-      createdAt:existing?.createdAt||ro.data||'',
-      updatedAt:existing?.updatedAt||ro.data||''
+      treatmentStatus:existing?.treatmentStatus||'',
+      pdcaRequired:existing?.pdcaRequired===true,
+      createdAt:existing?.createdAt||new Date().toISOString(),
+      updatedAt:existing?.updatedAt||new Date().toISOString()
     };
-    byRo.set(key,existing?{...base,...existing,ro:key,sourceRoOrigin:'Externa',autoLinked:true}:base);
+
+    byRo.set(key,existing?{
+      ...base,...existing,
+      ro:key,
+      sourceRoOrigin:'Externa',
+      sourceRoDate,
+      autoLinked:true,
+      sacDecision:existing?.sacDecision||'pending',
+      officialForm:{...autoOfficial,...(existing?.officialForm||{})}
+    }:base);
   });
 
-  const normalized=[...byRo.values()];
+  // Só entram na análise atual registros cujo R.O. é do ciclo iniciado em 24/09/2026.
+  // "Somente R.O." continua salvo tecnicamente, mas some da visualização de SAC.
+  const normalized=[...byRo.values()].filter(r=>
+    sacIsCurrentCycle(r) &&
+    sacDecision(r)!=='ro_only'
+  );
 
-  // Limpa a duplicidade do próprio cache local.
   try{
-    const raw=JSON.stringify(normalized);
-    if(raw!==localStorage.getItem(EXTERNAL_RO_CONTROL_KEY)){
-      safeStorageSet(EXTERNAL_RO_CONTROL_KEY,raw);
-    }
+    // Preserva também decisões "somente R.O." no cache, para elas não reaparecerem
+    // como candidatas na próxima sincronização.
+    const allForCache=[...byRo.values()];
+    const raw=JSON.stringify(allForCache);
+    if(raw!==localStorage.getItem(EXTERNAL_RO_CONTROL_KEY))safeStorageSet(EXTERNAL_RO_CONTROL_KEY,raw);
   }catch(e){}
 
   return normalized;
@@ -9346,7 +9405,10 @@ function sacBelongsToCurrentRepresentative(r){
   const rep=normalizeAnswer(r?.representative||r?.officialForm?.representative||'');
   return !!me && !!rep && rep===me;
 }
-function getMySacs(){return isAdmin()?getExternalRoControls():getExternalRoControls().filter(sacBelongsToCurrentRepresentative)}
+function getMySacs(){
+  const sacs=getExternalRoControls().filter(sacIsRealSac);
+  return isAdmin()?sacs:sacs.filter(sacBelongsToCurrentRepresentative);
+}
 function appendRepresentativeSacNotification(record,title,message){
   const representative=String(record?.representative||record?.officialForm?.representative||'').trim();
   if(!representative)return null;
@@ -9537,7 +9599,8 @@ function setSacQuickTab(tab){
   renderExternalRoControl();
 }
 function sacIsClassified(r){
-  return !!String(r?.treatmentType||'').trim() &&
+  return sacIsRealSac(r) &&
+         !!String(r?.treatmentType||'').trim() &&
          !!String(r?.responsibleSector||'').trim() &&
          !!String(r?.treatmentDeadline||'').trim();
 }
@@ -9559,7 +9622,11 @@ function sacHasFilledForm(r){
   return true;
 }
 function sacMatchesQuickTab(r){
-  if(sacQuickTab==='unclassified')return !sacIsClassified(r);
+  if(sacIsPendingCandidate(r)){
+    return sacQuickTab==='all'||sacQuickTab==='unclassified';
+  }
+  if(!sacIsRealSac(r))return false;
+  if(sacQuickTab==='unclassified')return false;
   if(sacQuickTab==='defined')return sacIsClassified(r) && r.treatmentStatus!=='done';
   if(sacQuickTab==='form')return sacHasFilledForm(r);
   if(sacQuickTab==='active')return r.treatmentStatus==='started' || r.status==='treatment';
@@ -9569,23 +9636,25 @@ function sacMatchesQuickTab(r){
 function updateSacQuickSummary(allRows,visibleRows){
   const el=document.getElementById('sacQuickSummary');
   if(!el)return;
+  const candidates=allRows.filter(sacIsPendingCandidate);
+  const sacs=allRows.filter(sacIsRealSac);
   const counts={
     all:allRows.length,
-    unclassified:allRows.filter(r=>!sacIsClassified(r)).length,
-    defined:allRows.filter(r=>sacIsClassified(r)&&r.treatmentStatus!=='done').length,
-    form:allRows.filter(sacHasFilledForm).length,
-    active:allRows.filter(r=>r.treatmentStatus==='started'||r.status==='treatment').length,
-    done:allRows.filter(r=>r.treatmentStatus==='done'||r.status==='done').length
+    unclassified:candidates.length,
+    defined:sacs.filter(r=>sacIsClassified(r)&&r.treatmentStatus!=='done').length,
+    form:sacs.filter(sacHasFilledForm).length,
+    active:sacs.filter(r=>r.treatmentStatus==='started'||r.status==='treatment').length,
+    done:sacs.filter(r=>r.treatmentStatus==='done'||r.status==='done').length
   };
   const label={
-    all:'Todos',
-    unclassified:'A classificar',
-    defined:'Classificados',
+    all:'Visão geral',
+    unclassified:'R.O.s para avaliar',
+    defined:'SACs classificados',
     form:'Ficha preenchida',
     active:'Em andamento',
     done:'Concluídos'
-  }[sacQuickTab]||'Todos';
-  el.textContent=`${label}: ${visibleRows.length} registro(s) · Total SAC: ${counts.all} · A classificar: ${counts.unclassified} · Classificados: ${counts.defined} · Com ficha: ${counts.form}`;
+  }[sacQuickTab]||'Visão geral';
+  el.textContent=`${label}: ${visibleRows.length} registro(s) · Para avaliar: ${counts.unclassified} · SACs: ${sacs.length}`;
 }
 
 
@@ -9606,31 +9675,80 @@ function sacDirectedSector(record){
   return 'Ainda não direcionado';
 }
 
+
+function saveSacDecisionLocally(record){
+  const stored=(()=>{
+    try{const x=JSON.parse(localStorage.getItem(EXTERNAL_RO_CONTROL_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return []}
+  })();
+  const roKey=appRoNumber(record?.ro||'','Externa');
+  const list=stored.filter(x=>appRoNumber(x?.ro||x?.sourceRo||x?.id||'','Externa')!==roKey);
+  list.push(record);
+  saveExternalRoControlsLocal(list);
+  portalBackendSave('external_ro_controls',record.id,record);
+}
+function markExternalRoAsRoOnly(id){
+  if(!isAdmin())return;
+  const r=getExternalRoControls().find(x=>String(x.id)===String(id));
+  if(!r)return;
+  if(!confirm('Manter '+String(r.ro||'esta ocorrência')+' somente como R.O.? Ela sairá da área de SAC.'))return;
+  const now=new Date().toISOString();
+  const record={...r,sacDecision:'ro_only',sacDecisionAt:now,sacDecisionBy:getSession()?.name||'SGQ',updatedAt:now};
+  saveSacDecisionLocally(record);
+  renderExternalRoControl();
+  refreshMenuNotificationBadges();
+}
+function promoteExternalRoToSac(id){
+  if(!isAdmin())return;
+  const r=getExternalRoControls().find(x=>String(x.id)===String(id));
+  if(!r)return;
+  const now=new Date().toISOString();
+  const record={
+    ...r,
+    sacDecision:'sac',
+    sacCreatedAt:r.sacCreatedAt||now,
+    sacDecisionAt:now,
+    sacDecisionBy:getSession()?.name||'SGQ',
+    pdcaRequired:r.pdcaRequired===true,
+    updatedAt:now
+  };
+  saveSacDecisionLocally(record);
+  openExternalRoControlModal(record.id);
+}
 function renderExternalRoControl(){
   if(!isAdmin()&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
   const treatment=document.getElementById('externalRoImpactFilter')?.value||'all';
   const q=normalizeAnswer(document.getElementById('externalRoSearch')?.value||'');
   const allSacRows=isAdmin()?getExternalRoControls():getMySacs();
+
   let rows=allSacRows.filter(r=>{
     if(!sacMatchesQuickTab(r))return false;
-    if(status!=='all'){
-      if(status==='started' && r.treatmentStatus!=='started')return false;
-      if(status!=='started' && r.status!==status)return false;
+
+    if(sacIsRealSac(r)){
+      if(status!=='all'){
+        if(status==='started' && r.treatmentStatus!=='started')return false;
+        if(status!=='started' && r.status!==status)return false;
+      }
+      if(treatment!=='all'&&r.treatmentType!==treatment)return false;
+    }else{
+      if(status!=='all'||treatment!=='all')return false;
     }
-    if(treatment!=='all'&&r.treatmentType!==treatment)return false;
+
     if(q){
-      const hay=normalizeAnswer([r.ro,r.client,r.product,r.order,r.sourceRoOrigin,sacDirectedSector(r),r.responsibleSector,r.qualityNote,r.adminNote,r.treatmentDescription,externalTreatmentLabel(r.treatmentType)].join(' '));
+      const hay=normalizeAnswer([
+        r.ro,r.client,r.product,r.order,r.sourceRoOrigin,sacDirectedSector(r),
+        r.responsibleSector,r.qualityNote,r.adminNote,r.treatmentDescription,
+        externalTreatmentLabel(r.treatmentType)
+      ].join(' '));
       if(!hay.includes(q))return false;
     }
     return true;
-  }).sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
+  }).sort((a,b)=>String(b.sourceRoDate||b.updatedAt||b.createdAt||'').localeCompare(String(a.sourceRoDate||a.updatedAt||a.createdAt||'')));
 
   updateSacQuickSummary(allSacRows,rows);
 
   const body=document.getElementById('externalRoControlBody');
   if(!body)return;
-
   const table=body.closest('table');
   if(table)table.style.display='none';
 
@@ -9641,12 +9759,30 @@ function renderExternalRoControl(){
     cards.style.display='grid';
     cards.style.gridTemplateColumns='repeat(auto-fit,minmax(320px,1fr))';
     cards.style.gap='12px';
-    body.closest('.card, .table-wrap, .external-ro-table-wrap, div')?.parentElement?.insertBefore(cards, body.closest('table')?.parentElement?.nextSibling || null);
     const parent=body.closest('table')?.parentElement || body.parentElement;
     if(parent)parent.insertAdjacentElement('afterend',cards);
   }
 
   cards.innerHTML=rows.length?rows.map(r=>{
+    if(sacIsPendingCandidate(r)){
+      return `<div class="card" style="padding:16px;min-width:0;border:1px solid #dbe4ee">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+          <div>
+            <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
+            <div class="small" style="margin-top:4px">${escapeHtml(r.client||'Cliente não informado')}</div>
+            <div class="small" style="margin-top:2px">Entrada: ${escapeHtml(r.sourceRoDate?formatDateBR(r.sourceRoDate):'—')}</div>
+          </div>
+          <span class="status-badge pending">Avaliar necessidade de SAC</span>
+        </div>
+        <div class="small" style="margin-top:12px">Esta é uma R.O. externa. Só será criada como SAC se o SGQ indicar que há necessidade de atendimento ao cliente.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.ro)}')">Ver R.O.</button>
+          ${isAdmin()?`<button class="btn secondary" type="button" onclick="markExternalRoAsRoOnly('${escapeHtml(r.id)}')">Somente R.O.</button>
+          <button class="btn primary" type="button" onclick="promoteExternalRoToSac('${escapeHtml(r.id)}')">Criar SAC</button>`:''}
+        </div>
+      </div>`;
+    }
+
     const pdca=r.pdcaRequired?'Obrigatório':'—';
     const treatmentState=externalTreatmentStatusLabel(r.treatmentStatus);
     const started=r.treatmentStartedAt?('Em execução desde: '+(formatDateTimeBR(r.treatmentStartedAt)||r.treatmentStartedAt)):'Ainda não iniciada';
@@ -9665,7 +9801,7 @@ function renderExternalRoControl(){
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
-            ${isAdmin()?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar</button>`:''}
+            ${isAdmin()?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
           </div>
           <div class="small" style="margin-top:4px"><b>Direcionado para:</b> ${escapeHtml(sacDirectedSector(r))}</div>
         </div>
@@ -9673,7 +9809,7 @@ function renderExternalRoControl(){
       </div>
 
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${sacIsClassified(r)?'<span class="status-badge answered">Classificado</span>':'<span class="status-badge pending">A classificar</span>'}
+        ${sacIsClassified(r)?'<span class="status-badge answered">SAC classificado</span>':'<span class="status-badge pending">SAC aguardando classificação</span>'}
         ${sacHasFilledForm(r)?'<span class="status-badge answered">Ficha preenchida</span>':`<span class="status-badge pending">Ficha ${officialSacCompletion(r).percent}%</span>`}
       </div>
 
@@ -9706,7 +9842,7 @@ function renderExternalRoControl(){
       </div>
       ${r.sacSentAt?`<div class="small" style="margin-top:8px">Enviado em ${escapeHtml(formatDateTimeBR(r.sacSentAt)||r.sacSentAt)} · versão ${escapeHtml(String(r.sacPdfVersion||1))}</div>`:''}
     </div>`;
-  }).join(''):'<div class="card" style="padding:24px"><b>Nenhuma R.O. foi encontrada na aba Externa.</b></div>';
+  }).join(''):'<div class="card" style="padding:24px"><b>Nenhuma R.O. externa nova aguardando análise de SAC.</b></div>';
 
   refreshExternalRoSidebarBadge();
 }
@@ -10325,6 +10461,9 @@ function saveExternalRoControl(){
     treatmentDescription:String(document.getElementById('externalTreatmentDescription')?.value||'').trim(),
     adminNote:String(document.getElementById('externalRoAdminNote')?.value||'').trim(),
     sourceRoOrigin:'Externa',
+    sourceRoDate:existing?.sourceRoDate||baseRoRecord?.data||baseRoRecord?.dataReclamacao||'',
+    sacDecision:'sac',
+    sacCreatedAt:existing?.sacCreatedAt||now,
     autoLinked:!!baseRoRecord,
     officialForm:{...(existing?.officialForm||{}),...getOfficialSacFormData()},
     representative:String(document.getElementById('sacRepresentative')?.value||existing?.representative||'').trim(),
@@ -15831,8 +15970,14 @@ function openAdminOperationalWorkspace(key,index){
       if(type)type.value=mode==='new_rnc'?'supplier':'internal';
       updateNcCapaFormType();
       if(mode==='new_rnc'){
+        window.__rncPhotoUploadKey='RNC-TEMP-'+Date.now();
         const setor=document.getElementById('admModRncSector');
         if(setor&&!setor.value)setor.value=String(getSession()?.sector||'');
+
+        // IMPORTANTE: no cadastro NOVO da RNC, o input de foto precisa
+        // receber o onchange que comprime, fixa no hidden e mostra a prévia.
+        // Antes isso só acontecia ao EDITAR uma RNC já existente.
+        bindRncPhotoInputs({});
       }
       activateNcCapaForm();
       setTimeout(activateNcCapaForm,0);
@@ -16238,6 +16383,53 @@ function removeRncPhotoField(i){const a=getTplJson('tplPhotoFieldsData');a.splic
 function rncTemplateMediaPreview(t){const fixed=(t.fixedImages||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555;text-align:center"><div style="font-size:7px;font-weight:700;margin-bottom:4px">${escapeHtml(x.label||'IMAGEM')}</div><img src="${x.dataUrl}" style="max-width:90%;max-height:70px;object-fit:contain"></div>`).join('');const photos=(t.photoFields||[]).map(x=>`<div style="padding:7px;border-bottom:1px solid #555"><b style="font-size:8px">${escapeHtml(x.label)}</b><div style="display:grid;grid-template-columns:repeat(${Math.min(4,Number(x.maxPhotos)||4)},1fr);gap:4px;margin-top:6px">${Array.from({length:Math.min(4,Number(x.maxPhotos)||4)},()=>'<div style="height:38px;border:1px dashed #9aa4b2;background:#fafafa"></div>').join('')}</div></div>`).join('');return fixed+photos}
 function rncPhotoInputsHtml(){const t=getRncProcessTemplate();return (t.photoFields||[]).map(f=>`<div style="grid-column:1/-1;border:1px solid #d9e1ee;border-radius:12px;padding:12px"><b>${escapeHtml(f.label)}</b><div class="small">Até ${Number(f.maxPhotos)||4} foto(s)${f.required?' · obrigatório':''}. Elas entram automaticamente no PDF.</div><input type="file" accept="image/*" multiple data-rnc-photo-field="${escapeHtml(f.id)}" data-max="${Number(f.maxPhotos)||4}" style="margin-top:8px"><input type="hidden" id="rncPhotos_${escapeHtml(f.id)}" value="[]"></div>`).join('')}
 function collectRncPhotos(){const out={};document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{const id=inp.dataset.rncPhotoField;const hidden=document.getElementById('rncPhotos_'+id);try{out[id]=JSON.parse(hidden?.value||'[]')}catch(e){out[id]=[]}});return out}
+
+function compressRncPhotoPreview(file){
+  return new Promise((resolve,reject)=>{
+    const rd=new FileReader();
+    rd.onload=()=>{
+      const im=new Image();
+      im.onload=()=>{
+        const max=320,scale=Math.min(1,max/Math.max(im.width,im.height));
+        const c=document.createElement('canvas');
+        c.width=Math.max(1,Math.round(im.width*scale));
+        c.height=Math.max(1,Math.round(im.height*scale));
+        c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+        resolve(c.toDataURL('image/jpeg',.5));
+      };
+      im.onerror=reject;
+      im.src=rd.result;
+    };
+    rd.onerror=reject;
+    rd.readAsDataURL(file);
+  });
+}
+async function uploadRncPhotoOnline(dataUrl,fieldId){
+  if(!navigator.onLine)throw new Error('A foto precisa ser enviada com conexão à internet.');
+  if(!portalBackendEnabled())throw new Error('Apps Script não configurado para salvar a foto.');
+
+  if(!window.__rncPhotoUploadKey)window.__rncPhotoUploadKey='RNC-TEMP-'+Date.now();
+  const eventoId='RNCPHOTO-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+
+  const ok=portalPostForm({
+    acao:'portal_upload_rnc_photo',
+    eventoId,
+    rncKey:window.__rncPhotoUploadKey,
+    campoId:String(fieldId||'foto'),
+    fileData:String(dataUrl||''),
+    ator:getSession()?.name||'SGQ'
+  });
+  if(!ok)throw new Error('Não foi possível iniciar o envio da foto.');
+
+  const started=Date.now();
+  while(Date.now()-started<120000){
+    await new Promise(resolve=>setTimeout(resolve,900));
+    const st=await portalJsonp({acao:'portal_rnc_photo_status',eventoId},12000).catch(()=>null);
+    if(st?.status==='done'&&st?.photo?.fileId)return st.photo;
+    if(st?.status==='error')throw new Error(st.erro||'Falha ao gravar a foto no Drive.');
+  }
+  throw new Error('A foto não foi confirmada no Drive dentro do tempo esperado.');
+}
 function bindRncPhotoInputs(existing={}){
   document.querySelectorAll('[data-rnc-photo-field]').forEach(inp=>{
     const id=inp.dataset.rncPhotoField,h=document.getElementById('rncPhotos_'+id);
@@ -16261,9 +16453,9 @@ function bindRncPhotoInputs(existing={}){
       info.insertAdjacentElement('afterend',preview);
     }
 
-    const updateInfo=()=>{
+    const updateInfo=(message='')=>{
       let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}
-      info.textContent=a.length?`${a.length} foto(s) fixada(s) nesta RNC.`:'Nenhuma foto fixada ainda.';
+      info.textContent=message||(a.length?`${a.length} foto(s) salva(s) online nesta RNC.`:'Nenhuma foto salva ainda.');
       preview.innerHTML=a.map((photo,i)=>{
         const src=rncPhotoSrc(photo);
         return src?`<div style="position:relative;border:1px solid #d8e0ec;border-radius:8px;padding:4px;background:#fff"><img src="${escapeHtml(src)}" style="display:block;width:100%;height:90px;object-fit:contain"><button type="button" class="btn danger" onclick="removeRncPhoto('${escapeHtml(id)}',${i})" style="position:absolute;right:4px;top:4px;padding:3px 6px;font-size:10px">×</button></div>`:'';
@@ -16276,14 +16468,30 @@ function bindRncPhotoInputs(existing={}){
       const max=Number(inp.dataset.max)||4;
       let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}
       const files=[...(inp.files||[])];
-      for(const f of files){
-        if(arr.length>=max)break;
-        if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}
-        arr.push(await compressRncPhoto(f));
+      inp.disabled=true;
+
+      try{
+        for(const f of files){
+          if(arr.length>=max)break;
+          if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}
+          updateInfo('Enviando foto para o Drive...');
+
+          const [dataUrl,previewDataUrl]=await Promise.all([
+            compressRncPhoto(f),
+            compressRncPhotoPreview(f)
+          ]);
+          const savedPhoto=await uploadRncPhotoOnline(dataUrl,id);
+          arr.push({...savedPhoto,previewDataUrl});
+          if(h)h.value=JSON.stringify(arr.slice(0,max));
+          updateInfo();
+        }
+      }catch(e){
+        updateInfo();
+        alert('Não foi possível salvar a foto online.\n\n'+String(e?.message||e));
+      }finally{
+        inp.value='';
+        inp.disabled=false;
       }
-      if(h)h.value=JSON.stringify(arr.slice(0,max));
-      inp.value='';
-      updateInfo();
     };
   });
 }
@@ -16399,9 +16607,11 @@ function rncGridToolbarHtml(){const h=selectedRncHeaderCell();if(h)return `<div 
 function rncPhotoSrc(photo){
   if(!photo)return '';
   if(typeof photo==='string')return photo;
+  if(photo.previewDataUrl)return String(photo.previewDataUrl);
   if(photo.dataUrl)return String(photo.dataUrl);
-  if(photo.fileId)return 'https://drive.google.com/uc?export=view&id='+encodeURIComponent(photo.fileId);
-  return String(photo.url||photo.src||'');
+  if(photo.url)return String(photo.url);
+  if(photo.fileId)return 'https://drive.google.com/thumbnail?id='+encodeURIComponent(photo.fileId)+'&sz=w1600';
+  return String(photo.src||'');
 }
 function rncFieldValue(obj,source,preview=false){if(String(source||'').startsWith('@'))return String(source).slice(1);if(!preview&&source==='eventDate'&&!String(obj?.eventDate||'').trim()){const d=String(obj?.createdAt||'').slice(0,10);if(d)return d;}if(!preview&&source==='rncIssueDate'){const v=obj?.rncIssueDate||obj?.issueDate||obj?.dataEmissao||obj?.emissionDate||'';if(String(v).trim())return v;}if(!preview&&source==='rncDisposition'){const v=obj?.rncDisposition||obj?.disposition||obj?.disposicao||'';if(String(v).trim())return v;}if(preview){const ex={rncReporter:'Maria',rncShift:'1º turno',eventDate:'17/09/2026',rncIssueDate:'17/09/2026',rncSupervisor:'Supervisor',rncManager:'Gerente',rncNumber:'RNC-2026-0001',supplier:'Fornecedor ABC',rncInvoice:'3215',rncProductCode:'000123',rncProduct:'Produto exemplo',rncDimensions:'Especificação',rncQuantity:'250 un.',rncDisposition:'Segregação / devolução',rncBlockArea:'Qualidade',rncBlockStage:'Recebimento',relatedRo:'Não vinculada',sector:'Qualidade',title:'RNC',description:'Descrição'};return ex[source]||'—'}return obj?.[source]??'—'}
 function rncLayoutRowsHtml(t,section,obj={},preview=false,cellClass='',ownerFilter=''){
