@@ -8900,12 +8900,25 @@ function sacDateKey(value){
   }
   return '';
 }
+function sacOriginalRoDate(record){
+  const raw=record?.raw||{};
+  return (
+    raw?.['Carimbo de data/hora'] ||
+    raw?.['Data'] ||
+    raw?.['Data da R.O.'] ||
+    raw?.['Data R.O.'] ||
+    raw?.['Data da Reclamação'] ||
+    raw?.['Data da reclamação'] ||
+    record?.dataReclamacao ||
+    record?.data ||
+    record?.officialForm?.complaintDate ||
+    record?.sourceRoDate ||
+    ''
+  );
+}
 function sacSourceDate(record){
   return sacDateKey(
-    record?.sourceRoDate ||
-    record?.data ||
-    record?.dataReclamacao ||
-    record?.officialForm?.complaintDate ||
+    sacOriginalRoDate(record) ||
     record?.createdAt ||
     record?.updatedAt ||
     ''
@@ -8984,7 +8997,7 @@ function getExternalRoControls(){
     if(!key)return;
 
     const existing=byRo.get(key);
-    const sourceRoDate=ro.data||ro.dataReclamacao||existing?.sourceRoDate||'';
+    const sourceRoDate=sacSourceDate(ro)||sacDateKey(existing?.sourceRoDate||'')||'';
     const autoOfficial={
       complaintDate:ro.dataReclamacao||ro.data||'',
       fiscalInvoice:ro.notaFiscal||'',
@@ -9836,7 +9849,7 @@ function renderExternalRoControl(){
           <div>
             <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
             <div class="small" style="margin-top:4px">${escapeHtml(r.client||'Cliente não informado')}</div>
-            <div class="small" style="margin-top:2px">Entrada: ${escapeHtml(r.sourceRoDate?formatDateBR(r.sourceRoDate):'—')}</div>
+            <div class="small" style="margin-top:2px">Entrada: ${escapeHtml(sacSourceDate(r)?formatDateBR(sacSourceDate(r)):'—')}</div>
           </div>
           <span class="status-badge pending">Avaliar necessidade de SAC</span>
         </div>
@@ -10527,7 +10540,7 @@ function saveExternalRoControl(){
     treatmentDescription:String(document.getElementById('externalTreatmentDescription')?.value||'').trim(),
     adminNote:String(document.getElementById('externalRoAdminNote')?.value||'').trim(),
     sourceRoOrigin:'Externa',
-    sourceRoDate:existing?.sourceRoDate||baseRoRecord?.data||baseRoRecord?.dataReclamacao||'',
+    sourceRoDate:(baseRoRecord?sacSourceDate(baseRoRecord):'')||sacDateKey(existing?.sourceRoDate||'')||'',
     sacDecision:'sac',
     sacCreatedAt:existing?.sacCreatedAt||now,
     autoLinked:!!baseRoRecord,
@@ -14388,9 +14401,33 @@ function firstValue(obj, names){
 function formatImportedDate(v){
   if(v===undefined || v===null || v==='') return '—';
   const s=String(v).trim();
-  const d=new Date(s);
-  if(!Number.isNaN(d.getTime())){
-    return d.toLocaleDateString('pt-BR');
+  if(!s)return '—';
+
+  // IMPORTANTE: nunca entregar DD/MM/AAAA direto ao new Date().
+  // O navegador pode interpretar 05/12/2026 como 12/05/2026.
+  let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\D|$)/);
+  if(m){
+    let y=Number(m[3]); if(y<100)y+=2000;
+    const d=Number(m[1]), mo=Number(m[2]);
+    if(d>=1&&d<=31&&mo>=1&&mo<=12){
+      return String(d).padStart(2,'0')+'/'+String(mo).padStart(2,'0')+'/'+String(y).padStart(4,'0');
+    }
+  }
+
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|\s|$)/);
+  if(m){
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+
+  const dt=new Date(s);
+  if(!Number.isNaN(dt.getTime())){
+    try{
+      return new Intl.DateTimeFormat('pt-BR',{
+        timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',year:'numeric'
+      }).format(dt);
+    }catch(e){
+      return dt.toLocaleDateString('pt-BR');
+    }
   }
   return s;
 }
