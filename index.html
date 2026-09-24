@@ -4817,7 +4817,7 @@ function portalJsonp(params,timeoutMs=15000){
 
     script.async=true;
     script.src=base+'?'+parts.join('&');
-    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar a confirmação solicitada.'));
+    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar os dados da base central.'));
     const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas não devolveu a confirmação ao aplicativo dentro do tempo limite.')),timeoutMs);
 
     document.head.appendChild(script);
@@ -4984,14 +4984,11 @@ async function portalBackendDeleteConfirmed(collection,id){
 
   if(!colecaoKey||!idKey)throw new Error('RNC inválida para exclusão.');
 
-  const eventoId='PORTALDELETE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
-
   const params={
     acao:'portal_delete',
     colecao:colecaoKey,
     id:idKey,
-    ator:getSession()?.name||'SGQ',
-    eventoId
+    ator:getSession()?.name||'SGQ'
   };
 
   const token=String(getSession()?.authToken||'').trim();
@@ -5000,30 +4997,60 @@ async function portalBackendDeleteConfirmed(collection,id){
   const submitted=portalPostForm(params);
   if(!submitted)throw new Error('Não foi possível enviar o pedido de exclusão ao Apps Script.');
 
+  // NÃO usa mais portal_delete_status nem portal_get_record.
+  // Essas rotas novas podem não existir ainda na versão publicada do Web App.
+  // A confirmação é feita pelo portal_load, que já é a rota usada pelo próprio
+  // sistema para carregar a base central.
   const started=Date.now();
+  let ultimaFalha='';
 
   while(Date.now()-started<90000){
-    await new Promise(resolve=>setTimeout(resolve,1200));
+    await new Promise(resolve=>setTimeout(resolve,1800));
 
     try{
-      const chk=await portalJsonp({
-        acao:'portal_delete_status',
-        eventoId
-      },15000);
+      const carga=await portalJsonp({acao:'portal_load'},30000);
 
-      if(chk?.sucesso && chk.status==='done'){
-        return {sucesso:true,excluido:true};
-      }
+      if(carga?.sucesso){
+        const lista=Array.isArray(carga?.dados?.adminModules)
+          ? carga.dados.adminModules
+          : [];
 
-      if(chk?.sucesso && chk.status==='error'){
-        throw new Error(chk.erro||'O Apps Script informou erro ao excluir a RNC.');
+        const aindaExiste=lista.some(r=>String(r?.id||'')===idKey);
+
+        if(!aindaExiste){
+          return {sucesso:true,excluido:true};
+        }
       }
     }catch(e){
-      if(String(e?.message||'').includes('informou erro'))throw e;
+      // Uma falha isolada na leitura não significa que o POST falhou.
+      // Continua tentando até o limite.
+      ultimaFalha=String(e?.message||e||'');
     }
   }
 
-  throw new Error('A exclusão foi enviada, mas não foi confirmada pela base central dentro do tempo esperado.');
+  // Última conferência usando a mesma rota central já usada pelo app.
+  try{
+    const carga=await portalJsonp({acao:'portal_load'},30000);
+
+    if(carga?.sucesso){
+      const lista=Array.isArray(carga?.dados?.adminModules)
+        ? carga.dados.adminModules
+        : [];
+
+      const aindaExiste=lista.some(r=>String(r?.id||'')===idKey);
+
+      if(!aindaExiste){
+        return {sucesso:true,excluido:true};
+      }
+    }
+  }catch(e){
+    ultimaFalha=String(e?.message||e||ultimaFalha);
+  }
+
+  throw new Error(
+    'A exclusão foi enviada, mas a RNC ainda aparece na base central.'+
+    (ultimaFalha?'\n\nÚltima leitura: '+ultimaFalha:'')
+  );
 }
 
 function portalBackendDelete(collection,id){
