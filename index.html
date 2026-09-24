@@ -3210,6 +3210,20 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
         <div class="label">Busca</div>
         <input id="externalRoSearch" placeholder="R.O., cliente, produto ou setor" oninput="renderExternalRoControl()">
       </div>
+      <div class="field">
+        <div class="label">Organizar por</div>
+        <select id="externalRoSort" onchange="renderExternalRoControl()">
+          <option value="date_desc">Mais recente → mais antiga</option>
+          <option value="date_asc">Mais antiga → mais recente</option>
+          <option value="ro_asc">R.O. menor → maior</option>
+          <option value="ro_desc">R.O. maior → menor</option>
+          <option value="client_asc">Cliente A → Z</option>
+          <option value="client_desc">Cliente Z → A</option>
+          <option value="sector_asc">Setor A → Z</option>
+          <option value="deadline_asc">Prazo mais próximo</option>
+          <option value="status_asc">Situação</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -9714,12 +9728,62 @@ function promoteExternalRoToSac(id){
   saveSacDecisionLocally(record);
   openExternalRoControlModal(record.id);
 }
+
+function sacRoNumericKey(value){
+  const m=String(value||'').match(/(\d+)(?!.*\d)/);
+  return m?Number(m[1]):Number.MAX_SAFE_INTEGER;
+}
+function sacSortRows(rows,mode){
+  const list=[...(rows||[])];
+  const txt=v=>normalizeAnswer(String(v||''));
+  const date=v=>{
+    const k=sacDateKey(v);
+    if(!k)return 0;
+    const t=new Date(k+'T00:00:00').getTime();
+    return Number.isNaN(t)?0:t;
+  };
+  const cmpText=(a,b)=>txt(a).localeCompare(txt(b),'pt-BR',{numeric:true,sensitivity:'base'});
+
+  switch(mode){
+    case 'date_asc':
+      return list.sort((a,b)=>date(sacSourceDate(a))-date(sacSourceDate(b)));
+    case 'ro_asc':
+      return list.sort((a,b)=>sacRoNumericKey(a.ro)-sacRoNumericKey(b.ro) || cmpText(a.ro,b.ro));
+    case 'ro_desc':
+      return list.sort((a,b)=>sacRoNumericKey(b.ro)-sacRoNumericKey(a.ro) || cmpText(b.ro,a.ro));
+    case 'client_asc':
+      return list.sort((a,b)=>cmpText(a.client,b.client) || sacRoNumericKey(a.ro)-sacRoNumericKey(b.ro));
+    case 'client_desc':
+      return list.sort((a,b)=>cmpText(b.client,a.client) || sacRoNumericKey(a.ro)-sacRoNumericKey(b.ro));
+    case 'sector_asc':
+      return list.sort((a,b)=>cmpText(sacDirectedSector(a),sacDirectedSector(b)) || sacRoNumericKey(a.ro)-sacRoNumericKey(b.ro));
+    case 'deadline_asc':
+      return list.sort((a,b)=>{
+        const da=date(a.treatmentDeadline), db=date(b.treatmentDeadline);
+        if(!da&&!db)return sacRoNumericKey(a.ro)-sacRoNumericKey(b.ro);
+        if(!da)return 1;
+        if(!db)return -1;
+        return da-db;
+      });
+    case 'status_asc':
+      return list.sort((a,b)=>cmpText(
+        sacIsPendingCandidate(a)?'Avaliar necessidade de SAC':externalTreatmentStatusLabel(a.treatmentStatus),
+        sacIsPendingCandidate(b)?'Avaliar necessidade de SAC':externalTreatmentStatusLabel(b.treatmentStatus)
+      ) || date(sacSourceDate(b))-date(sacSourceDate(a)));
+    case 'date_desc':
+    default:
+      return list.sort((a,b)=>date(sacSourceDate(b))-date(sacSourceDate(a)));
+  }
+}
+
 function renderExternalRoControl(){
   if(!isAdmin()&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
   const treatment=document.getElementById('externalRoImpactFilter')?.value||'all';
   const q=normalizeAnswer(document.getElementById('externalRoSearch')?.value||'');
   const allSacRows=isAdmin()?getExternalRoControls():getMySacs();
+
+  const sortMode=document.getElementById('externalRoSort')?.value||'date_desc';
 
   let rows=allSacRows.filter(r=>{
     if(!sacMatchesQuickTab(r))return false;
@@ -9743,7 +9807,9 @@ function renderExternalRoControl(){
       if(!hay.includes(q))return false;
     }
     return true;
-  }).sort((a,b)=>String(b.sourceRoDate||b.updatedAt||b.createdAt||'').localeCompare(String(a.sourceRoDate||a.updatedAt||a.createdAt||'')));
+  });
+
+  rows=sacSortRows(rows,sortMode);
 
   updateSacQuickSummary(allSacRows,rows);
 
