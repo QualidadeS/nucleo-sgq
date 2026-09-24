@@ -4817,7 +4817,7 @@ function portalJsonp(params,timeoutMs=15000){
 
     script.async=true;
     script.src=base+'?'+parts.join('&');
-    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar o retorno do login.'));
+    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar a confirmação solicitada.'));
     const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas não devolveu a confirmação ao aplicativo dentro do tempo limite.')),timeoutMs);
 
     document.head.appendChild(script);
@@ -4977,14 +4977,77 @@ async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=15000
 
 async function portalBackendDeleteConfirmed(collection,id){
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
-  const res=await portalJsonp({
+  if(!navigator.onLine)throw new Error('Sem conexão com a internet para excluir o registro.');
+
+  const colecaoKey=String(collection||'').trim();
+  const idKey=String(id||'').trim();
+  if(!colecaoKey||!idKey)throw new Error('Registro inválido para exclusão.');
+
+  // IMPORTANTE:
+  // portal_delete existe no doPost do Apps Script. Não deve ser chamado por JSONP/GET.
+  // A versão anterior tentava executar portal_delete via GET e o navegador acabava
+  // recebendo uma resposta que não era JavaScript, gerando o erro de "retorno do login".
+  const params={
     acao:'portal_delete',
-    colecao:String(collection||''),
-    id:String(id||''),
+    colecao:colecaoKey,
+    id:idKey,
     ator:getSession()?.name||'Sistema'
-  },30000);
-  if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a exclusão do registro anterior.');
-  return res;
+  };
+
+  const token=String(getSession()?.authToken||'').trim();
+  if(token)params.token=token;
+
+  const submitted=portalPostForm(params);
+  if(!submitted)throw new Error('Não foi possível enviar o pedido de exclusão ao Apps Script.');
+
+  // Confirma pela própria base central: quando portal_get_record devolver null,
+  // a exclusão já foi efetivamente aplicada.
+  const started=Date.now();
+  let ultimoErro='';
+
+  while(Date.now()-started<90000){
+    await new Promise(resolve=>setTimeout(resolve,1200));
+
+    try{
+      const chk=await portalJsonp({
+        acao:'portal_get_record',
+        colecao:colecaoKey,
+        id:idKey
+      },15000);
+
+      if(chk?.sucesso && !chk.registro){
+        return {sucesso:true,excluido:true};
+      }
+
+      if(chk && chk.sucesso===false){
+        ultimoErro=String(chk.erro||'');
+      }
+    }catch(e){
+      // Uma falha isolada de leitura não significa que a exclusão falhou.
+      // Continua tentando até o limite.
+      ultimoErro=String(e?.message||e||'');
+    }
+  }
+
+  // Última leitura antes de declarar falha.
+  try{
+    const finalRead=await portalJsonp({
+      acao:'portal_get_record',
+      colecao:colecaoKey,
+      id:idKey
+    },15000);
+
+    if(finalRead?.sucesso && !finalRead.registro){
+      return {sucesso:true,excluido:true};
+    }
+  }catch(e){
+    ultimoErro=String(e?.message||e||ultimoErro);
+  }
+
+  throw new Error(
+    'O pedido de exclusão foi enviado, mas a base central ainda devolve este registro.'+
+    (ultimoErro?'\n\nÚltima resposta: '+ultimoErro:'')
+  );
 }
 
 function portalBackendDelete(collection,id){
