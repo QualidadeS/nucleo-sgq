@@ -4977,40 +4977,53 @@ async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=15000
 
 async function portalBackendDeleteConfirmed(collection,id){
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
-  if(!navigator.onLine)throw new Error('Sem conexão com a internet para excluir o registro.');
+  if(!navigator.onLine)throw new Error('Sem conexão com a internet para excluir a RNC.');
 
   const colecaoKey=String(collection||'').trim();
   const idKey=String(id||'').trim();
 
-  if(!colecaoKey||!idKey)throw new Error('Registro inválido para exclusão.');
+  if(!colecaoKey||!idKey)throw new Error('RNC inválida para exclusão.');
 
-  // Exclusão confirmada em uma única chamada.
-  // A própria resposta só volta depois que o Apps Script marcou o registro
-  // como inativo na base e tratou os arquivos vinculados.
-  const res=await portalJsonp({
-    acao:'portal_delete_confirmed',
+  const eventoId='PORTALDELETE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+
+  const params={
+    acao:'portal_delete',
     colecao:colecaoKey,
     id:idKey,
-    ator:getSession()?.name||'SGQ'
-  },90000);
+    ator:getSession()?.name||'SGQ',
+    eventoId
+  };
 
-  if(!res?.sucesso){
-    throw new Error(res?.erro||'A base central não confirmou a exclusão.');
+  const token=String(getSession()?.authToken||'').trim();
+  if(token)params.token=token;
+
+  const submitted=portalPostForm(params);
+  if(!submitted)throw new Error('Não foi possível enviar o pedido de exclusão ao Apps Script.');
+
+  const started=Date.now();
+
+  while(Date.now()-started<90000){
+    await new Promise(resolve=>setTimeout(resolve,1200));
+
+    try{
+      const chk=await portalJsonp({
+        acao:'portal_delete_status',
+        eventoId
+      },15000);
+
+      if(chk?.sucesso && chk.status==='done'){
+        return {sucesso:true,excluido:true};
+      }
+
+      if(chk?.sucesso && chk.status==='error'){
+        throw new Error(chk.erro||'O Apps Script informou erro ao excluir a RNC.');
+      }
+    }catch(e){
+      if(String(e?.message||'').includes('informou erro'))throw e;
+    }
   }
 
-  // Confirma também pela leitura normal da coleção.
-  // Registro inativo não pode mais voltar em portal_get_record.
-  const check=await portalJsonp({
-    acao:'portal_get_record',
-    colecao:colecaoKey,
-    id:idKey
-  },20000).catch(()=>null);
-
-  if(check?.sucesso && check.registro){
-    throw new Error('A base respondeu à exclusão, mas o registro ainda aparece como ativo.');
-  }
-
-  return {sucesso:true,excluido:true};
+  throw new Error('A exclusão foi enviada, mas não foi confirmada pela base central dentro do tempo esperado.');
 }
 
 function portalBackendDelete(collection,id){
@@ -17090,7 +17103,7 @@ function updateRncHeaderValue(i,v){
   refreshRncTemplatePreview();
 }
 
-function renderRncHeaderLayoutEditor(t){const a=t.headerLayout||defaultRncHeaderLayout();const rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((x,y)=>x-y);return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button type="button" class="btn secondary" onclick="addRncHeaderCell()">+ Célula</button><button type="button" class="btn secondary" onclick="addRncHeaderRow()">+ Linha</button></div>`+rows.map(row=>`<div style="border:1px solid #d7deea;border-radius:12px;padding:10px;background:#f8fafc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:12px">Linha ${row}</b><button type="button" class="btn secondary" style="padding:6px 9px" onclick="addRncHeaderCell(${row})">+ célula nesta linha</button></div><div style="display:grid;gap:8px">${a.map((x,i)=>({x,i})).filter(o=>(Number(o.x.row)||1)===row).map(({x,i})=>`<div style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="font-size:12px">${escapeHtml(x.label||x.value||('Célula '+(i+1)))}</b><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn secondary" style="padding:5px 8px" onclick="mergeRncHeaderCell(${i})">Mesclar →</button><button type="button" class="btn secondary" style="padding:5px 8px" onclick="splitRncHeaderCell(${i})">Dividir</button><button type="button" class="btn danger" style="padding:5px 8px" onclick="removeRncHeaderCell(${i})">Excluir</button></div></div><div style="display:grid;grid-template-columns:minmax(140px,1.3fr) minmax(140px,1fr) 90px 90px 115px;gap:7px;align-items:end"><label><span class="small">Texto / rótulo</span><input value="${escapeHtml(x.label||'')}" oninput="updateRncHeaderField(${i},'label',this.value)"></label><label><span class="small">Valor</span><input value="${escapeHtml(
+function renderRncHeaderLayoutEditor(t){const a=t.headerLayout||defaultRncHeaderLayout();const rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((x,y)=>x-y);return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button type="button" class="btn secondary" onclick="addRncHeaderCell()">+ Célula</button><button type="button" class="btn secondary" onclick="addRncHeaderRow()">+ Linha</button></div>`+rows.map(row=>`<div style="border:1px solid #d7deea;border-radius:12px;padding:10px;background:#f8fafc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:12px">Linha ${row}</b><button type="button" class="btn secondary" style="padding:6px 9px" onclick="addRncHeaderCell(${row})">+ célula nesta linha</button></div><div style="display:grid;gap:8px">${a.map((x,i)=>({x,i})).filter(o=>(Number(o.x.row)||1)===row).map(({x,i})=>`<div style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="font-size:12px">${escapeHtml(x.label||x.value||('Célula '+(i+1)))}</b><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn secondary" style="padding:5px 8px" onclick="mergeRncHeaderCell(${i})">Mesclar →</button><button type="button" class="btn secondary" style="padding:5px 8px" onclick="splitRncHeaderCell(${i})">Dividir</button><button type="button" class="btn danger" style="padding:5px 8px" onclick="removeRncHeaderCellById('${x.id}',event)">Excluir</button></div></div><div style="display:grid;grid-template-columns:minmax(140px,1.3fr) minmax(140px,1fr) 90px 90px 115px;gap:7px;align-items:end"><label><span class="small">Texto / rótulo</span><input value="${escapeHtml(x.label||'')}" oninput="updateRncHeaderField(${i},'label',this.value)"></label><label><span class="small">Valor</span><input value="${escapeHtml(
   x.source==='code' ? (t.code||'') :
   x.source==='revision' ? (t.revision||'') :
   x.source==='title' ? (t.title||'') :
@@ -17100,7 +17113,57 @@ function renderRncHeaderLayoutEditor(t){const a=t.headerLayout||defaultRncHeader
 function nextRncHeaderId(){return 'h-custom-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6)}
 function addRncHeaderCell(row){const a=rncHeaderFields();row=Number(row)||Math.max(1,...a.map(x=>Number(x.row)||1));const same=a.filter(x=>(Number(x.row)||1)===row);const width=same.length?Math.max(5,Math.round(100/(same.length+1))):100;if(same.length)same.forEach(x=>x.width=Math.max(5,(Number(x.width)||20)*same.length/(same.length+1)));a.push({id:nextRncHeaderId(),row,label:'Novo campo',value:'',source:'@',width,height:7,align:'left',bold:false});saveRncHeaderFields(a)}
 function addRncHeaderRow(){const a=rncHeaderFields(),row=Math.max(0,...a.map(x=>Number(x.row)||1))+1;a.push({id:nextRncHeaderId(),row,label:'Novo campo',value:'',source:'@',width:100,height:7,align:'left',bold:false});saveRncHeaderFields(a)}
-function removeRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;const row=Number(x.row)||1;a.splice(i,1);const same=a.filter(v=>(Number(v.row)||1)===row);if(same.length){const total=same.reduce((s,v)=>s+(Number(v.width)||20),0)||100;same.forEach(v=>v.width=(Number(v.width)||20)*100/total)}saveRncHeaderFields(a)}
+function removeRncHeaderCell(i){
+  const a=rncHeaderFields();
+  const x=a[i];
+  if(!x)return;
+  removeRncHeaderCellById(x.id);
+}
+
+function removeRncHeaderCellById(id,ev){
+  if(ev){
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+
+  const a=rncHeaderFields();
+  const idx=a.findIndex(x=>String(x.id)===String(id));
+  if(idx<0)return;
+
+  const removida=a[idx];
+  const row=Number(removida.row)||1;
+
+  a.splice(idx,1);
+
+  // Reequilibra somente as células que sobraram na mesma linha.
+  const same=a.filter(v=>(Number(v.row)||1)===row);
+  if(same.length){
+    const total=same.reduce((sum,v)=>sum+(Number(v.width)||20),0)||100;
+    same.forEach(v=>{
+      v.width=((Number(v.width)||20)/total)*100;
+    });
+  }
+
+  // Grava diretamente no hidden que é a fonte real do editor.
+  const hidden=document.getElementById('tplHeaderLayoutData');
+  if(hidden)hidden.value=JSON.stringify(a);
+
+  // Se a célula excluída estava selecionada, limpa a seleção.
+  if(String(rncGridSelectedHeaderId||'')===String(id)){
+    rncGridSelectedHeaderId='';
+  }
+
+  // Atualiza imediatamente a lista e a folha.
+  const list=document.getElementById('tplHeaderLayoutList');
+  if(list){
+    const t=collectRncTemplateForm();
+    t.headerLayout=a;
+    list.innerHTML=renderRncHeaderLayoutEditor(t);
+  }
+
+  refreshRncTemplatePreview();
+}
+
 function mergeRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;const row=a.filter(v=>(Number(v.row)||1)===(Number(x.row)||1)),pos=row.findIndex(v=>v.id===x.id),right=row[pos+1];if(!right)return alert('Não há célula à direita para mesclar.');x.width=(Number(x.width)||20)+(Number(right.width)||20);const ri=a.findIndex(v=>v.id===right.id);if(ri>=0)a.splice(ri,1);saveRncHeaderFields(a)}
 function splitRncHeaderCell(i){const a=rncHeaderFields(),x=a[i];if(!x)return;const w=Math.max(6,Number(x.width)||20);x.width=w/2;const ni=a.findIndex(v=>v.id===x.id)+1;a.splice(ni,0,{id:nextRncHeaderId(),row:Number(x.row)||1,label:'',value:'',source:'@',width:w/2,height:Number(x.height)||7,align:x.align||'left',bold:false});saveRncHeaderFields(a)}
 function rncHeaderValue(t,x,preview=true,obj={}){const src=String(x.source||'');if(src==='@logo')return '__RNC_LOGO__';if(src==='title')return t.title||'';if(src==='code')return t.code||'';if(src==='revision')return t.revision||'';if(src==='@label')return '';if(src.startsWith('@')){const v=src.slice(1);if(x.id==='h-register'&&!preview)return obj.rncNumber||'—';return v}return x.value||''}
@@ -17115,7 +17178,7 @@ function rncHeaderMergeVertical(dir){const a=rncHeaderFields(),x=a.find(v=>v.id=
 function rncHeaderMergeUp(){rncHeaderMergeVertical(-1)}
 function rncHeaderMergeDown(){rncHeaderMergeVertical(1)}
 function rncHeaderSplitSelected(){const i=rncHeaderIndexBySelected();if(i>=0)splitRncHeaderCell(i)}
-function rncHeaderDeleteSelected(){const i=rncHeaderIndexBySelected();if(i<0)return;removeRncHeaderCell(i);rncGridSelectedHeaderId='';refreshRncTemplatePreview()}
+function rncHeaderDeleteSelected(){const x=selectedRncHeaderCell();if(!x)return;removeRncHeaderCellById(x.id);}
 function rncHeaderAddCellSelected(){const x=selectedRncHeaderCell();addRncHeaderCell(x?Number(x.row)||1:undefined)}
 function rncHeaderAddRowSelected(){addRncHeaderRow()}
 function rncHeaderRowsHtml(t,preview=true,obj={}){const a=t.headerLayout||defaultRncHeaderLayout(),bw=Math.max(.4,Number(t.layout?.borderWidth)||.65),fs=(Number(t.layout?.fontScale)||100)/100,rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((a,b)=>a-b);if(!rows.length)return'';const maxRow=Math.max(...rows,...a.map(x=>(Number(x.row)||1)+Math.max(1,Number(x.rowSpan)||1)-1));const rowHeights=Array.from({length:maxRow},(_,i)=>{const rr=i+1,c=a.filter(x=>(Number(x.row)||1)===rr);return Math.max(3,...c.map(x=>Number(x.height)||7))});const positions=new Map(),occupied={};for(let rr=1;rr<=maxRow;rr++){const blocks=(occupied[rr]||[]).sort((u,v)=>u[0]-v[0]);const cells=a.filter(x=>(Number(x.row)||1)===rr);let free=[];let cursor=0;for(const b of blocks){if(b[0]>cursor)free.push([cursor,b[0]]);cursor=Math.max(cursor,b[1])}if(cursor<100)free.push([cursor,100]);const freeTotal=free.reduce((s,z)=>s+z[1]-z[0],0)||100,total=cells.reduce((s,x)=>s+(Number(x.width)||20),0)||100;let freePos=0,seg=0,segPos=free[0]?.[0]||0;for(const x of cells){let want=(Number(x.width)||20)/total*freeTotal,left=null,right=null;while(want>.001&&seg<free.length){const [sl,sr]=free[seg];segPos=Math.max(segPos,sl);const avail=sr-segPos;if(avail<=.001){seg++;segPos=free[seg]?.[0]||100;continue}const take=Math.min(want,avail);if(left===null)left=segPos;right=segPos+take;segPos+=take;want-=take;if(segPos>=sr-.001){seg++;segPos=free[seg]?.[0]||100}}if(left===null){left=0;right=0}positions.set(x.id,[left,right]);const sp=Math.max(1,Number(x.rowSpan)||1);if(sp>1)for(let z=1;z<sp;z++){(occupied[rr+z]||(occupied[rr+z]=[])).push([left,right])}}}const rowTpl=rowHeights.map(h=>preview?`minmax(${h*4.2}px,auto)`:`minmax(${h}mm,auto)`).join(' ');return `<div data-rnc-header-grid="1" style="display:grid;grid-template-columns:repeat(1000,minmax(0,1fr));grid-template-rows:${rowTpl};border-bottom:${bw}px solid #111">${a.map(x=>{const i=a.findIndex(z=>z.id===x.id),v=rncHeaderValue(t,x,preview,obj),al=['left','center','right'].includes(x.align)?x.align:'left',[l,r]=positions.get(x.id)||[0,100],cs=Math.max(1,Math.round(l*10)+1),ce=Math.max(cs+1,Math.round(r*10)+1),rs=Number(x.row)||1,re=Math.min(maxRow+1,rs+Math.max(1,Number(x.rowSpan)||1));const label=x.label?`<b ${preview?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'label',this.textContent)" onclick="event.stopPropagation();selectRncHeaderCell('${x.id}')"`:''} style="font-size:${6.7*fs}px;outline:none">${escapeHtml(x.label)}</b>`:'';const value=v==='__RNC_LOGO__'?rncTemplateLogoHtml(t,preview):(v?`<span ${preview&&String(x.source||'').startsWith('@')&&x.source!=='@logo'?`contenteditable="true" spellcheck="false" oninput="previewEditRncHeader(${i},'source','@'+this.textContent)" onclick="event.stopPropagation();selectRncHeaderCell('${x.id}')"`:''} style="font-size:${7.4*fs}px;${x.bold?'font-weight:800;':''};outline:none">${escapeHtml(v)}</span>`:'');const selected=preview&&x.id===rncGridSelectedHeaderId;return `<div data-rnc-header-cell="${x.id}" ${preview?`onclick="selectRncHeaderCell('${x.id}')"`:''} style="grid-column:${cs}/${ce};grid-row:${rs}/${re};position:relative;min-width:0;overflow:hidden;overflow-wrap:anywhere;word-break:break-word;white-space:normal;padding:${preview?'4px 5px':'1mm'};border-right:${bw}px solid #777;border-top:${rs>1?bw:0}px solid #777;text-align:${al};display:flex;${x.label&&v?'flex-direction:column;gap:2px;':'align-items:center;'}justify-content:${al==='center'?'center':al==='right'?'flex-end':'flex-start'};${selected?'box-shadow:inset 0 0 0 2px #2f6fed;background:#eef5ff;':''};cursor:${preview?'pointer':'default'}">${label}${value}${preview?`<span onpointerdown="startRncHeaderResize(event,'${x.id}')" style="position:absolute;right:-4px;top:0;width:8px;height:100%;cursor:col-resize;z-index:5" title="Arraste para dimensionar"></span>`:''}</div>`}).join('')}</div>`}
