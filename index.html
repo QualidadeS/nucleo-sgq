@@ -11398,6 +11398,59 @@ function nextTuesdayIsoDate(fromDate=new Date()){
   return `${y}-${m}-${day}`;
 }
 
+
+function applyTriageDecisionLocal(roNumber,decision,savedRecords,roUnitValue){
+  const base=String(roNumber||'').trim();
+  if(!base)return;
+
+  const target=getAllRoRecords().find(r=>
+    String(triageBaseRoNumber(r)||'').trim()===base ||
+    String(r?.numero||r?.id||r?.codigo||'').trim()===base
+  );
+  if(!target)return;
+
+  const first=(savedRecords||[])[0]||{};
+  const directed=decision==='directed';
+  const sector=directed?String(first.responsibleSector||'').trim():'';
+  const person=directed?String(first.responsibleUserName||'Todo o setor').trim():'';
+
+  const status=
+    decision==='directed' ? 'Enviado' :
+    decision==='record' ? 'Registro' :
+    decision==='obsolete' ? 'Obsoleto' :
+    decision==='cancelled' ? 'Cancelada' : '';
+
+  if(roUnitValue){
+    target.unidade=canonicalUnitName(roUnitValue);
+  }
+
+  target.setorResponsavelPlanilha=sector;
+  target.pessoaResponsavel=person;
+  target.statusOperacional=status;
+  target.status=status;
+
+  // `ro.setor` também é fallback da lógica de triagem em snapshots antigos.
+  if(directed)target.setor=sector;
+
+  if(target.raw&&typeof target.raw==='object'){
+    target.raw.__unidade=target.unidade||'';
+    target.raw.__setorResponsavel=sector;
+    target.raw.__pessoaResponsavel=person;
+    target.raw.__statusOperacional=status;
+  }
+
+  // Persiste imediatamente no cache importado para o contador não voltar
+  // ao renderizar a tela antes da próxima sincronização da planilha.
+  try{
+    const all=getAllRoRecords();
+    const internas=all.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna');
+    const externas=all.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa');
+    saveImportedRosByOrigin(internas,externas);
+  }catch(e){
+    console.warn('[NUCLEO TRIAGEM] não foi possível persistir o status local imediatamente',e);
+  }
+}
+
 async function saveTriageRecord(){
   await showNucleoLoading('Salvando triagem e processando ações...','Processando');
   try{
@@ -11452,6 +11505,7 @@ async function saveTriageRecord(){
     renderTriage();
     try{render()}catch(e){}
     try{refreshRoSummary()}catch(e){}
+    hideNucleoLoading(true);
     alert('Unidade corrigida. Nenhuma decisão de triagem, setor, Status ou PDCA foi alterado.');
     return;
   }
@@ -11487,7 +11541,18 @@ async function saveTriageRecord(){
     };
     map.set(recordKey,record);savedRecords.push(record);
   }
-  // A planilha original e a base central precisam confirmar antes da interface considerar salvo.
+
+  // A decisão fica registrada localmente IMEDIATAMENTE.
+  // Assim a R.O. deixa de contar como "A triar" assim que o SGQ salva.
+  localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+  applyTriageDecisionLocal(roNumber,decision,savedRecords,roUnitValue);
+
+  try{renderTriage()}catch(e){}
+  try{refreshRoSummary()}catch(e){}
+  try{refreshMenuNotificationBadges()}catch(e){}
+
+  // Depois sincroniza com a planilha/base central.
+  // A interface não depende mais do retorno da base para reconhecer a decisão.
   // Para R.O. repetida, setorAnterior identifica exatamente a linha que deve ser alterada.
   for(const record of savedRecords){
     if(portalBackendEnabled()){
@@ -11501,7 +11566,7 @@ async function saveTriageRecord(){
         // A pendência de PDCA é controlada separadamente pelo Núcleo e não deve sobrescrever este campo.
         status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
       });
-      await portalBackendSaveConfirmedPost('triage',record.roKey,record,60000);
+      portalBackendSave('triage',record.roKey,record);
       const deletedKeys=getDeletedTriageKeys();
       if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
     }
@@ -11517,7 +11582,7 @@ async function saveTriageRecord(){
   for(const oldKey of obsoleteKeys){
     if(portalBackendEnabled()){
       updateNucleoLoading('Removendo o direcionamento anterior da base central...','Processando');
-      await portalBackendDeleteConfirmed('triage',oldKey);
+      portalBackendDelete('triage',oldKey);
       const deletedKeys=getDeletedTriageKeys();
       deletedKeys.add(String(oldKey));
       saveDeletedTriageKeys(deletedKeys);
@@ -11528,15 +11593,17 @@ async function saveTriageRecord(){
 
   updateRoUnitLocal(key,roUnitValue);
 
-  // Atualiza imediatamente a fonte importada depois de editar setor. Sem isso,
-  // a tela ainda podia usar o setor antigo mantido no cache até a próxima
-  // sincronização manual/automática.
-  try{
-    updateNucleoLoading('Atualizando a visualização com os dados gravados...','Processando');
-    await syncImportedRosFromConfiguredSources({silent:true,force:true});
-  }catch(syncErr){
-    console.warn('[NUCLEO TRIAGEM] setor foi salvo, mas a releitura imediata falhou',syncErr);
-  }
+  // A interface já foi atualizada localmente. A releitura completa da planilha
+  // acontece em segundo plano e não mantém o usuário preso no carregamento.
+  setTimeout(()=>{
+    syncImportedRosFromConfiguredSources({silent:true,force:true})
+      .then(()=>{
+        try{renderTriage()}catch(e){}
+        try{refreshRoSummary()}catch(e){}
+        try{refreshMenuNotificationBadges()}catch(e){}
+      })
+      .catch(syncErr=>console.warn('[NUCLEO TRIAGEM] releitura em segundo plano falhou',syncErr));
+  },300);
 
   closeTriageModal();
   populateTriageSectors();
@@ -11587,12 +11654,42 @@ async function saveTriageRecord(){
       if(email)notifyManagersOfDirectedRo(roNumber,sec,triageRo,person);
     }
     try{await refreshEmailHistory()}catch(_){ }
+
+    hideNucleoLoading(true);
+
     alert(emailErrors.length
       ? ('Triagem salva, mas houve falha em alguns e-mails: '+emailErrors.join(' | '))
-      : ('Triagem salva. '+savedRecords.length+' setor(es) direcionado(s) e '+totalSent+' e-mail(s) enviado(s).'));
+      : ('Triagem concluída com sucesso. '+savedRecords.length+' setor(es) direcionado(s) e '+totalSent+' e-mail(s) enviado(s).'));
+  }else{
+    hideNucleoLoading(true);
+
+    const decisionLabel=
+      decision==='record' ? 'Somente para registro' :
+      decision==='obsolete' ? 'R.O. obsoleta' :
+      decision==='cancelled' ? 'R.O. cancelada' :
+      'Triagem concluída';
+
+    alert(
+      'Triagem concluída com sucesso.\n\n'+
+      roNumber+' — '+decisionLabel+
+      (note?'\nMotivo: '+note:'')
+    );
   }
+  } catch(err) {
+    console.error('[NUCLEO TRIAGEM] falha ao concluir triagem',err);
+    hideNucleoLoading(true);
+
+    alert(
+      'Não foi possível concluir toda a sincronização da triagem.\n\n'+
+      String(err?.message||err||'Falha desconhecida.')+
+      '\n\nA decisão já foi mantida localmente para não continuar aparecendo como “A triar”.'
+    );
+
+    try{renderTriage()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
   } finally {
-    hideNucleoLoading();
+    hideNucleoLoading(true);
   }
 }
 
