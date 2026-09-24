@@ -2278,14 +2278,18 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 #nucleoLoadingOverlay{
   position:fixed;
   inset:0;
-  z-index:99999;
+  z-index:2147483000 !important;
   display:none;
   align-items:center;
   justify-content:center;
   background:rgba(255,255,255,.88);
   backdrop-filter:blur(2px);
 }
-#nucleoLoadingOverlay.show{display:flex}
+#nucleoLoadingOverlay.show{
+  display:flex !important;
+  z-index:2147483000 !important;
+  pointer-events:auto !important;
+}
 #nucleoLoadingCard{
   width:min(420px,calc(100vw - 40px));
   background:#fff;
@@ -4197,7 +4201,7 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v3';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v5';
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -11699,7 +11703,10 @@ async function saveTriageRecord(){
         ]);
       }catch(syncErr){
         console.warn('[NUCLEO TRIAGEM] decisão salva localmente, mas planilha não confirmou',syncErr);
-        syncWarnings.push('A planilha não confirmou a atualização agora.');
+        syncWarnings.push(
+          'A planilha não confirmou a atualização: '+
+          String(syncErr?.message||syncErr||'erro não informado')
+        );
       }
 
       portalBackendSave('triage',record.roKey,record);
@@ -20342,7 +20349,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v3</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v5</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
