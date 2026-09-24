@@ -15556,15 +15556,12 @@ const ADMIN_OPERATIONAL_MODULES={
   },
   nccapa:{
     eyebrow:'NÃO CONFORMIDADES',
-    title:'Não conformidades e CAPA',
-    desc:'Central de não conformidades internas e de fornecedor. NC de cliente continua no fluxo de SAC; NC de fornecedor é registrada como RNC e pode ou não estar vinculada a uma R.O.',
+    title:'Não conformidades',
+    desc:'Central única para acompanhar NCs e RNCs. RNC é usada para fornecedor; ocorrências de cliente continuam no fluxo de SAC. CAPA fica apenas como informação/filtro neste momento.',
     cards:[
       ['Nova NC interna','Registrar uma não conformidade interna. O vínculo com R.O. é opcional.','new_internal'],
       ['Nova RNC de fornecedor','Registrar uma RNC de fornecedor. O vínculo com R.O. é opcional.','new_rnc'],
-      ['Em tratamento','Acompanhar NCs e RNCs abertas, contenções e responsáveis.','active'],
-      ['RNC de fornecedores','Consultar as não conformidades de fornecedor e seus vínculos.','rnc'],
-      ['Enviar RNC','Selecionar uma RNC já pronta, conferir o PDF e realizar o envio por e-mail.','rnc_send'],
-      ['CAPA vinculada','Controlar NCs e RNCs com ação corretiva/preventiva vinculada.','capa']
+      ['Em tratamento','Central única para visualizar, filtrar, enviar, acompanhar e excluir NCs/RNCs.','active']
     ]
   },
   documents:{
@@ -16058,7 +16055,7 @@ function openAdminOperationalWorkspace(key,index){
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
   if(key==='processes'&&mode==='templates'){renderProcessTemplatesWorkspace();return}
-  if(key==='nccapa'&&mode==='rnc_send'){renderRncSendWorkspace();return}
+  if(key==='nccapa'&&mode==='active'){renderNcCapaTreatmentWorkspace();return}
   if(mode==='new'||mode==='new_internal'||mode==='new_rnc'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
       <div class="card" style="margin-top:14px;padding:20px">
@@ -16117,6 +16114,221 @@ function openAdminOperationalWorkspace(key,index){
     </div>
   </div>`;
 }
+
+function ncCapaTypeKey(r){
+  const t=normalizeAnswer(r?.ncType||'');
+  if(t==='supplier'||String(r?.rncNumber||'').trim())return 'supplier';
+  if(t==='client'||t==='customer'||t==='cliente')return 'client';
+  return 'internal';
+}
+function ncCapaTypeLabel(r){
+  const t=ncCapaTypeKey(r);
+  if(t==='supplier')return 'RNC fornecedor';
+  if(t==='client')return 'Cliente / SAC';
+  return 'NC interna';
+}
+function ncCapaEmailLabel(r){
+  if(ncCapaTypeKey(r)!=='supplier')return '—';
+  if(r?.rncEmailStatus==='sent')return 'Enviada';
+  if(r?.rncEmailStatus==='sending')return 'Enviando';
+  return 'Não enviada';
+}
+function ncCapaCapaLabel(r){
+  return String(r?.capa||'no')==='yes'?'Sim':'Não';
+}
+function ncCapaRecordDate(r){
+  return r?.updatedAt||r?.createdAt||r?.eventDate||r?.rncIssueDate||'';
+}
+function renderNcCapaTreatmentWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;
+
+  host.innerHTML=`<div style="grid-column:1/-1">
+    <button class="btn secondary" type="button" onclick="showAdminOperationalModule('nccapa')">← Voltar ao módulo</button>
+
+    <div class="card" style="margin-top:14px;padding:20px">
+      <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">Em tratamento</h3>
+          <div class="small" style="margin-top:5px">Todas as NCs e RNCs ficam nesta central. Use os filtros para separar fornecedor, interna, cliente/SAC, CAPA e situação.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn secondary" type="button" onclick="openAdminOperationalWorkspace('nccapa',0)">＋ Nova NC interna</button>
+          <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('nccapa',1)">＋ Nova RNC fornecedor</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-top:18px">
+        <label><span class="small">Tipo</span>
+          <select id="ncTreatmentType" onchange="renderNcCapaTreatmentList()">
+            <option value="all">Todos</option>
+            <option value="supplier">RNC fornecedor</option>
+            <option value="internal">NC interna</option>
+            <option value="client">Cliente / SAC</option>
+          </select>
+        </label>
+
+        <label><span class="small">CAPA</span>
+          <select id="ncTreatmentCapa" onchange="renderNcCapaTreatmentList()">
+            <option value="all">Todas</option>
+            <option value="yes">Com CAPA</option>
+            <option value="no">Sem CAPA</option>
+          </select>
+        </label>
+
+        <label><span class="small">Situação</span>
+          <select id="ncTreatmentStatus" onchange="renderNcCapaTreatmentList()">
+            <option value="all">Todas</option>
+            <option value="open">Em aberto</option>
+            <option value="done">Concluídas</option>
+          </select>
+        </label>
+
+        <label><span class="small">Envio da RNC</span>
+          <select id="ncTreatmentEmail" onchange="renderNcCapaTreatmentList()">
+            <option value="all">Todos</option>
+            <option value="sent">Enviadas</option>
+            <option value="not_sent">Não enviadas</option>
+          </select>
+        </label>
+
+        <label><span class="small">Organizar</span>
+          <select id="ncTreatmentSort" onchange="renderNcCapaTreatmentList()">
+            <option value="recent">Mais recentes</option>
+            <option value="old">Mais antigas</option>
+            <option value="number">Número / título</option>
+            <option value="type">Tipo</option>
+          </select>
+        </label>
+
+        <label style="grid-column:span 2"><span class="small">Buscar</span>
+          <input id="ncTreatmentSearch" placeholder="Número, título, fornecedor, setor, R.O..." oninput="renderNcCapaTreatmentList()">
+        </label>
+      </div>
+
+      <div id="ncTreatmentSummary" class="small" style="margin-top:14px"></div>
+      <div id="ncTreatmentList" style="margin-top:12px"></div>
+    </div>
+  </div>`;
+
+  renderNcCapaTreatmentList();
+}
+function renderNcCapaTreatmentList(){
+  const host=document.getElementById('ncTreatmentList');if(!host)return;
+
+  const type=document.getElementById('ncTreatmentType')?.value||'all';
+  const capa=document.getElementById('ncTreatmentCapa')?.value||'all';
+  const status=document.getElementById('ncTreatmentStatus')?.value||'all';
+  const email=document.getElementById('ncTreatmentEmail')?.value||'all';
+  const sort=document.getElementById('ncTreatmentSort')?.value||'recent';
+  const q=normalizeAnswer(document.getElementById('ncTreatmentSearch')?.value||'');
+
+  let rows=getAdminModuleRecords().filter(r=>r.module==='nccapa');
+
+  rows=rows.filter(r=>{
+    const tk=ncCapaTypeKey(r);
+
+    if(type!=='all'&&tk!==type)return false;
+    if(capa!=='all'&&String(r.capa||'no')!==capa)return false;
+
+    const concluida=['done','published','closed','concluded'].includes(String(r.status||''));
+    if(status==='open'&&concluida)return false;
+    if(status==='done'&&!concluida)return false;
+
+    if(email!=='all'){
+      if(tk!=='supplier')return false;
+      if(email==='sent'&&r.rncEmailStatus!=='sent')return false;
+      if(email==='not_sent'&&r.rncEmailStatus==='sent')return false;
+    }
+
+    if(q){
+      const hay=normalizeAnswer([
+        r.rncNumber,r.title,r.supplier,r.sector,r.responsible,r.relatedRo,
+        r.rncProduct,r.rncSummary,r.description,ncCapaTypeLabel(r)
+      ].filter(Boolean).join(' '));
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+
+  if(sort==='old'){
+    rows.sort((a,b)=>String(ncCapaRecordDate(a)).localeCompare(String(ncCapaRecordDate(b))));
+  }else if(sort==='number'){
+    rows.sort((a,b)=>String(a.rncNumber||a.title||'').localeCompare(String(b.rncNumber||b.title||''),'pt-BR',{numeric:true,sensitivity:'base'}));
+  }else if(sort==='type'){
+    rows.sort((a,b)=>ncCapaTypeLabel(a).localeCompare(ncCapaTypeLabel(b),'pt-BR',{sensitivity:'base'}));
+  }else{
+    rows.sort((a,b)=>String(ncCapaRecordDate(b)).localeCompare(String(ncCapaRecordDate(a))));
+  }
+
+  const summary=document.getElementById('ncTreatmentSummary');
+  if(summary){
+    const rncs=rows.filter(r=>ncCapaTypeKey(r)==='supplier').length;
+    const ncs=rows.filter(r=>ncCapaTypeKey(r)==='internal').length;
+    const capas=rows.filter(r=>String(r.capa||'no')==='yes').length;
+    summary.textContent=`${rows.length} registro(s) • ${rncs} RNC fornecedor • ${ncs} NC interna • ${capas} com CAPA`;
+  }
+
+  if(!rows.length){
+    host.innerHTML='<div style="padding:28px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa"><b>Nenhum registro encontrado.</b><div class="small" style="margin-top:5px">Ajuste os filtros ou a busca.</div></div>';
+    return;
+  }
+
+  host.innerHTML=`<div style="overflow:auto;border:1px solid #e5e7eb;border-radius:12px">
+    <table style="width:100%;min-width:1080px">
+      <thead><tr>
+        <th>Registro</th>
+        <th>Tipo</th>
+        <th>Parte / setor</th>
+        <th>CAPA</th>
+        <th>Situação</th>
+        <th>Envio</th>
+        <th style="text-align:right">Ações</th>
+      </tr></thead>
+      <tbody>${rows.map(r=>{
+        const tk=ncCapaTypeKey(r);
+        const ehRnc=tk==='supplier';
+        const registro=ehRnc?(r.rncNumber||'RNC sem número'):(r.title||'NC sem título');
+        const complemento=ehRnc?(r.title||r.rncSummary||''):(r.relatedRo?('R.O.: '+r.relatedRo):(r.description||''));
+        const parte=ehRnc?(r.supplier||'—'):(r.sector||r.responsible||'—');
+        return `<tr>
+          <td><b>${escapeHtml(registro)}</b>${complemento?`<div class="small">${escapeHtml(complemento)}</div>`:''}</td>
+          <td><span class="pill">${escapeHtml(ncCapaTypeLabel(r))}</span></td>
+          <td>${escapeHtml(parte)}</td>
+          <td><span class="pill">${escapeHtml(ncCapaCapaLabel(r))}</span></td>
+          <td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td>
+          <td>${ehRnc?`<span class="pill">${escapeHtml(ncCapaEmailLabel(r))}</span>`:'—'}</td>
+          <td><div style="display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap">
+            ${ehRnc?`<button class="btn secondary" type="button" onclick="printRncStandard('${escapeHtml(r.id)}')">Visualizar</button>`:''}
+            ${ehRnc?`<button class="btn primary" type="button" onclick="openRncSendModal('${escapeHtml(r.id)}')">Enviar</button>`:''}
+            <button class="btn secondary" type="button" onclick="showNcCapaStatus('${escapeHtml(r.id)}')">Situação</button>
+            <button class="btn secondary" type="button" onclick="editAdminOperationalRecord('${escapeHtml(r.id)}')">Abrir</button>
+            <button class="btn danger" type="button" onclick="deleteAdminOperationalRecord('${escapeHtml(r.id)}')">Excluir</button>
+          </div></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`;
+}
+function showNcCapaStatus(id){
+  const r=adminModuleRecord(id);if(!r)return;
+
+  const tipo=ncCapaTypeLabel(r);
+  const situacao=adminModuleStatusLabel(r.status);
+  const capa=ncCapaCapaLabel(r);
+  const envio=ncCapaEmailLabel(r);
+  const numero=r.rncNumber||r.title||'Registro';
+  const vinculo=r.relatedRo||'Não vinculada';
+
+  alert(
+    `${numero}\n\n`+
+    `Tipo: ${tipo}\n`+
+    `Situação: ${situacao}\n`+
+    `CAPA: ${capa}\n`+
+    (ncCapaTypeKey(r)==='supplier'?`Envio da RNC: ${envio}\n`:'')+
+    `R.O. vinculada: ${vinculo}`
+  );
+}
+
 function renderRncSendWorkspace(){
   const host=document.getElementById('adminModuleContent');if(!host)return;
   const rncs=getAdminModuleRecords().filter(r=>r.module==='nccapa'&&(r.ncType==='supplier'||String(r.rncNumber||'').trim())).slice().sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
@@ -17173,17 +17385,18 @@ async function deleteAdminOperationalRecord(id){
   const r=adminModuleRecord(id);if(!r)return;
 
   if(r.module==='nccapa'&&!canOperateNcCapa()){
-    alert('Somente o SGQ/ADM pode excluir uma RNC.');
+    alert('Somente o SGQ/ADM pode excluir este registro.');
     return;
   }
 
-  const nome=String(r.rncNumber||r.title||'esta RNC').trim();
+  const ehRnc=ncCapaTypeKey(r)==='supplier';
+  const nome=String(r.rncNumber||r.title||(ehRnc?'esta RNC':'esta NC')).trim();
   const fornecedor=String(r.supplier||'').trim();
-  const enviada=r.rncEmailStatus==='sent';
+  const enviada=ehRnc&&r.rncEmailStatus==='sent';
 
   let msg=
     `Excluir ${nome}${fornecedor?` — ${fornecedor}`:''}?\n\n`+
-    `Ela será removida da base do Núcleo e deixará de aparecer nas listas.`;
+    `O registro será removido da base do Núcleo e deixará de aparecer na central Em tratamento.`;
 
   if(enviada){
     msg+=`\n\nATENÇÃO: esta RNC já consta como enviada por e-mail. A exclusão não desfaz o e-mail que já foi enviado.`;
@@ -17207,7 +17420,9 @@ async function deleteAdminOperationalRecord(id){
 
     hideNucleoLoading();
 
-    if(estavaEmEnviar){
+    if(document.getElementById('ncTreatmentList')){
+      renderNcCapaTreatmentList();
+    }else if(estavaEmEnviar){
       renderRncSendWorkspace();
     }else{
       showAdminOperationalModule(r.module);
