@@ -16416,10 +16416,60 @@ async function sendRncEmailNow(){
   }
   const submitted=portalPostForm({acao:'portal_send_rnc_email',id,email:supplierEmail,cc,replyTo,subject,message,html,docHtml,formato:'both',eventoId:eventId,ator:getSession()?.name||'SGQ'});
   if(!submitted){hideNucleoLoading();btn.disabled=false;st.textContent='Não foi possível iniciar o envio.';return}
-  let result=null;for(let i=0;i<12&&!result;i++){await new Promise(res=>setTimeout(res,i?1000:700));try{const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);if(chk?.sucesso&&chk?.status&&chk.status!=='processing')result=chk}catch(e){}}
+  // Gerar PDF + DOCX (principalmente com fotos) pode levar bem mais de 12 s.
+  // Aguarda até 2 minutos e confirma por DUAS fontes:
+  // 1) status do evento; 2) registro da própria RNC já marcado como enviado.
+  let result=null;
+  const startedEmail=Date.now();
+
+  while(Date.now()-startedEmail<120000 && !result){
+    await new Promise(res=>setTimeout(res,1500));
+
+    try{
+      const chk=await portalJsonp({acao:'portal_rnc_email_status',eventoId:eventId},15000);
+      if(chk?.sucesso&&chk?.status&&chk.status!=='processing'){
+        result=chk;
+        break;
+      }
+    }catch(e){}
+
+    // Fallback real: se o Apps Script já gravou a RNC como "sent",
+    // o e-mail foi enviado mesmo que o status do evento ainda não apareça.
+    try{
+      const central=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id},15000);
+      const reg=central?.registro;
+      if(central?.sucesso && reg && reg.rncEmailStatus==='sent'){
+        const sentAt=String(reg.rncEmailSentAt||'');
+        const attemptAt=String(updated.rncEmailLastAttemptAt||'');
+        if(!attemptAt || !sentAt || sentAt>=attemptAt){
+          result={sucesso:true,status:'sent',at:sentAt||new Date().toISOString(),registro:reg};
+          break;
+        }
+      }
+    }catch(e){}
+
+    st.textContent='Enviando RNC... aguardando confirmação do e-mail.';
+  }
+
   hideNucleoLoading();btn.disabled=false;
-  if(!result||result.status!=='sent'){st.textContent='O envio não foi confirmado.'+(result?.erro?' '+result.erro:'');return}
-  const done={...updated,rncEmailStatus:'sent',rncEmailSentAt:result.at||new Date().toISOString(),rncEmailTo:supplierEmail,rncEmailCc:cc};all=getAdminModuleRecords();ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=done;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,done);st.textContent='RNC enviada com sucesso.';setTimeout(()=>{ov.classList.add('hidden');openRncSuccessModal(done,'RNC enviada com sucesso.');},650);
+
+  // Última leitura antes de declarar falha.
+  if(!result){
+    try{
+      const central=await portalJsonp({acao:'portal_get_record',colecao:'admin_modules',id},15000);
+      const reg=central?.registro;
+      if(central?.sucesso && reg?.rncEmailStatus==='sent'){
+        result={sucesso:true,status:'sent',at:reg.rncEmailSentAt||new Date().toISOString(),registro:reg};
+      }
+    }catch(e){}
+  }
+
+  if(!result||result.status!=='sent'){
+    st.textContent='O envio não foi confirmado.'+(result?.erro?' '+result.erro:'');
+    return;
+  }
+
+  const done={...updated,...(result.registro||{}),rncEmailStatus:'sent',rncEmailSentAt:result.at||new Date().toISOString(),rncEmailTo:supplierEmail,rncEmailCc:cc};all=getAdminModuleRecords();ix=all.findIndex(x=>x.id===id);if(ix>=0)all[ix]=done;saveAdminModuleRecords(all);portalBackendSave('admin_modules',id,done);st.textContent='RNC enviada com sucesso.';setTimeout(()=>{ov.classList.add('hidden');openRncSuccessModal(done,'RNC enviada com sucesso.');},650);
 }
 
 const PROCESS_LAYOUT_KEY='nucleo_process_layouts_v1';
