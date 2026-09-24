@@ -8903,10 +8903,13 @@ function sacDateKey(value){
 function sacOriginalRoDate(record){
   const raw=record?.raw||{};
   return (
+    record?.sourceDateRaw ||
+    raw?.__dataRo ||
     raw?.['Carimbo de data/hora'] ||
-    raw?.['Data'] ||
+    raw?.['Carimbo de data e hora'] ||
     raw?.['Data da R.O.'] ||
     raw?.['Data R.O.'] ||
+    raw?.['Data'] ||
     raw?.['Data da Reclamação'] ||
     raw?.['Data da reclamação'] ||
     record?.dataReclamacao ||
@@ -14597,9 +14600,10 @@ function normalizeImportedRo(raw,index){
     'Descrição','Descricao'
   ])||'Sem descrição').trim();
 
-  const data=formatImportedDate(firstValue(raw,[
-    'Carimbo de data/hora','Data','Data da R.O.','Data R.O.'
-  ]));
+  const dataOriginal=raw?.__dataRo || firstValue(raw,[
+    'Carimbo de data/hora','Carimbo de data e hora','Data da R.O.','Data R.O.','Data'
+  ]);
+  const data=formatImportedDate(dataOriginal);
 
   const prazo=formatImportedDate(firstValue(raw,[
     'Prazo PDCA','Prazo para PDCA','Prazo','Data limite','Data Limite'
@@ -14713,6 +14717,7 @@ function normalizeImportedRo(raw,index){
     assunto: tipo,
     tipoRO: tipo,
     data,
+    sourceDateRaw:String(dataOriginal||'').trim(),
     prazo: prazo==='—'?'—':prazo,
     status,
     // Valor literal da coluna Status da planilha-base (Interna: AD / Externa: AE).
@@ -15282,12 +15287,12 @@ async function bootstrapRoData(){
   return restoredLegacy;
 }
 
-async function refreshLegacyRoCacheFromApi(){
+async function refreshLegacyRoCacheFromApi(force=false){
   const splitNow=readImportedRosByOrigin();
   const s=getSavedIntegrationSettings();
   const periodFiltered=String(s.roSyncPeriod||'all')!=='all';
   const missingOrigin=!periodFiltered && (!splitNow.internas.length || !splitNow.externas.length);
-  if(!importedRoCacheNeedsRefresh && ros.length && !missingOrigin)return false;
+  if(!force && !importedRoCacheNeedsRefresh && ros.length && !missingOrigin)return false;
   if(!s?.apiUrl)return false;
 
   try{
@@ -16364,7 +16369,13 @@ function ensureRncSuccessModal(){
 function openRncSuccessModal(r,msg){
   const ov=ensureRncSuccessModal();ov.dataset.rncId=r.id;ov.classList.remove('hidden');
   document.getElementById('rncSuccessTitle').textContent=msg||'RNC criada com sucesso.';
-  document.getElementById('rncSuccessMeta').textContent=[r.rncNumber,r.supplier,r.eventDate||r.rncIssueDate].filter(Boolean).join(' · ');
+  const totalFotos=Object.values(r.rncPhotos||{}).reduce((n,g)=>n+(Array.isArray(g)?g.filter(x=>x&&x.fileId).length:0),0);
+  document.getElementById('rncSuccessMeta').textContent=[
+    r.rncNumber,
+    r.supplier,
+    r.eventDate||r.rncIssueDate,
+    totalFotos?(`${totalFotos} foto(s) confirmada(s) no Drive`):''
+  ].filter(Boolean).join(' · ');
   document.getElementById('rncSuccessPdfBtn').onclick=()=>printRncStandard(r.id);
   document.getElementById('rncSuccessSendBtn').onclick=()=>openRncSendModal(r.id);
 }
@@ -16556,9 +16567,20 @@ function bindRncPhotoInputs(existing={}){
       info.insertAdjacentElement('afterend',preview);
     }
 
-    const updateInfo=(message='')=>{
+    const updateInfo=(message='',state='neutral')=>{
       let a=[];try{a=JSON.parse(h?.value||'[]')}catch(e){}
-      info.textContent=message||(a.length?`${a.length} foto(s) salva(s) online nesta RNC.`:'Nenhuma foto salva ainda.');
+
+      const defaultText=a.length
+        ? `${a.length} foto(s) salva(s) online nesta RNC.`
+        : 'Nenhuma foto salva ainda.';
+
+      info.textContent=message||defaultText;
+      info.style.fontWeight=state==='success'||state==='error'?'700':'400';
+      info.style.color=
+        state==='success'?'#18794e':
+        state==='error'?'#b42318':
+        state==='sending'?'#7a5a00':'';
+
       preview.innerHTML=a.map((photo,i)=>{
         const src=rncPhotoSrc(photo);
         return src?`<div style="position:relative;border:1px solid #d8e0ec;border-radius:8px;padding:4px;background:#fff"><img src="${escapeHtml(src)}" style="display:block;width:100%;height:90px;object-fit:contain"><button type="button" class="btn danger" onclick="removeRncPhoto('${escapeHtml(id)}',${i})" style="position:absolute;right:4px;top:4px;padding:3px 6px;font-size:10px">×</button></div>`:'';
@@ -16571,26 +16593,97 @@ function bindRncPhotoInputs(existing={}){
       const max=Number(inp.dataset.max)||4;
       let arr=[];try{arr=JSON.parse(h?.value||'[]')}catch(e){}
       const files=[...(inp.files||[])];
+
+      if(!files.length)return;
+
       inp.disabled=true;
+      let onlineAgora=0;
+      let pendentesAgora=0;
 
       try{
         for(const f of files){
-          if(arr.length>=max)break;
-          if(f.size>2500000){alert('Cada foto precisa ter até 2,5 MB.');continue}
-          updateInfo('Enviando foto para o Drive...');
+          if(arr.length>=max){
+            updateInfo(`Limite de ${max} foto(s) atingido.`, 'error');
+            break;
+          }
+
+          if(f.size>2500000){
+            updateInfo(`A foto "${f.name}" é maior que 2,5 MB e não foi adicionada.`, 'error');
+            alert('Cada foto precisa ter até 2,5 MB.');
+            continue;
+          }
+
+          // A miniatura aparece imediatamente. O usuário não fica preso
+          // olhando apenas "Enviando..." sem saber se a foto foi registrada.
+          updateInfo(`Preparando "${f.name}"...`, 'sending');
 
           const [dataUrl,previewDataUrl]=await Promise.all([
             compressRncPhoto(f),
             compressRncPhotoPreview(f)
           ]);
-          const savedPhoto=await uploadRncPhotoOnline(dataUrl,id);
-          arr.push({...savedPhoto,previewDataUrl});
-          if(h)h.value=JSON.stringify(arr.slice(0,max));
-          updateInfo();
+
+          let savedPhoto=null;
+
+          try{
+            updateInfo(`Enviando "${f.name}" para o Drive...`, 'sending');
+
+            // Não deixa a interface ficar indefinidamente em "Enviando".
+            // Se a confirmação direta demorar, a foto fica guardada no
+            // próprio registro e o backend conclui o upload quando a RNC for salva.
+            savedPhoto=await Promise.race([
+              uploadRncPhotoOnline(dataUrl,id),
+              new Promise((_,reject)=>setTimeout(
+                ()=>reject(new Error('A confirmação online demorou mais que o esperado.')),
+                18000
+              ))
+            ]);
+          }catch(uploadErr){
+            savedPhoto=null;
+          }
+
+          if(savedPhoto?.fileId){
+            arr.push({...savedPhoto,previewDataUrl});
+            onlineAgora++;
+            updateInfo(
+              `✓ "${f.name}" salva no Drive com sucesso.`,
+              'success'
+            );
+          }else{
+            // Fallback seguro: mantém a foto dentro da RNC. O Apps Script já
+            // converte dataUrl em arquivo do Drive durante o salvamento da RNC.
+            arr.push({
+              dataUrl,
+              previewDataUrl,
+              name:f.name,
+              mimeType:f.type||'image/jpeg',
+              pendingDriveUpload:true
+            });
+            pendentesAgora++;
+            updateInfo(
+              `✓ "${f.name}" adicionada à RNC. O Drive será confirmado ao salvar a RNC.`,
+              'success'
+            );
+          }
+
+          arr=arr.slice(0,max);
+          if(h)h.value=JSON.stringify(arr);
+          updateInfo(
+            onlineAgora
+              ? `✓ Foto confirmada no Drive. Total nesta RNC: ${arr.length}.`
+              : `✓ Foto adicionada. Ela será enviada ao Drive quando você salvar a RNC.`,
+            'success'
+          );
+        }
+
+        if(onlineAgora>1){
+          updateInfo(`✓ ${onlineAgora} fotos confirmadas no Drive.`, 'success');
+        }else if(pendentesAgora>1){
+          updateInfo(`✓ ${pendentesAgora} fotos adicionadas. O Drive será confirmado ao salvar a RNC.`, 'success');
         }
       }catch(e){
-        updateInfo();
-        alert('Não foi possível salvar a foto online.\n\n'+String(e?.message||e));
+        const msg=String(e?.message||e||'Erro desconhecido');
+        updateInfo(`✕ Não foi possível adicionar a foto: ${msg}`, 'error');
+        alert('Não foi possível adicionar a foto.\n\n'+msg);
       }finally{
         inp.value='';
         inp.disabled=false;
@@ -19214,7 +19307,22 @@ setTimeout(async()=>{
       updateNucleoLoading('Completando dados pela planilha...');
     }
 
-    const repaired=await refreshLegacyRoCacheFromApi();
+    const RO_DATE_CACHE_VERSION='ro-date-source-v4';
+    const needDateRepair=localStorage.getItem('portal-sgq-ro-date-cache-version')!==RO_DATE_CACHE_VERSION;
+
+    if(needDateRepair){
+      importedRoCacheNeedsRefresh=true;
+      updateNucleoLoading('Atualizando datas diretamente da planilha de R.O.s...');
+    }
+
+    const repaired=await refreshLegacyRoCacheFromApi(needDateRepair);
+
+    if(needDateRepair && repaired){
+      localStorage.setItem('portal-sgq-ro-date-cache-version',RO_DATE_CACHE_VERSION);
+      // Substitui também as datas antigas guardadas nos cards de SAC.
+      try{saveExternalRoControlsLocal(getExternalRoControls())}catch(e){}
+    }
+
     console.info('NÚCLEO R.O.s em memória',{
       total:ros.length,
       interna:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna').length,
