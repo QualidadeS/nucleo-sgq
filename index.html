@@ -10886,10 +10886,16 @@ function resolvedTriageForRo(ro,map=getSavedTriageMap()){
     };
   }
 
-  // Sem uma combinação válida na base, não reaproveitar uma triagem antiga para
-  // decidir a situação. A única exceção é Obsoleto, que é um estado do Núcleo.
+  // Se a planilha ainda não refletiu a alteração, uma decisão MANUAL recém-salva
+  // pelo SGQ continua válida para a interface e para o contador de triagem.
+  // Registros puramente reconstruídos da planilha não ganham essa prioridade.
   const exact=String(triageKeyOf(ro)||'').trim();
   const saved=(exact&&map.get(exact))||map.get(base)||getTriageRecordsForRoNumber(base,map)[0]||null;
+
+  if(saved?.decision && !saved?.importedFromSheet){
+    return saved;
+  }
+
   if(saved?.decision==='obsolete')return saved;
   return null;
 }
@@ -11157,7 +11163,7 @@ function renderTriage(){
       <td>
         <div class="triage-actions">
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(key)}')">Ver R.O.</button>
-          <button class="btn ${r.triagemStatus==='new'?'primary':'secondary'}" type="button" onclick="openTriageRecord('${escapeHtml(key)}')">${r.triagemStatus==='new'?'Triar':'Editar'}</button>
+          <button class="btn ${r.triagemStatus==='new'?'primary':'secondary'}" type="button" onclick="try{hideNucleoLoading(true)}catch(e){};openTriageRecord('${escapeHtml(key)}')">${r.triagemStatus==='new'?'Triar':'Editar'}</button>
         </div>
       </td>
     </tr>`;
@@ -11298,53 +11304,112 @@ function updateRoUnitLocal(roKey,newUnit){
 }
 
 function openTriageRecord(id){
+  // Se algum carregamento anterior ficou preso, ele não pode bloquear o botão Triar.
+  try{hideNucleoLoading(true)}catch(e){}
+
   const wanted=String(id||'').trim();
-  // O lápis das R.O.s atribuídas envia a chave interna RO::SETOR.
-  // A R.O. importada, porém, continua identificada somente pelo número.
-  // Portanto a chave composta nunca deve ser usada para procurar a R.O. física.
   const roNumber=triageRoNumberPart(wanted)||String(wanted).split('::')[0];
   const ro=getAllRoRecords().find(r=>triageRoNumberPart(triageKeyOf(r))===roNumber);
-  if(!ro){alert('R.O. não encontrada.');return}
+
+  if(!ro){
+    alert('R.O. não encontrada.');
+    return;
+  }
 
   currentTriageRoId=roNumber;
   currentEditingTriageKey=wanted.includes('::')?wanted:'';
-  const savedMap=getSavedTriageMap();
-  const tri=savedMap.get(wanted)||savedMap.get(roNumber)||{};
 
-  const summary=document.getElementById('triageRoSummary');
-  summary.innerHTML=[
-    ['R.O.',roNumber],
-    ['Unidade',ro.unidade||'-'],
-    ['Cliente',ro.cliente||'Não informado'],
-    ['Tipo de ocorrência',ro.tipoRO||ro.assunto||ro.tipo||'-'],
-    ['Setor identificado',ro.setorIdentificado||'-'],
-    ['Setor causa da planilha',ro.setor||'-']
-  ].map(([k,v])=>`<div class="triage-summary-item"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
+  const overlay=document.getElementById('triageModalOverlay');
 
-  document.getElementById('triageDecision').value=tri.decision||'directed';
-  document.getElementById('triageClassification').value=tri.classification||'';
-  populateTriageRoUnit(ro.unidade||'');
-
-  const sectors=getConfiguredSectorsForTriage();
-  const picker=document.getElementById('triageSectorPicker');
-  if(picker)picker.innerHTML='<option value="">Selecione um setor...</option>'+sectors.map(sec=>`<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`).join('');
-  const assignmentsBox=document.getElementById('triageAssignments');
-  if(assignmentsBox)assignmentsBox.innerHTML='';
-  const existingForRo=getTriageRecordsForRoNumber(roNumber);
-  // Pelo lápis, editar SOMENTE o vínculo clicado. Na triagem normal, mostrar todos.
-  const targetedAssignment=currentEditingTriageKey ? (savedMap.get(currentEditingTriageKey)||tri) : null;
-  const existingAssignments=targetedAssignment?.responsibleSector?[targetedAssignment]:(existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]));
-  existingAssignments.forEach(x=>addTriageAssignment(x.responsibleSector,x.responsibleUserEmail||'',x.assignmentReason||x.reason||'',x.responsibleSector));
-
-  document.getElementById('triageNote').value=tri.note||'';
-
-  updateTriageDecisionUi();
-  document.getElementById('triageModalOverlay').classList.add('open');
+  // Abre o modal ANTES de qualquer cálculo/preenchimento.
+  // Assim um erro em setor/usuário/cache não faz o botão parecer morto.
+  if(overlay)overlay.classList.add('open');
   document.body.style.overflow='hidden';
 
-  // A análise de duplicidade acontece depois que o modal já abriu,
-  // para nunca bloquear o usuário ao clicar em "Triar".
-  renderTriageDuplicateWarning(ro);
+  try{
+    const savedMap=getSavedTriageMap();
+    const tri=savedMap.get(wanted)||savedMap.get(roNumber)||{};
+
+    const summary=document.getElementById('triageRoSummary');
+    if(summary){
+      summary.innerHTML=[
+        ['R.O.',roNumber],
+        ['Unidade',ro.unidade||'-'],
+        ['Cliente',ro.cliente||'Não informado'],
+        ['Tipo de ocorrência',ro.tipoRO||ro.assunto||ro.tipo||'-'],
+        ['Setor identificado',ro.setorIdentificado||'-'],
+        ['Setor causa da planilha',ro.setor||'-']
+      ].map(([k,v])=>`<div class="triage-summary-item"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
+    }
+
+    const decisionEl=document.getElementById('triageDecision');
+    if(decisionEl)decisionEl.value=tri.decision||'directed';
+
+    const classificationEl=document.getElementById('triageClassification');
+    if(classificationEl)classificationEl.value=tri.classification||'';
+
+    try{populateTriageRoUnit(ro.unidade||'')}catch(e){
+      console.warn('[NUCLEO TRIAGEM] falha ao preencher unidade',e);
+    }
+
+    try{
+      const sectors=getConfiguredSectorsForTriage();
+      const picker=document.getElementById('triageSectorPicker');
+      if(picker){
+        picker.innerHTML='<option value="">Selecione um setor...</option>'+
+          sectors.map(sec=>`<option value="${escapeHtml(sec)}">${escapeHtml(sec)}</option>`).join('');
+      }
+    }catch(e){
+      console.warn('[NUCLEO TRIAGEM] falha ao preencher setores',e);
+    }
+
+    const assignmentsBox=document.getElementById('triageAssignments');
+    if(assignmentsBox)assignmentsBox.innerHTML='';
+
+    try{
+      const existingForRo=getTriageRecordsForRoNumber(roNumber);
+      const targetedAssignment=currentEditingTriageKey
+        ? (savedMap.get(currentEditingTriageKey)||tri)
+        : null;
+
+      const existingAssignments=targetedAssignment?.responsibleSector
+        ? [targetedAssignment]
+        : (existingForRo.length?existingForRo:(tri.responsibleSector?[tri]:[]));
+
+      existingAssignments.forEach(x=>
+        addTriageAssignment(
+          x.responsibleSector,
+          x.responsibleUserEmail||'',
+          x.assignmentReason||x.reason||'',
+          x.responsibleSector
+        )
+      );
+    }catch(e){
+      console.warn('[NUCLEO TRIAGEM] falha ao restaurar direcionamentos',e);
+    }
+
+    const noteEl=document.getElementById('triageNote');
+    if(noteEl)noteEl.value=tri.note||'';
+
+    try{updateTriageDecisionUi()}catch(e){
+      console.warn('[NUCLEO TRIAGEM] falha ao atualizar regra visual',e);
+    }
+
+    setTimeout(()=>{
+      try{renderTriageDuplicateWarning(ro)}catch(e){
+        console.warn('[NUCLEO TRIAGEM] falha na análise de duplicidade',e);
+      }
+    },0);
+
+  }catch(err){
+    console.error('[NUCLEO TRIAGEM] modal aberto com falha parcial',err);
+
+    // O modal continua aberto. Mostra o erro dentro dele em vez de deixar o botão sem resposta.
+    const note=document.getElementById('triageNote');
+    if(note && !note.value){
+      note.placeholder='O modal abriu, mas houve falha ao carregar algum dado auxiliar. Você ainda pode preencher a triagem.';
+    }
+  }
 }
 
 function updateTriageDecisionUi(){
