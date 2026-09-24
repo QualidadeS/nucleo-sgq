@@ -17063,7 +17063,40 @@ function defaultRncHeaderLayout(){return [
 function rncHeaderFields(){return getTplJson('tplHeaderLayoutData',defaultRncHeaderLayout())}
 function saveRncHeaderFields(a){setTplJson('tplHeaderLayoutData',a);const h=document.getElementById('tplHeaderLayoutList');if(h)h.innerHTML=renderRncHeaderLayoutEditor({...collectRncTemplateForm(),headerLayout:a});refreshRncTemplatePreview()}
 function updateRncHeaderField(i,k,v){const a=rncHeaderFields();if(!a[i])return;if(['width','height'].includes(k))v=Math.max(k==='width'?5:3,Number(v)||0);a[i][k]=v;saveRncHeaderFields(a)}
-function renderRncHeaderLayoutEditor(t){const a=t.headerLayout||defaultRncHeaderLayout();const rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((x,y)=>x-y);return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button type="button" class="btn secondary" onclick="addRncHeaderCell()">+ Célula</button><button type="button" class="btn secondary" onclick="addRncHeaderRow()">+ Linha</button></div>`+rows.map(row=>`<div style="border:1px solid #d7deea;border-radius:12px;padding:10px;background:#f8fafc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:12px">Linha ${row}</b><button type="button" class="btn secondary" style="padding:6px 9px" onclick="addRncHeaderCell(${row})">+ célula nesta linha</button></div><div style="display:grid;gap:8px">${a.map((x,i)=>({x,i})).filter(o=>(Number(o.x.row)||1)===row).map(({x,i})=>`<div style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="font-size:12px">${escapeHtml(x.label||x.value||('Célula '+(i+1)))}</b><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn secondary" style="padding:5px 8px" onclick="mergeRncHeaderCell(${i})">Mesclar →</button><button type="button" class="btn secondary" style="padding:5px 8px" onclick="splitRncHeaderCell(${i})">Dividir</button><button type="button" class="btn danger" style="padding:5px 8px" onclick="removeRncHeaderCell(${i})">Excluir</button></div></div><div style="display:grid;grid-template-columns:minmax(140px,1.3fr) minmax(140px,1fr) 90px 90px 115px;gap:7px;align-items:end"><label><span class="small">Texto / rótulo</span><input value="${escapeHtml(x.label||'')}" oninput="updateRncHeaderField(${i},'label',this.value)"></label><label><span class="small">Valor</span><input value="${escapeHtml(String(x.source||'').startsWith('@')&&x.source!=='@label'?String(x.source).slice(1):x.value||'')}" ${['code','revision','title','@label'].includes(x.source)?'disabled':''} oninput="updateRncHeaderField(${i},'source','@'+this.value)"></label><label><span class="small">Largura %</span><input type="number" min="3" max="100" step="1" value="${Number(x.width)||20}" oninput="updateRncHeaderField(${i},'width',this.value)"></label><label><span class="small">Altura mm</span><input type="number" min="3" max="50" step="1" value="${Number(x.height)||7}" oninput="updateRncHeaderField(${i},'height',this.value)"></label><label><span class="small">Alinhamento</span><select onchange="updateRncHeaderField(${i},'align',this.value)"><option value="left" ${x.align==='left'?'selected':''}>Esquerda</option><option value="center" ${x.align==='center'?'selected':''}>Centro</option><option value="right" ${x.align==='right'?'selected':''}>Direita</option></select></label></div></div>`).join('')}</div></div>`).join('')}
+function updateRncHeaderValue(i,v){
+  const a=rncHeaderFields();
+  if(!a[i])return;
+
+  const src=String(a[i].source||'');
+
+  if(src==='code'){
+    const el=document.getElementById('tplCode');
+    if(el)el.value=v;
+  }else if(src==='revision'){
+    const el=document.getElementById('tplRevision');
+    if(el)el.value=v;
+  }else if(src==='title'){
+    const el=document.getElementById('tplTitle');
+    if(el)el.value=v;
+  }else if(src==='@logo'){
+    return;
+  }else{
+    // Valores literais do cabeçalho ficam guardados como @texto.
+    a[i].source='@'+String(v||'');
+    setTplJson('tplHeaderLayoutData',a);
+  }
+
+  // Atualiza a folha sem recriar o input onde a pessoa está digitando.
+  refreshRncTemplatePreview();
+}
+
+function renderRncHeaderLayoutEditor(t){const a=t.headerLayout||defaultRncHeaderLayout();const rows=[...new Set(a.map(x=>Number(x.row)||1))].sort((x,y)=>x-y);return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px"><button type="button" class="btn secondary" onclick="addRncHeaderCell()">+ Célula</button><button type="button" class="btn secondary" onclick="addRncHeaderRow()">+ Linha</button></div>`+rows.map(row=>`<div style="border:1px solid #d7deea;border-radius:12px;padding:10px;background:#f8fafc"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="font-size:12px">Linha ${row}</b><button type="button" class="btn secondary" style="padding:6px 9px" onclick="addRncHeaderCell(${row})">+ célula nesta linha</button></div><div style="display:grid;gap:8px">${a.map((x,i)=>({x,i})).filter(o=>(Number(o.x.row)||1)===row).map(({x,i})=>`<div style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;background:#fff"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px"><b style="font-size:12px">${escapeHtml(x.label||x.value||('Célula '+(i+1)))}</b><div style="display:flex;gap:5px;flex-wrap:wrap"><button type="button" class="btn secondary" style="padding:5px 8px" onclick="mergeRncHeaderCell(${i})">Mesclar →</button><button type="button" class="btn secondary" style="padding:5px 8px" onclick="splitRncHeaderCell(${i})">Dividir</button><button type="button" class="btn danger" style="padding:5px 8px" onclick="removeRncHeaderCell(${i})">Excluir</button></div></div><div style="display:grid;grid-template-columns:minmax(140px,1.3fr) minmax(140px,1fr) 90px 90px 115px;gap:7px;align-items:end"><label><span class="small">Texto / rótulo</span><input value="${escapeHtml(x.label||'')}" oninput="updateRncHeaderField(${i},'label',this.value)"></label><label><span class="small">Valor</span><input value="${escapeHtml(
+  x.source==='code' ? (t.code||'') :
+  x.source==='revision' ? (t.revision||'') :
+  x.source==='title' ? (t.title||'') :
+  String(x.source||'').startsWith('@')&&x.source!=='@label'&&x.source!=='@logo' ? String(x.source).slice(1) :
+  (x.value||'')
+)}" ${x.source==='@logo'?'disabled':''} oninput="updateRncHeaderValue(${i},this.value)"></label><label><span class="small">Largura %</span><input type="number" min="3" max="100" step="1" value="${Number(x.width)||20}" oninput="updateRncHeaderField(${i},'width',this.value)"></label><label><span class="small">Altura mm</span><input type="number" min="3" max="50" step="1" value="${Number(x.height)||7}" oninput="updateRncHeaderField(${i},'height',this.value)"></label><label><span class="small">Alinhamento</span><select onchange="updateRncHeaderField(${i},'align',this.value)"><option value="left" ${x.align==='left'?'selected':''}>Esquerda</option><option value="center" ${x.align==='center'?'selected':''}>Centro</option><option value="right" ${x.align==='right'?'selected':''}>Direita</option></select></label></div></div>`).join('')}</div></div>`).join('')}
 function nextRncHeaderId(){return 'h-custom-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,6)}
 function addRncHeaderCell(row){const a=rncHeaderFields();row=Number(row)||Math.max(1,...a.map(x=>Number(x.row)||1));const same=a.filter(x=>(Number(x.row)||1)===row);const width=same.length?Math.max(5,Math.round(100/(same.length+1))):100;if(same.length)same.forEach(x=>x.width=Math.max(5,(Number(x.width)||20)*same.length/(same.length+1)));a.push({id:nextRncHeaderId(),row,label:'Novo campo',value:'',source:'@',width,height:7,align:'left',bold:false});saveRncHeaderFields(a)}
 function addRncHeaderRow(){const a=rncHeaderFields(),row=Math.max(0,...a.map(x=>Number(x.row)||1))+1;a.push({id:nextRncHeaderId(),row,label:'Novo campo',value:'',source:'@',width:100,height:7,align:'left',bold:false});saveRncHeaderFields(a)}
