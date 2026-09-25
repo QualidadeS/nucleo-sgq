@@ -2833,7 +2833,18 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 }
 </style>
 
-</head><body>
+
+<style id="nucleo-boot-v14">
+body.nucleo-booting > *:not(#nucleoLoadingOverlay){
+  visibility:hidden!important;
+}
+body.nucleo-booting #nucleoLoadingOverlay{
+  display:flex!important;
+  visibility:visible!important;
+  z-index:2147483000!important;
+}
+</style>
+</head><body class="nucleo-booting">
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
   <div id="nucleoLoadingCard">
@@ -4530,8 +4541,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v13';
-window.__NUCLEO_APP_BUILD='2026-09-25-v13';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v14';
+window.__NUCLEO_APP_BUILD='2026-09-25-v14';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -6036,7 +6047,7 @@ function startNucleoGlobalSync(){
 
 function scheduleBackendSync(){
   if(!portalBackendEnabled())return;
-  setTimeout(()=>syncPortalBackend(false),500);
+  setTimeout(()=>syncNucleoGlobalRevision(true),900);
 }
 
 const RULE_AUDIT_KEY='portal-sgq-rule-audit-v1';
@@ -7597,15 +7608,13 @@ async function loginUser(){
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
-    // Fonte oficial compartilhada: após autenticar, sempre atualiza este navegador pela base central.
-    setTimeout(async()=>{
-      try{
-        await syncPortalBackend(false,{foreground:true,loadingMessage:'Atualizando os dados do Núcleo...'});
-        refreshSectorSelectors();
-        try{populateTriageSectors()}catch(e){}
-        try{render()}catch(e){}
-      }catch(e){console.warn('Sincronização pós-login falhou:',e)}
-    },250);
+    // Após autenticar, usa o mesmo coordenador global; evita uma segunda
+    // sincronização/renderização pesada em paralelo com a abertura.
+    setTimeout(()=>{
+      syncNucleoGlobalRevision(true).catch(e=>
+        console.warn('Sincronização pós-login falhou:',e)
+      );
+    },500);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
     if(session.role==='admin'){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
@@ -13043,7 +13052,13 @@ function updateNetworkState(){
   pill.textContent=online?(q?'● Online · '+q+' aguardando sync':'● Online'):'● Offline · rascunho local';
   pill.classList.toggle('offline',!online||q>0);
 }
-window.addEventListener('online',()=>{updateNetworkState();flushOfflineQueue();setTimeout(()=>syncPortalBackend(false),500)});
+window.addEventListener('online',()=>{
+  updateNetworkState();
+  flushOfflineQueue();
+  if(!document.body.classList.contains('nucleo-booting')){
+    setTimeout(()=>syncNucleoGlobalRevision(true),700);
+  }
+});
 
 // Mantém as máquinas atualizadas sem bombardear o Apps Script nem rerenderizar
 // a aplicação a cada poucos segundos. Foco/retorno só sincroniza se a última carga
@@ -13065,27 +13080,31 @@ function startNucleoCentralRefresh(){
 }
 setTimeout(retryPendingRncDeletes,1800);
 
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'){
+let __nucleoResumeSyncTimer=null;
+
+function scheduleNucleoResumeSync(){
+  if(document.body.classList.contains('nucleo-booting'))return;
+  try{clearTimeout(__nucleoResumeSyncTimer)}catch(e){}
+  __nucleoResumeSyncTimer=setTimeout(()=>{
     checkNucleoAppVersion(true);
-    nucleoAutoSyncIfDue(false);
+    syncNucleoGlobalRevision(false);
+  },500);
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')scheduleNucleoResumeSync();
+});
+
+window.addEventListener('focus',scheduleNucleoResumeSync);
+
+function startNucleoLiveSyncAfterBoot(){
+  startNucleoGlobalSync();
+  startNucleoAppVersionCheck();
+  setTimeout(()=>{
+    checkNucleoAppVersion(true);
     syncNucleoGlobalRevision(true);
-  }
-});
-
-window.addEventListener('focus',()=>{
-  checkNucleoAppVersion(true);
-  nucleoAutoSyncIfDue(false);
-  syncNucleoGlobalRevision(true);
-});
-
-startNucleoGlobalSync();
-startNucleoAppVersionCheck();
-
-setTimeout(()=>{
-  checkNucleoAppVersion(true);
-  syncNucleoGlobalRevision(true);
-},1200);
+  },1200);
+}
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
 const ARCHIVED_RO_KEY='portal-sgq-archived-ro-v1';
@@ -20856,66 +20875,57 @@ async function syncNow(){
   }
 }
 try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
+
 ensurePreviewSession();
-render();initLogin();refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
-async function nucleoBackgroundStartupSync(){
-  if(!getSession()?.authToken || !navigator.onLine)return;
+initLogin();
+refreshAccessUI();
+enforceAdminVisibility();
+refreshRoRegistrationAccess();
 
-  try{
-    await syncImportedRosFromConfiguredSources({silent:true,force:true});
+async function bootNucleoOnce(){
+  const session=getSession();
 
-    try{
-      localStorage.setItem('portal-sgq-ro-date-cache-version','ro-date-source-v4');
-    }catch(e){}
-
-    try{render()}catch(e){}
-    try{renderCurrentOverview()}catch(e){}
-    try{refreshRoSummary()}catch(e){}
-    try{renderTriage()}catch(e){}
-    try{refreshMenuNotificationBadges()}catch(e){}
-  }catch(e){
-    // O portal continua aberto com o cache/localStorage mesmo sem conexão.
-    console.warn('[NÚCLEO] sincronização inicial em segundo plano não concluída',e);
+  // Sem sessão: mostra login, sem montar uma visão geral vazia por trás.
+  if(!session?.authToken){
+    document.body.classList.remove('nucleo-booting');
+    hideNucleoLoading(true);
+    return;
   }
 
-  try{
-    await syncPortalBackend(false,{foreground:false});
-  }catch(e){
-    console.warn('[NÚCLEO] base central indisponível na abertura',e);
-  }
-}
-
-setTimeout(async()=>{
-  // A abertura depende apenas dos dados já salvos no aparelho.
-  // A rede nunca pode impedir a interface de abrir.
-  await showNucleoLoading('Recuperando dados salvos...','Abrindo NÚCLEO');
+  showNucleoLoading('Recuperando seus dados salvos...','Abrindo NÚCLEO');
 
   try{
+    // 1) Primeiro restaura o cache persistente; nenhuma chamada de rede aqui.
     await bootstrapRoData();
 
+    // 2) Monta a interface UMA vez, já com os dados locais recuperados.
     try{render()}catch(e){}
     try{renderCurrentOverview()}catch(e){}
     try{refreshRoSummary()}catch(e){}
     try{refreshNotificationBell()}catch(e){}
     try{refreshMenuNotificationBadges()}catch(e){}
+    try{refreshDocumentRequestAccess()}catch(e){}
 
   }catch(e){
-    console.warn('[NÚCLEO] falha ao carregar cache local',e);
+    console.warn('[NÚCLEO] falha ao restaurar cache local',e);
   }finally{
+    // Só agora revela a aplicação. Não existe mais o flash da tela vazia.
+    document.body.classList.remove('nucleo-booting');
     hideNucleoLoading(true);
   }
 
-  // Só depois que a tela já abriu é que a rede entra em ação.
-  setTimeout(()=>nucleoBackgroundStartupSync(),250);
+  // 3) Depois da interface estar responsiva, inicia UMA rotina central de sync.
+  // Não existe mais sync de startup separado + sync global concorrendo.
+  setTimeout(()=>startNucleoLiveSyncAfterBoot(),700);
+}
 
-},80);
-try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
-try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
+setTimeout(()=>bootNucleoOnce(),0);
 
 try{
-  // Força a normalização imediata do cache de SACs antigos.
   saveExternalRoControlsLocal(getExternalRoControls());
-}catch(e){console.warn('Falha ao normalizar cache de SAC.',e)}
+}catch(e){
+  console.warn('Falha ao normalizar cache de SAC.',e);
+}
 
 try{refreshDocumentRequestAccess()}catch(e){}
 function refreshDocumentRequestAccess(){
@@ -21117,7 +21127,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v13</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v14</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
