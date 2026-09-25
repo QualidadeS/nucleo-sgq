@@ -6624,7 +6624,7 @@ async function refreshAnnouncementsFromCentral(showModal=true){
 }
 
 function schedulePendingAnnouncementCheck(){
-  setTimeout(()=>{refreshAnnouncementsFromCentral(true)},500);
+  // Comunicados chegam junto com a próxima sincronização central.
 }
 
 // Comunicados já vêm no snapshot da base central. Evita uma segunda consulta
@@ -6923,12 +6923,12 @@ async function loginUser(){
     // Fonte oficial compartilhada: após autenticar, sempre atualiza este navegador pela base central.
     setTimeout(async()=>{
       try{
-        await syncPortalBackend(false,{foreground:true,loadingMessage:'Atualizando os dados do Núcleo...'});
+        await syncPortalBackend(false);
         refreshSectorSelectors();
         try{populateTriageSectors()}catch(e){}
         try{render()}catch(e){}
       }catch(e){console.warn('Sincronização pós-login falhou:',e)}
-    },250);
+    },3000);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
     if(session.role==='admin'){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
@@ -20083,7 +20083,9 @@ async function syncNow(){
 }
 try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
 ensurePreviewSession();
-render();initLogin();refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
+initLogin();
+if(getSession())render();
+refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
   await showNucleoLoading('Recuperando R.O.s salvas...','Carregando NÚCLEO');
   try{
@@ -20109,7 +20111,7 @@ setTimeout(async()=>{
       updateNucleoLoading('Atualizando datas diretamente da planilha de R.O.s...');
     }
 
-    const repaired=await refreshLegacyRoCacheFromApi(needDateRepair);
+    const repaired=false; // Evita carregar todas as R.O.s durante a abertura; use Sincronizar após entrar.
 
     if(needDateRepair && repaired){
       localStorage.setItem('portal-sgq-ro-date-cache-version',RO_DATE_CACHE_VERSION);
