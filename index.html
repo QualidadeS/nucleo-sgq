@@ -15741,22 +15741,51 @@ async function testConnection(){
     result.textContent='Testando conexão...';
   }
 
+  let data=null;
+  let usedJsonp=false;
+
   try{
-    // Um teste de conexão não deve ler todas as R.O.s, pois essa operação pode
-    // demorar mais que o tempo limite mesmo com o Apps Script funcionando.
-    const data=await portalJsonp({acao:'portal_public_config'},20000);
-    if(!data?.sucesso)throw new Error(data?.erro||'A implantação não confirmou a conexão.');
-    if(result){
-      result.className='statusline okline';
-      result.classList.remove('hidden');
-      result.textContent='Conexão com o Apps Script realizada. Para conferir as R.O.s, use Sincronizar.';
+    const url=appendIntegrationParams(sync.apiUrl,sync,true);
+    const response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store'});
+    if(!response.ok) throw new Error('HTTP '+response.status);
+    const text=await response.text();
+    try{data=JSON.parse(text);}
+    catch(e){throw new Error('Resposta não é JSON válido.');}
+  }catch(fetchErr){
+    usedJsonp=true;
+    try{
+      data=await jsonpRequest(sync.apiUrl,sync.apiKey,roSyncPeriodParams(sync));
+    }catch(jsonpErr){
+      if(result){
+        result.className='statusline';
+        result.classList.remove('hidden');
+        result.textContent='Falha na conexão. Abra a URL /exec diretamente no navegador e confirme se ela mostra os dados. Detalhe: '+(jsonpErr?.message||jsonpErr);
+      }
+      return;
     }
-  }catch(err){
+  }
+
+  if(data && data.sucesso===false){
     if(result){
       result.className='statusline';
       result.classList.remove('hidden');
-      result.textContent='Falha ao consultar a implantação: '+(err?.message||err);
+      result.textContent='O Apps Script respondeu com erro: '+(data.erro||'erro não informado');
     }
+    return;
+  }
+
+  let imported=0;
+  if(data && Array.isArray(data.dados)){
+    try{ imported=applyImportedRos(data.dados,data); }catch(e){}
+  }
+
+  if(result){
+    const qtd=(data && typeof data.quantidade!=='undefined') ? ` • ${data.quantidade} registro(s) encontrado(s)` : '';
+    const imp=imported ? ` • ${imported} importado(s) para o portal` : '';
+    result.className='statusline okline';
+    result.classList.remove('hidden');
+    const bases=(data&&typeof data.quantidadeInterna!=='undefined')?` • Interna: ${data.quantidadeInterna} • Externa/SAC: ${data.quantidadeExterna||0}`:'';
+    result.textContent='Conexão realizada com sucesso'+qtd+bases+imp+(usedJsonp?' • modo compatível com navegador':'')+'.';
   }
 }
 
