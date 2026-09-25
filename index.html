@@ -4201,7 +4201,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v8';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v9';
+window.__NUCLEO_APP_BUILD='2026-09-25-v9';
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -5456,6 +5457,64 @@ function startTriageCentralFastSync(){
 }
 
 
+
+
+// ============================================================
+// REGRA FIXA — TODOS OS DISPOSITIVOS NA MESMA VERSÃO DO APP
+// O backend publica a versão oficial. Se este HTML estiver antigo,
+// o navegador recarrega o MESMO endereço com cache-buster.
+// ============================================================
+let __nucleoAppVersionCheckBusy=false;
+let __nucleoAppVersionTimer=null;
+
+function nucleoReloadForBuild(build){
+  const target=String(build||'').trim();
+  if(!target)return;
+
+  try{
+    const url=new URL(window.location.href);
+    url.searchParams.set('appv',target);
+    url.searchParams.set('_refresh',String(Date.now()));
+
+    // Guarda somente para diagnóstico; não é fonte de verdade.
+    try{sessionStorage.setItem('nucleo-last-requested-build',target)}catch(e){}
+
+    window.location.replace(url.toString());
+  }catch(e){
+    window.location.reload();
+  }
+}
+
+async function checkNucleoAppVersion(force=false){
+  if(__nucleoAppVersionCheckBusy || !portalBackendEnabled() || !navigator.onLine)return false;
+  if(document.visibilityState==='hidden' && !force)return false;
+
+  __nucleoAppVersionCheckBusy=true;
+  try{
+    const res=await portalJsonp({acao:'portal_app_version'},10000);
+    if(!res?.sucesso)return false;
+
+    const serverBuild=String(res.build||'').trim();
+    const localBuild=String(window.__NUCLEO_APP_BUILD||'').trim();
+
+    if(serverBuild && localBuild && serverBuild!==localBuild){
+      nucleoReloadForBuild(serverBuild);
+      return true;
+    }
+    return false;
+  }catch(e){
+    console.warn('[NÚCLEO VERSÃO] não foi possível conferir a versão do app',e);
+    return false;
+  }finally{
+    __nucleoAppVersionCheckBusy=false;
+  }
+}
+
+function startNucleoAppVersionCheck(){
+  try{clearInterval(__nucleoAppVersionTimer)}catch(e){}
+  // Leve: consulta só uma string de versão.
+  __nucleoAppVersionTimer=setInterval(()=>checkNucleoAppVersion(false),15000);
+}
 
 // ============================================================
 // REGRA FIXA DO NÚCLEO — SINCRONIZAÇÃO GLOBAL
@@ -12564,6 +12623,7 @@ setTimeout(retryPendingRncDeletes,1800);
 
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
+    checkNucleoAppVersion(true);
     nucleoAutoSyncIfDue(false);
     syncTriageCentralFast(true);
     syncNucleoGlobalRevision(true);
@@ -12571,6 +12631,7 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 window.addEventListener('focus',()=>{
+  checkNucleoAppVersion(true);
   nucleoAutoSyncIfDue(false);
   syncTriageCentralFast(true);
   syncNucleoGlobalRevision(true);
@@ -12579,8 +12640,10 @@ window.addEventListener('focus',()=>{
 startNucleoCentralRefresh();
 startTriageCentralFastSync();
 startNucleoGlobalSync();
+startNucleoAppVersionCheck();
 
 setTimeout(()=>{
+  checkNucleoAppVersion(true);
   syncTriageCentralFast(true);
   syncNucleoGlobalRevision(true);
 },1800);
@@ -20556,7 +20619,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v8</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v9</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
