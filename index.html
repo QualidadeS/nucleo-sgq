@@ -4530,8 +4530,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v12';
-window.__NUCLEO_APP_BUILD='2026-09-25-v12';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v13';
+window.__NUCLEO_APP_BUILD='2026-09-25-v13';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -5607,33 +5607,37 @@ async function syncPortalBackend(showMessage=false,options={}){
     applyPortalBackendSnapshot(res);
     updateBackendStatus(true,'Base central conectada.');
 
-    // Atualizações leves acontecem imediatamente. Renderizações grandes ficam fora
-    // do caminho crítico para o navegador não congelar a cada sincronização automática.
-    try{
-      refreshSectorSelectors();
-      refreshExternalRoSidebarBadge();
-      refreshNotificationBell();
-      refreshContestPendingBadge();
-      refreshPdcaSidebarBadge();
-    }catch(e){}
-    const heavyRefresh=()=>{
+    // Em sincronização automática, aplica apenas os dados.
+    // Renderizações são feitas UMA vez pelo coordenador global.
+    if(!options.skipRefresh){
       try{
-        loadAdminConfig();
-        renderAnnouncementsAdmin();
-        renderContestations();
-        populateTriageUnits();
-        renderTriage();
-        renderExternalRoControl();
-        refreshRoSummary();
-        try{render()}catch(e){}
-        renderOperationalUsers();
-        try{populateAdminCleanupRos();}catch(e){}
-        setTimeout(()=>{try{showPendingAnnouncement()}catch(e){}},100);
+        refreshSectorSelectors();
+        refreshExternalRoSidebarBadge();
+        refreshNotificationBell();
+        refreshContestPendingBadge();
+        refreshPdcaSidebarBadge();
       }catch(e){}
-    };
-    if(foreground)heavyRefresh();
-    else if('requestIdleCallback' in window)requestIdleCallback(heavyRefresh,{timeout:2500});
-    else setTimeout(heavyRefresh,350);
+
+      const heavyRefresh=()=>{
+        try{
+          loadAdminConfig();
+          renderAnnouncementsAdmin();
+          renderContestations();
+          populateTriageUnits();
+          renderTriage();
+          renderExternalRoControl();
+          refreshRoSummary();
+          try{render()}catch(e){}
+          renderOperationalUsers();
+          try{populateAdminCleanupRos();}catch(e){}
+          setTimeout(()=>{try{showPendingAnnouncement()}catch(e){}},100);
+        }catch(e){}
+      };
+
+      if(foreground)heavyRefresh();
+      else if('requestIdleCallback' in window)requestIdleCallback(heavyRefresh,{timeout:2500});
+      else setTimeout(heavyRefresh,350);
+    }
 
     if(showMessage)alert('Base central sincronizada.');
     return true;
@@ -5889,101 +5893,146 @@ async function checkNucleoAppVersion(force=false){
 function startNucleoAppVersionCheck(){
   try{clearInterval(__nucleoAppVersionTimer)}catch(e){}
   // Leve: consulta só uma string de versão.
-  __nucleoAppVersionTimer=setInterval(()=>checkNucleoAppVersion(false),15000);
+  __nucleoAppVersionTimer=setInterval(()=>checkNucleoAppVersion(false),60000);
 }
 
 // ============================================================
-// REGRA FIXA DO NÚCLEO — SINCRONIZAÇÃO GLOBAL
-// localStorage é somente cache local; a fonte de verdade é a base central.
+// REGRA FIXA DO NÚCLEO — SINCRONIZAÇÃO GLOBAL SEM TRAVAR A UI
+// Um único coordenador consulta a revisão central.
+// Só quando a revisão muda baixa os dados compartilhados.
 // ============================================================
 let __nucleoGlobalSyncTimer=null;
 let __nucleoGlobalSyncBusy=false;
 let __nucleoGlobalReloadBusy=false;
 let __nucleoLastSharedRevision='';
 
-async function reloadNucleoSharedState(){
-  if(__nucleoGlobalReloadBusy)return false;
-  __nucleoGlobalReloadBusy=true;
-  try{
-    await syncPortalBackend(false,{foreground:false});
+function nucleoRefreshVisibleUi(){
+  // Atualiza somente o que o usuário pode estar vendo agora.
+  try{refreshNotificationBell()}catch(e){}
+  try{refreshMenuNotificationBadges()}catch(e){}
+  try{refreshRoSummary()}catch(e){}
 
-    try{
-      await syncImportedRosFromConfiguredSources({silent:true,force:true});
-    }catch(roErr){
-      console.warn('[NÚCLEO SYNC GLOBAL] falha ao reler R.O.s',roErr);
-    }
-
-    try{refreshSectorSelectors()}catch(e){}
+  const triageView=document.getElementById('triageView');
+  if(triageView && !triageView.classList.contains('hidden')){
     try{populateTriageSectors()}catch(e){}
     try{populateTriageUnits()}catch(e){}
     try{renderTriage()}catch(e){}
-    try{refreshRoSummary()}catch(e){}
-    try{refreshMenuNotificationBadges()}catch(e){}
-    try{refreshExternalRoSidebarBadge()}catch(e){}
-    try{refreshPdcaSidebarBadge()}catch(e){}
-    try{refreshContestPendingBadge()}catch(e){}
-    try{refreshNotificationBell()}catch(e){}
-    try{renderCurrentOverview()}catch(e){}
-    try{renderPendingHub()}catch(e){}
+  }
+
+  const roListView=document.getElementById('roListView');
+  if(roListView && !roListView.classList.contains('hidden')){
     try{render()}catch(e){}
+  }
+
+  const overview=document.getElementById('overviewView');
+  if(overview && !overview.classList.contains('hidden')){
+    try{renderCurrentOverview()}catch(e){}
+  }
+
+  const external=document.getElementById('externalRoControlView');
+  if(external && !external.classList.contains('hidden')){
+    try{renderExternalRoControl()}catch(e){}
+  }
+
+  const contest=document.getElementById('contestationsView');
+  if(contest && !contest.classList.contains('hidden')){
+    try{renderContestations()}catch(e){}
+  }
+
+  const users=document.getElementById('usersView');
+  if(users && !users.classList.contains('hidden')){
+    try{renderOperationalUsers()}catch(e){}
+  }
+}
+
+async function reloadNucleoSharedState(){
+  if(__nucleoGlobalReloadBusy)return false;
+  __nucleoGlobalReloadBusy=true;
+
+  try{
+    // 1. Coleções centrais, sem renderizações intermediárias.
+    await syncPortalBackend(false,{
+      foreground:false,
+      skipRefresh:true
+    });
+
+    // 2. R.O.s físicas da planilha.
+    try{
+      await syncImportedRosFromConfiguredSources({
+        silent:true,
+        force:true
+      });
+    }catch(roErr){
+      console.warn('[NÚCLEO SYNC] R.O.s não atualizadas nesta rodada',roErr);
+    }
+
+    // Dá uma oportunidade ao navegador para pintar a tela.
+    await new Promise(resolve=>setTimeout(resolve,0));
+
+    // 3. Uma única atualização visual.
+    nucleoRefreshVisibleUi();
     return true;
+
   }finally{
     __nucleoGlobalReloadBusy=false;
   }
 }
 
 async function syncNucleoGlobalRevision(force=false){
-  if(__nucleoGlobalSyncBusy || !portalBackendEnabled() || !navigator.onLine || !getSession()?.authToken){
+  if(
+    __nucleoGlobalSyncBusy ||
+    __nucleoGlobalReloadBusy ||
+    !portalBackendEnabled() ||
+    !navigator.onLine ||
+    !getSession()?.authToken
+  ){
     return false;
   }
+
   if(document.visibilityState==='hidden' && !force)return false;
 
   __nucleoGlobalSyncBusy=true;
   try{
-    const res=await portalJsonp({acao:'portal_sync_version'},12000);
+    const res=await portalJsonp({
+      acao:'portal_sync_version'
+    },10000);
+
     if(!res?.sucesso)return false;
 
     const revision=String(res.revision||'0');
-    const changed=__nucleoLastSharedRevision && revision!==__nucleoLastSharedRevision;
-    __nucleoLastSharedRevision=revision;
 
-    if(changed || force){
+    // Primeira leitura apenas registra a revisão; não refaz tudo sem necessidade.
+    if(!__nucleoLastSharedRevision){
+      __nucleoLastSharedRevision=revision;
+      if(force)await reloadNucleoSharedState();
+      return true;
+    }
+
+    if(revision!==__nucleoLastSharedRevision){
+      __nucleoLastSharedRevision=revision;
       await reloadNucleoSharedState();
     }
+
     return true;
+
   }catch(e){
-    console.warn('[NÚCLEO SYNC GLOBAL] consulta de revisão falhou',e);
+    console.warn('[NÚCLEO SYNC] consulta de revisão falhou',e);
     return false;
+
   }finally{
     __nucleoGlobalSyncBusy=false;
   }
 }
 
-
-let __nucleoFullSafetySyncTimer=null;
-
-function startNucleoFullSafetySync(){
-  try{clearInterval(__nucleoFullSafetySyncTimer)}catch(e){}
-
-  // Fallback obrigatório: mesmo que uma rotina antiga não incremente
-  // a revisão global, os dispositivos convergem para a base central.
-  __nucleoFullSafetySyncTimer=setInterval(()=>{
-    if(
-      document.visibilityState==='visible' &&
-      navigator.onLine &&
-      getSession()?.authToken
-    ){
-      reloadNucleoSharedState().catch(e=>
-        console.warn('[NÚCLEO SYNC GLOBAL] sincronização de segurança falhou',e)
-      );
-    }
-  },60000);
-}
-
 function startNucleoGlobalSync(){
   try{clearInterval(__nucleoGlobalSyncTimer)}catch(e){}
-  __nucleoGlobalSyncTimer=setInterval(()=>syncNucleoGlobalRevision(false),5000);
+
+  // 10 s: rápido para trabalho colaborativo, sem bombardear o navegador.
+  __nucleoGlobalSyncTimer=setInterval(()=>{
+    syncNucleoGlobalRevision(false);
+  },10000);
 }
+
 
 function scheduleBackendSync(){
   if(!portalBackendEnabled())return;
@@ -12342,7 +12391,7 @@ async function saveTriageRecord(){
       try{
         await portalBackendSaveConfirmedPost('triage',record.roKey,record,25000);
         // Confere imediatamente a coleção central após a gravação.
-        setTimeout(()=>syncTriageCentralFast(true),100);
+        
       }catch(centralErr){
         console.warn('[NUCLEO TRIAGEM] base central não confirmou a triagem',centralErr);
         // Reenvia em segundo plano, mas deixa aviso explícito.
@@ -12381,16 +12430,14 @@ async function saveTriageRecord(){
 
   // A interface já foi atualizada localmente. A releitura completa da planilha
   // acontece em segundo plano e não mantém o usuário preso no carregamento.
+  // A gravação já foi feita na base central.
+  // O coordenador global distribui a alteração aos demais usuários sem
+  // iniciar outra sincronização pesada neste mesmo instante.
   setTimeout(()=>{
-    syncTriageCentralFast(true).catch(()=>{});
-    syncImportedRosFromConfiguredSources({silent:true,force:true})
-      .then(()=>{
-        try{renderTriage()}catch(e){}
-        try{refreshRoSummary()}catch(e){}
-        try{refreshMenuNotificationBadges()}catch(e){}
-      })
-      .catch(syncErr=>console.warn('[NUCLEO TRIAGEM] releitura em segundo plano falhou',syncErr));
-  },300);
+    try{renderTriage()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+  },50);
 
   closeTriageModal();
   populateTriageSectors();
@@ -13022,7 +13069,6 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
     checkNucleoAppVersion(true);
     nucleoAutoSyncIfDue(false);
-    syncTriageCentralFast(true);
     syncNucleoGlobalRevision(true);
   }
 });
@@ -13030,21 +13076,16 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('focus',()=>{
   checkNucleoAppVersion(true);
   nucleoAutoSyncIfDue(false);
-  syncTriageCentralFast(true);
   syncNucleoGlobalRevision(true);
 });
 
-startNucleoCentralRefresh();
-startTriageCentralFastSync();
 startNucleoGlobalSync();
-startNucleoFullSafetySync();
 startNucleoAppVersionCheck();
 
 setTimeout(()=>{
   checkNucleoAppVersion(true);
-  syncTriageCentralFast(true);
   syncNucleoGlobalRevision(true);
-},1800);
+},1200);
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
 const ARCHIVED_RO_KEY='portal-sgq-archived-ro-v1';
@@ -21076,7 +21117,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v12</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v13</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
