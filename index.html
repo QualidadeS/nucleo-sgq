@@ -4547,8 +4547,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v18';
-window.__NUCLEO_APP_BUILD='2026-09-25-v18';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v19';
+window.__NUCLEO_APP_BUILD='2026-09-25-v19';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -7565,11 +7565,10 @@ async function hydrateNucleoAfterLogin(){
       new Promise(resolve=>setTimeout(()=>resolve(false),12000))
     ]);
 
-    const roTask=Promise.race([
-      syncImportedRosFromConfiguredSources({silent:true,force:true}),
-      new Promise(resolve=>setTimeout(()=>resolve(false),12000))
-    ]);
+    const roTask=syncImportedRosFromConfiguredSources({silent:true,force:true});
 
+    // A carga de R.O.s pode ser maior que as outras coleções.
+    // Não transforma timeout artificial em "zero".
     await Promise.allSettled([centralTask,roTask]);
 
     // Mesmo se uma das fontes não responder, usa tudo que já chegou.
@@ -16357,77 +16356,60 @@ async function bootstrapRoData(){
 
 
 async function syncImportedRosFromConfiguredSources(options={}){
-  const current=getSavedIntegrationSettings();
-
-  // REGRA FIXA: a base sincronizada é a mesma em qualquer dispositivo.
-  const sharedSettings={
-    ...current,
-    roSyncPeriod:'all',
-    roSyncDateFrom:'',
-    roSyncDateTo:''
-  };
-
-  if(!sharedSettings?.apiUrl){
-    throw new Error('URL central das R.O.s não configurada.');
+  if(!portalBackendEnabled()){
+    throw new Error('Base central não configurada.');
   }
 
-  let data=null;
-  let fetchError=null;
+  if(!getSession()?.authToken){
+    throw new Error('Sessão não autenticada para carregar as R.O.s.');
+  }
+
+  window.__NUCLEO_RO_LOADING=true;
+  window.__NUCLEO_RO_LAST_ERROR='';
 
   try{
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),8000);
+    // Endpoint único e autenticado. Não usa mais a rota genérica do Web App,
+    // nem fetch CORS, nem uma configuração local diferente em cada aparelho.
+    const data=await portalJsonp({
+      acao:'portal_ro_load'
+    },45000);
 
-    try{
-      const url=appendIntegrationParams(sharedSettings.apiUrl,sharedSettings,true);
-      const response=await fetch(url,{
-        method:'GET',
-        redirect:'follow',
-        cache:'no-store',
-        signal:controller.signal
-      });
-
-      if(!response.ok)throw new Error('HTTP '+response.status);
-      data=await response.json();
-    }finally{
-      clearTimeout(timer);
+    if(!data || data.sucesso!==true){
+      throw new Error(data?.erro||'A base central não confirmou a carga das R.O.s.');
     }
 
-  }catch(err){
-    fetchError=err;
+    if(!Array.isArray(data.dados)){
+      throw new Error('O Apps Script não retornou a lista de R.O.s.');
+    }
 
-    // O Apps Script costuma funcionar melhor por JSONP em navegador móvel.
-    data=await jsonpRequest(
-      sharedSettings.apiUrl,
-      sharedSettings.apiKey,
-      {}
-    );
-  }
+    const esperado=Number(data.quantidade);
+    if(Number.isFinite(esperado) && esperado!==data.dados.length){
+      throw new Error(
+        'Carga incompleta de R.O.s: servidor informou '+esperado+
+        ', mas o navegador recebeu '+data.dados.length+'.'
+      );
+    }
 
-  if(data?.sucesso===false){
-    throw new Error(data.erro||'Falha ao carregar a base compartilhada de R.O.s.');
-  }
+    applyImportedRos(data.dados,data);
+    importedRoCacheNeedsRefresh=false;
 
-  if(!Array.isArray(data?.dados)){
-    throw new Error(
-      'A base central não devolveu a lista de R.O.s.'+
-      (fetchError?' Tentativa direta: '+String(fetchError?.message||fetchError):'')
-    );
-  }
-
-  applyImportedRos(data.dados,data);
-  importedRoCacheNeedsRefresh=false;
-
-  try{
+    window.__NUCLEO_RO_DATA_READY=true;
     window.__NUCLEO_LAST_RO_SYNC={
-      total:Array.isArray(data.dados)?data.dados.length:0,
+      total:data.dados.length,
       interna:Number(data.quantidadeInterna||0),
       externa:Number(data.quantidadeExterna||0),
       at:new Date().toISOString()
     };
-  }catch(e){}
 
-  return true;
+    return true;
+
+  }catch(e){
+    window.__NUCLEO_RO_LAST_ERROR=String(e?.message||e);
+    throw e;
+
+  }finally{
+    window.__NUCLEO_RO_LOADING=false;
+  }
 }
 
 async function refreshLegacyRoCacheFromApi(force=false){
@@ -19941,10 +19923,14 @@ function overviewUserData(){
 function overviewAdminData(){
   const triageMap=overviewSafe(()=>getSavedTriageMap(),new Map());
   const allRos=overviewSafe(()=>getAllRoRecords(),[]);
-  // Use a mesma regra da tela de Triagem. A mesma R.O. pode ter chave técnica
-  // RO::Setor; procurar apenas pela chave base fazia uma R.O. já atribuída
-  // também ser contada como "aguardando triagem".
-  const triagePending=overviewSafe(()=>getTriageRecords().filter(r=>r.triagemStatus==='new').length,0);
+  const roDataReady=window.__NUCLEO_RO_DATA_READY===true || allRos.length>0;
+  const roTotal=allRos.length;
+
+  // "0" só é válido depois que a base de R.O.s foi carregada.
+  const triagePending=roDataReady
+    ? overviewSafe(()=>getTriageRecords().filter(r=>r.triagemStatus==='new').length,0)
+    : null;
+
   const contests=overviewSafe(()=>getContestations().filter(c=>c.status==='pending'),[]);
   const pendingActions=overviewSafe(()=>pendingActionItems(),[]);
   const actionReview=pendingActions.filter(x=>['review','overdue'].includes(x?.status?.code)).length;
@@ -19953,7 +19939,7 @@ function overviewAdminData(){
   const registrations=overviewSafe(()=>pendingRegistrationItems(),[]);
   const docs=overviewSafe(()=>getAdminModuleRecords().filter(r=>r.module==='documents'&&!['done','cancelled'].includes(String(r.status||''))),[]);
   const summary=overviewSafe(()=>roSummaryData(),{pending:0,noPresentation:0,openActions:0,overdue:0});
-  return {triagePending,contests,pendingActions,actionReview,sacToClassify,registrations,docs,summary};
+  return {roDataReady,roTotal,triagePending,contests,pendingActions,actionReview,sacToClassify,registrations,docs,summary};
 }
 
 const OVERVIEW_QUICK_LINKS_KEY='nucleo-overview-quick-links-v1';
@@ -20117,7 +20103,8 @@ function renderAdminOverview(){
 
   const k=document.getElementById('overviewKpis');
   if(k)k.innerHTML=[
-    overviewKpi(d.triagePending,'R.O.s aguardando triagem',d.triagePending?'warn':'','showTriage()','Triar'),
+    overviewKpi(d.roDataReady?d.roTotal:'—','R.O.s carregadas da planilha',d.roDataReady?'':'warn','showList()',d.roDataReady?'Abrir':'Carregando'),
+    overviewKpi(d.roDataReady?d.triagePending:'—','R.O.s aguardando triagem',d.roDataReady&&d.triagePending?'warn':'','showTriage()',d.roDataReady?'Triar':'Carregando'),
     overviewKpi(d.sacToClassify,'SACs aguardando classificação',d.sacToClassify?'warn':'','showExternalRoControl()','Classificar'),
     overviewKpi(d.actionReview,'Ações para atenção do SGQ',d.actionReview?'danger':'','showPendingActions()','Analisar'),
     overviewKpi(d.contests.length,'Contestações pendentes',d.contests.length?'warn':'','showContestations()','Analisar'),
@@ -20126,7 +20113,17 @@ function renderAdminOverview(){
   ].join('');
 
   const priorities=[];
-  if(d.triagePending)priorities.push(overviewPriority(`${d.triagePending} R.O.(s) sem triagem`,'Precisam ser classificadas e direcionadas pelo SGQ.','showTriage()','warn'));
+  if(!d.roDataReady){
+    priorities.push(overviewPriority(
+      'Base de R.O.s ainda não carregada',
+      window.__NUCLEO_RO_LAST_ERROR
+        ? 'Falha na carga: '+window.__NUCLEO_RO_LAST_ERROR
+        : 'O Núcleo ainda está buscando as R.O.s da planilha central.',
+      'syncNucleoGlobalRevision(true)',
+      'warn'
+    ));
+  }
+  if(d.roDataReady&&d.triagePending)priorities.push(overviewPriority(`${d.triagePending} R.O.(s) sem triagem`,'Precisam ser classificadas e direcionadas pelo SGQ.','showTriage()','warn'));
   if(d.sacToClassify)priorities.push(overviewPriority(`${d.sacToClassify} SAC(s) sem classificação completa`,'Defina tratativa, setor responsável e prazo antes do início.','showExternalRoControl()','warn'));
   if(d.actionReview)priorities.push(overviewPriority(`${d.actionReview} ação(ões) exigem atenção`,'Há ações atrasadas ou aguardando conferência do SGQ.','showPendingActions()','danger'));
   if(d.contests.length)priorities.push(overviewPriority(`${d.contests.length} contestação(ões) pendente(s)`,'Existem solicitações aguardando decisão administrativa.','showContestations()','warn'));
@@ -20999,7 +20996,18 @@ async function bootNucleoOnce(){
 
   try{
     // Cache simples primeiro: não depende de IndexedDB nem rede.
-    try{restoreImportedRos()}catch(e){
+    try{
+      const restoredLocal=restoreImportedRos();
+      if(restoredLocal>0){
+        window.__NUCLEO_RO_DATA_READY=true;
+        window.__NUCLEO_LAST_RO_SYNC={
+          total:getAllRoRecords().length,
+          interna:getAllRoRecords().filter(r=>String(r.origemBase||'')==='Interna').length,
+          externa:getAllRoRecords().filter(r=>String(r.origemBase||'')==='Externa').length,
+          at:'cache-local'
+        };
+      }
+    }catch(e){
       console.warn('[NÚCLEO] cache local simples não pôde ser restaurado',e);
     }
 
@@ -21254,7 +21262,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v18</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v19</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
