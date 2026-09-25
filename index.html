@@ -2834,17 +2834,23 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 </style>
 
 
-<style id="nucleo-boot-v14">
-body.nucleo-booting > *:not(#nucleoLoadingOverlay){
-  visibility:hidden!important;
-}
-body.nucleo-booting #nucleoLoadingOverlay.show{
-  display:flex!important;
-  visibility:visible!important;
-  z-index:2147483000!important;
+
+<style id="nucleo-mobile-performance-v16">
+@media(max-width:700px){
+  #nucleoLoadingOverlay{
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+    background:rgba(255,255,255,.97)!important;
+  }
+  .card,.triage-modal,.login-card,#nucleoLoadingCard{
+    box-shadow:none!important;
+  }
+  html,body{
+    overscroll-behavior:none;
+  }
 }
 </style>
-</head><body class="nucleo-booting">
+</head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
   <div id="nucleoLoadingCard">
@@ -4541,8 +4547,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v16';
-window.__NUCLEO_APP_BUILD='2026-09-25-v16';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v17';
+window.__NUCLEO_APP_BUILD='2026-09-25-v17';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -5478,19 +5484,7 @@ function applyPortalBackendSnapshot(snapshot){
 
   const data=snapshot.dados||{};
   // A base central vence qualquer cache antigo deste navegador.
-  // As R.O.s também vêm no snapshot central; assim um computador novo
-  // não depende do IndexedDB/localStorage de outro computador.
   nucleoApplySharedState(data.sharedState);
-  if(Array.isArray(data.ros) && data.ros.length){
-    try{ applyImportedRos(data.ros,data.rosMeta||{}); }
-    catch(e){ console.warn('[NÚCLEO] não foi possível aplicar as R.O.s centrais',e); }
-  }else if(data.rosMeta && Number(data.rosMeta.quantidade||0)===0){
-    try{
-      ros.splice(0,ros.length);
-      selected=null;
-      saveImportedRosByOrigin([],[]);
-    }catch(e){}
-  }
   if(data.config && typeof data.config==='object'){
     const localIntegration=getSavedIntegrationSettings();
     const mergedConfig={
@@ -7559,6 +7553,51 @@ function enableMobileLoginKeyboard(){
 
 let loginAttemptNonce=0;
 
+
+async function hydrateNucleoAfterLogin(){
+  // Login novo não pode depender do cache daquele computador.
+  // Busca a base central + R.O.s e só então monta a primeira tela útil.
+  try{
+    showNucleoLoading('Carregando os dados compartilhados...','Entrando no NÚCLEO');
+
+    const centralTask=Promise.race([
+      syncPortalBackend(false,{foreground:false,skipRefresh:true}),
+      new Promise(resolve=>setTimeout(()=>resolve(false),12000))
+    ]);
+
+    const roTask=Promise.race([
+      syncImportedRosFromConfiguredSources({silent:true,force:true}),
+      new Promise(resolve=>setTimeout(()=>resolve(false),12000))
+    ]);
+
+    await Promise.allSettled([centralTask,roTask]);
+
+    // Mesmo se uma das fontes não responder, usa tudo que já chegou.
+    try{refreshSectorSelectors()}catch(e){}
+    try{refreshAccessUI()}catch(e){}
+    try{enforceAdminVisibility()}catch(e){}
+    try{refreshRoRegistrationAccess()}catch(e){}
+    try{showList()}catch(e){}
+    try{render()}catch(e){}
+    try{renderCurrentOverview()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshNotificationBell()}catch(e){}
+    try{refreshContestPendingBadge()}catch(e){}
+    try{refreshPdcaSidebarBadge()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+
+    // A partir daqui, mantém este usuário no mesmo sincronizador dos demais.
+    try{startNucleoGlobalSync()}catch(e){}
+    try{startNucleoAppVersionCheck()}catch(e){}
+
+  }catch(e){
+    console.warn('[NÚCLEO] pós-login não conseguiu carregar tudo',e);
+    try{showList()}catch(_){}
+  }finally{
+    hideNucleoLoading(true);
+  }
+}
+
 async function loginUser(){
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
@@ -7617,16 +7656,13 @@ async function loginUser(){
     try{document.activeElement?.blur()}catch(e){}
     try{setSession(session)}catch(e){nucleoSessionMemory=session;console.warn('Sessão mantida em memória:',e)}
 
-    // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
-    const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
+    // Mostra a navegação imediatamente, mas a primeira carga útil vem da base central.
+    const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,refreshNotificationBell,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
-    // Após autenticar, usa o mesmo coordenador global; evita uma segunda
-    // sincronização/renderização pesada em paralelo com a abertura.
-    setTimeout(()=>{
-      syncNucleoGlobalRevision(true).catch(e=>
-        console.warn('Sincronização pós-login falhou:',e)
-      );
-    },500);
+
+    // Em um computador novo o cache local pode estar vazio. Portanto o login
+    // SEMPRE hidrata os dados compartilhados explicitamente.
+    setTimeout(()=>hydrateNucleoAfterLogin(),50);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
     if(session.role==='admin'){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
@@ -13112,10 +13148,21 @@ window.addEventListener('focus',scheduleNucleoResumeSync);
 function startNucleoLiveSyncAfterBoot(){
   startNucleoGlobalSync();
   startNucleoAppVersionCheck();
-  setTimeout(()=>{
+
+  setTimeout(async()=>{
     checkNucleoAppVersion(true);
-    syncNucleoGlobalRevision(true);
-  },1200);
+
+    // Computador/celular sem cache precisa receber a base inteira na primeira abertura.
+    if(!getAllRoRecords().length){
+      try{
+        await reloadNucleoSharedState();
+      }catch(e){
+        console.warn('[NÚCLEO] primeira carga compartilhada falhou',e);
+      }
+    }else{
+      syncNucleoGlobalRevision(true);
+    }
+  },900);
 }
 window.addEventListener('offline',updateNetworkState);
 const FAVORITES_KEY='portal-sgq-favorites-v1';
@@ -16291,8 +16338,6 @@ function restoreImportedRos(){
 
 
 async function bootstrapRoData(){
-  // O cache é apenas um arranque rápido. A fonte oficial é recarregada
-  // pelo snapshot central após o login, inclusive em computadores novos.
   // Primeiro tenta o cache grande e persistente.
   const restoredDurable=await restoreImportedRosDurable();
   if(restoredDurable){
@@ -16315,17 +16360,14 @@ async function syncImportedRosFromConfiguredSources(options={}){
   const current=getSavedIntegrationSettings();
 
   // REGRA FIXA: a base sincronizada é a mesma em qualquer dispositivo.
-  // A URL da fonte oficial não pode depender do cadastro local de cada
-  // navegador. Todas as máquinas devem consultar o mesmo Web App publicado.
   const sharedSettings={
     ...current,
-    apiUrl:NUCLEO_DEFAULT_API_URL,
     roSyncPeriod:'all',
     roSyncDateFrom:'',
     roSyncDateTo:''
   };
 
-  if(!sharedSettings.apiUrl){
+  if(!sharedSettings?.apiUrl){
     throw new Error('URL central das R.O.s não configurada.');
   }
 
@@ -20919,6 +20961,7 @@ refreshRoRegistrationAccess();
 async function bootNucleoOnce(){
   const session=getSession();
 
+  // Mostra o loading, mas nunca esconde o documento inteiro.
   try{
     const overlay=document.getElementById('nucleoLoadingOverlay');
     const titleEl=document.getElementById('nucleoLoadingTitle');
@@ -20928,27 +20971,29 @@ async function bootNucleoOnce(){
     if(overlay)overlay.classList.add('show');
   }catch(e){}
 
-  // Watchdog absoluto: o app jamais pode ficar preso no overlay de abertura.
+  // Se algo falhar, libera a tela rapidamente.
   const bootWatchdog=setTimeout(()=>{
-    document.body.classList.remove('nucleo-booting');
     hideNucleoLoading(true);
-    console.warn('[NÚCLEO] watchdog liberou a interface após timeout de abertura.');
-  },1800);
+    console.warn('[NÚCLEO] watchdog liberou a interface.');
+  },1200);
 
   if(!session?.authToken){
     clearTimeout(bootWatchdog);
-    document.body.classList.remove('nucleo-booting');
     hideNucleoLoading(true);
+    try{
+      const login=document.getElementById('loginOverlay');
+      if(login)login.style.display='flex';
+    }catch(e){}
     return;
   }
 
   try{
-    // 1) Recuperação SINCRONA do localStorage. É rápida e nunca depende de IndexedDB/rede.
+    // Cache simples primeiro: não depende de IndexedDB nem rede.
     try{restoreImportedRos()}catch(e){
       console.warn('[NÚCLEO] cache local simples não pôde ser restaurado',e);
     }
 
-    // 2) Monta a interface imediatamente com o que já existe no aparelho.
+    // Monta a tela imediatamente.
     try{render()}catch(e){}
     try{renderCurrentOverview()}catch(e){}
     try{refreshRoSummary()}catch(e){}
@@ -20958,16 +21003,18 @@ async function bootNucleoOnce(){
 
   }finally{
     clearTimeout(bootWatchdog);
-    document.body.classList.remove('nucleo-booting');
     hideNucleoLoading(true);
   }
 
-  // 3) IndexedDB é opcional e nunca bloqueia a abertura.
+  // IndexedDB e sincronização central ficam totalmente fora da abertura.
+  const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'');
+  const durableDelay=isMobile?1800:400;
+
   setTimeout(async()=>{
     try{
       const restored=await Promise.race([
         restoreImportedRosDurable(),
-        new Promise(resolve=>setTimeout(()=>resolve(0),2000))
+        new Promise(resolve=>setTimeout(()=>resolve(0),1800))
       ]);
 
       if(restored){
@@ -20976,14 +21023,17 @@ async function bootNucleoOnce(){
         try{refreshRoSummary()}catch(e){}
       }
     }catch(e){
-      console.warn('[NÚCLEO] cache IndexedDB ignorado nesta abertura',e);
+      console.warn('[NÚCLEO] IndexedDB ignorado nesta abertura',e);
     }
 
-    // 4) Só depois inicia a sincronização central.
-    try{startNucleoLiveSyncAfterBoot()}catch(e){
-      console.warn('[NÚCLEO] sincronização central não iniciou',e);
-    }
-  },350);
+    const syncDelay=isMobile?2200:500;
+    setTimeout(()=>{
+      try{startNucleoLiveSyncAfterBoot()}catch(e){
+        console.warn('[NÚCLEO] sincronização central não iniciou',e);
+      }
+    },syncDelay);
+
+  },durableDelay);
 }
 
 setTimeout(()=>bootNucleoOnce(),0);
@@ -21194,7 +21244,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v15</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v17</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
