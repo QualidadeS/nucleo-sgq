@@ -4201,8 +4201,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v9';
-window.__NUCLEO_APP_BUILD='2026-09-25-v9';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v10';
+window.__NUCLEO_APP_BUILD='2026-09-25-v10';
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -5467,18 +5467,26 @@ function startTriageCentralFastSync(){
 let __nucleoAppVersionCheckBusy=false;
 let __nucleoAppVersionTimer=null;
 
+function nucleoBuildOrdinal(build){
+  const m=String(build||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})-v(\d+)$/i);
+  if(!m)return 0;
+  return Number(m[1]+m[2]+m[3])*10000+Number(m[4]);
+}
+
 function nucleoReloadForBuild(build){
   const target=String(build||'').trim();
   if(!target)return;
 
   try{
+    const already=sessionStorage.getItem('nucleo-last-requested-build')||'';
+    if(already===target)return;
+    sessionStorage.setItem('nucleo-last-requested-build',target);
+  }catch(e){}
+
+  try{
     const url=new URL(window.location.href);
     url.searchParams.set('appv',target);
     url.searchParams.set('_refresh',String(Date.now()));
-
-    // Guarda somente para diagnóstico; não é fonte de verdade.
-    try{sessionStorage.setItem('nucleo-last-requested-build',target)}catch(e){}
-
     window.location.replace(url.toString());
   }catch(e){
     window.location.reload();
@@ -5497,11 +5505,18 @@ async function checkNucleoAppVersion(force=false){
     const serverBuild=String(res.build||'').trim();
     const localBuild=String(window.__NUCLEO_APP_BUILD||'').trim();
 
-    if(serverBuild && localBuild && serverBuild!==localBuild){
+    // Nunca recarrega uma versão nova para uma versão antiga.
+    if(
+      serverBuild &&
+      localBuild &&
+      nucleoBuildOrdinal(serverBuild)>nucleoBuildOrdinal(localBuild)
+    ){
       nucleoReloadForBuild(serverBuild);
       return true;
     }
+
     return false;
+
   }catch(e){
     console.warn('[NÚCLEO VERSÃO] não foi possível conferir a versão do app',e);
     return false;
@@ -5581,6 +5596,27 @@ async function syncNucleoGlobalRevision(force=false){
   }finally{
     __nucleoGlobalSyncBusy=false;
   }
+}
+
+
+let __nucleoFullSafetySyncTimer=null;
+
+function startNucleoFullSafetySync(){
+  try{clearInterval(__nucleoFullSafetySyncTimer)}catch(e){}
+
+  // Fallback obrigatório: mesmo que uma rotina antiga não incremente
+  // a revisão global, os dispositivos convergem para a base central.
+  __nucleoFullSafetySyncTimer=setInterval(()=>{
+    if(
+      document.visibilityState==='visible' &&
+      navigator.onLine &&
+      getSession()?.authToken
+    ){
+      reloadNucleoSharedState().catch(e=>
+        console.warn('[NÚCLEO SYNC GLOBAL] sincronização de segurança falhou',e)
+      );
+    }
+  },15000);
 }
 
 function startNucleoGlobalSync(){
@@ -12640,6 +12676,7 @@ window.addEventListener('focus',()=>{
 startNucleoCentralRefresh();
 startTriageCentralFastSync();
 startNucleoGlobalSync();
+startNucleoFullSafetySync();
 startNucleoAppVersionCheck();
 
 setTimeout(()=>{
@@ -15819,6 +15856,56 @@ async function bootstrapRoData(){
     console.info('NÚCLEO: cache antigo migrado para IndexedDB:',restoredLegacy);
   }
   return restoredLegacy;
+}
+
+
+async function syncImportedRosFromConfiguredSources(options={}){
+  const current=getSavedIntegrationSettings();
+
+  // REGRA FIXA: sincronização compartilhada nunca depende do filtro local do aparelho.
+  const sharedSettings={
+    ...current,
+    roSyncPeriod:'all',
+    roSyncDateFrom:'',
+    roSyncDateTo:''
+  };
+
+  if(!sharedSettings?.apiUrl){
+    throw new Error('URL central das R.O.s não configurada.');
+  }
+
+  let data=null;
+
+  try{
+    const url=appendIntegrationParams(sharedSettings.apiUrl,sharedSettings,true);
+    const response=await fetch(url,{
+      method:'GET',
+      redirect:'follow',
+      cache:'no-store'
+    });
+
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    data=await response.json();
+
+  }catch(fetchError){
+    data=await jsonpRequest(
+      sharedSettings.apiUrl,
+      sharedSettings.apiKey,
+      {} // sem período = todas as R.O.s
+    );
+  }
+
+  if(data?.sucesso===false){
+    throw new Error(data.erro||'Falha ao carregar a base compartilhada de R.O.s.');
+  }
+
+  if(!Array.isArray(data?.dados)){
+    throw new Error('A base central não devolveu a lista de R.O.s.');
+  }
+
+  applyImportedRos(data.dados,data);
+  importedRoCacheNeedsRefresh=false;
+  return true;
 }
 
 async function refreshLegacyRoCacheFromApi(force=false){
@@ -20381,6 +20468,13 @@ setTimeout(async()=>{
 
     const repaired=await refreshLegacyRoCacheFromApi(needDateRepair);
 
+    // O cache local nunca decide o estado final.
+    try{
+      await syncImportedRosFromConfiguredSources({silent:true,force:true});
+    }catch(sharedSyncErr){
+      console.warn('[NÚCLEO] falha na sincronização compartilhada inicial de R.O.s',sharedSyncErr);
+    }
+
     if(needDateRepair && repaired){
       localStorage.setItem('portal-sgq-ro-date-cache-version',RO_DATE_CACHE_VERSION);
       // Substitui também as datas antigas guardadas nos cards de SAC.
@@ -20619,7 +20713,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v9</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v10</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
