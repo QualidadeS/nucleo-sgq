@@ -15717,148 +15717,22 @@ function jsonpRequest(baseUrl, apiKey, extraParams){
 
 async function testConnection(){
   if(!requireIntegrationUnlock())return;
-
-  if(!isAdmin()){
-    alert('Configuração indisponível.');
-    return;
-  }
-
-  const sync=saveIntegrationSettings(true);
+  if(!isAdmin()){alert('Configuração indisponível.');return;}
+  const settings=saveIntegrationSettings(true);
   const result=document.getElementById('testResult');
-
-  if(!sync.apiUrl){
-    if(result){
-      result.className='statusline';
-      result.classList.remove('hidden');
-      result.textContent='Informe a URL /exec do Apps Script.';
-    }
+  if(!settings.apiUrl){
+    if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='Informe a URL /exec do Apps Script.';}
     return;
   }
-
-  if(result){
-    result.className='statusline';
-    result.classList.remove('hidden');
-    result.textContent='Testando conexão...';
-  }
-
-  let data=null;
-  let usedJsonp=false;
-
+  if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='Testando a resposta da API...';}
   try{
-    const url=appendIntegrationParams(sync.apiUrl,sync,true);
-    const response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store'});
-    if(!response.ok) throw new Error('HTTP '+response.status);
-    const text=await response.text();
-    try{data=JSON.parse(text);}
-    catch(e){throw new Error('Resposta não é JSON válido.');}
-  }catch(fetchErr){
-    usedJsonp=true;
-    try{
-      data=await jsonpRequest(sync.apiUrl,sync.apiKey,roSyncPeriodParams(sync));
-    }catch(jsonpErr){
-      if(result){
-        result.className='statusline';
-        result.classList.remove('hidden');
-        result.textContent='Falha na conexão. Abra a URL /exec diretamente no navegador e confirme se ela mostra os dados. Detalhe: '+(jsonpErr?.message||jsonpErr);
-      }
-      return;
-    }
-  }
-
-  if(data && data.sucesso===false){
-    if(result){
-      result.className='statusline';
-      result.classList.remove('hidden');
-      result.textContent='O Apps Script respondeu com erro: '+(data.erro||'erro não informado');
-    }
-    return;
-  }
-
-  let imported=0;
-  if(data && Array.isArray(data.dados)){
-    try{ imported=applyImportedRos(data.dados,data); }catch(e){}
-  }
-
-  if(result){
-    const qtd=(data && typeof data.quantidade!=='undefined') ? ` • ${data.quantidade} registro(s) encontrado(s)` : '';
-    const imp=imported ? ` • ${imported} importado(s) para o portal` : '';
-    result.className='statusline okline';
-    result.classList.remove('hidden');
-    const bases=(data&&typeof data.quantidadeInterna!=='undefined')?` • Interna: ${data.quantidadeInterna} • Externa/SAC: ${data.quantidadeExterna||0}`:'';
-    result.textContent='Conexão realizada com sucesso'+qtd+bases+imp+(usedJsonp?' • modo compatível com navegador':'')+'.';
+    const data=await portalJsonp({acao:'portal_public_config'},20000);
+    if(!data?.sucesso)throw new Error(data?.erro||'A implantação não confirmou a conexão.');
+    if(result){result.className='statusline okline';result.classList.remove('hidden');result.textContent='API conectada. Para buscar as R.O.s, clique em Sincronizar.';}
+  }catch(err){
+    if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='A API não respondeu ao teste curto: '+(err?.message||err);}
   }
 }
-
-
-
-const ADMIN_MODULES_KEY='portal-sgq-admin-modules-v2';
-const STANDARD_DOCUMENTS_KEY='portal-sgq-standard-documents-v1';
-const DOCUMENT_DELIVERIES_KEY='portal-sgq-document-deliveries-v1';
-
-const ADMIN_OPERATIONAL_MODULES={
-  equipment:{
-    eyebrow:'ATIVOS E MEDIÇÃO',
-    title:'Equipamentos e metrologia',
-    desc:'Cadastre instrumentos, controle calibrações e acompanhe a condição dos ativos.',
-    cards:[
-      ['Novo equipamento','Cadastrar ativo, código, localização e situação.','new'],
-      ['Equipamentos em acompanhamento','Acompanhar ativos em uso, manutenção ou bloqueio.','active'],
-      ['Calibrações pendentes','Identificar instrumentos que exigem verificação.','pending'],
-      ['Histórico metrológico','Consultar eventos, evidências e mudanças de status.','history']
-    ]
-  },
-  training:{
-    eyebrow:'PESSOAS E COMPETÊNCIAS',
-    title:'Treinamentos, competências e conhecimento',
-    desc:'Controle necessidades de treinamento, participantes, validade, eficácia e reciclagens.',
-    cards:[
-      ['Novo treinamento','Registrar treinamento, competência e participante.','new'],
-      ['Treinamentos em andamento','Acompanhar capacitações abertas ou em execução.','active'],
-      ['Reciclagens pendentes','Ver registros próximos do vencimento ou sem eficácia.','pending'],
-      ['Histórico de competências','Consultar treinamentos e certificados registrados.','history']
-    ]
-  },
-  nccapa:{
-    eyebrow:'RNC',
-    title:'RNC de fornecedores',
-    desc:'Central para registrar e acompanhar RNCs de fornecedor. Reclamações de cliente continuam exclusivamente no fluxo de SAC. CAPA fica apenas como informação/filtro neste momento.',
-    cards:[
-      ['Nova RNC de fornecedor','Registrar uma RNC de fornecedor. O vínculo com R.O. é opcional.','new_rnc'],
-      ['Em tratamento','Visualizar, filtrar, enviar, acompanhar e excluir RNCs de fornecedor.','active']
-    ]
-  },
-  documents:{
-    eyebrow:'SOLICITAÇÕES AO SGQ',
-    title:'Solicitação de Documentos',
-    desc:'Canal para solicitar ao SGQ documentos técnicos, legais, comerciais ou de produto e acompanhar a entrega.',
-    cards:[
-      ['Nova solicitação','Solicitar FISPQ, ficha técnica, certificado, laudo, documento de produto ou outro documento ao SGQ.','new'],
-      ['Minhas solicitações','Acompanhar os pedidos que você abriu e o andamento informado pelo SGQ.','mine'],
-      ['Documentos padrão','Cadastrar e controlar arquivos que podem ser entregues automaticamente.','standards'],
-      ['Histórico de entregas','Consultar documentos padrão enviados automaticamente pelo portal.','deliveries'],
-      ['Em análise','Pedidos sem documento padrão compatível que precisam de análise do SGQ.','doc_analysis'],
-      ['Em preparação','Documentos que o SGQ está providenciando.','doc_preparation'],
-      ['Prontos para entrega','Documentos concluídos e aguardando envio/entrega.','doc_ready'],
-      ['Histórico de solicitações','Consultar todas as solicitações e entregas registradas.','history']
-    ]
-  },
-  processes:{
-    eyebrow:'DOCUMENTOS INTERNOS DO SGQ',
-    title:'Gestão de processos',
-    desc:'Biblioteca controlada dos documentos internos do SGQ: IT, GSP, POP, LPP e outros documentos de processo.',
-    cards:[
-      ['Novo documento interno','Cadastrar IT, GSP, POP, LPP ou outro documento interno.','new'],
-      ['Documentos vigentes','Consultar documentos internos publicados e em uso.','published'],
-      ['Em revisão','Acompanhar documentos internos em revisão.','review'],
-      ['Revisões pendentes','Ver documentos com revisão próxima ou pendente.','pending'],
-      ['Histórico documental','Consultar versões, revisões e documentos substituídos.','history'],
-      ['Modelos de formulários','Configurar perguntas, revisão e aparência dos formulários gerados pelo Núcleo.','templates']
-    ]
-  }
-};
-
-
-const RNC_DELETED_TOMBSTONES_KEY='portal-sgq-rnc-deleted-v1';
 
 function getRncDeletedTombstones(){
   try{
