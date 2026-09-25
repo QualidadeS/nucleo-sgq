@@ -4547,8 +4547,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v19';
-window.__NUCLEO_APP_BUILD='2026-09-25-v19';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v20';
+window.__NUCLEO_APP_BUILD='2026-09-25-v20';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -5140,7 +5140,7 @@ function processDeadlineAlerts(showMessage=false){
   });
   localStorage.setItem(DEADLINE_ALERTS_KEY,JSON.stringify(state));if(showMessage)alert(created?created+' alerta(s) atualizado(s).':'Nenhum novo alerta de prazo.');refreshNotificationBell();
 }
-const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyUG0UtKvvb8cNyqs7K8VmuADRp0x0m7wDwMsg0XEaj_b32t20HPBWEV6Hkh-BE6AY_Sw/exec';
+const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyCl5Cor0mqj0J5m00WfvqoQ6CE_5HJrep9O0DOjpoFHp2DGxYkP62zDpLggr8GmPS2kA/exec';
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
@@ -21262,7 +21262,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v19</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v20</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
