@@ -2504,6 +2504,335 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 }
 </style>
 
+
+<style id="nucleo-mobile-v11">
+@media(max-width:700px){
+  html,body{
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:hidden!important;
+  }
+
+  :root{
+    --sidebar-collapsed:58px!important;
+  }
+
+  .app-shell{
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  .sidebar,
+  .sidebar.collapsed{
+    width:58px!important;
+    padding:8px 4px 10px!important;
+    overflow-x:hidden!important;
+  }
+
+  .sidebar .brand{
+    min-height:46px!important;
+    margin:0 0 10px!important;
+    padding:0!important;
+    justify-content:center!important;
+  }
+
+  .sidebar .brand-logo-wrap,
+  .sidebar.collapsed .brand-logo-wrap{
+    width:40px!important;
+    height:40px!important;
+    flex:0 0 40px!important;
+    margin:0!important;
+  }
+
+  .sidebar .brand-text-wrap,
+  .sidebar .sidebar-intro,
+  .sidebar .sidebar-collapse-btn,
+  .sidebar .side-item > span:nth-child(2),
+  .sidebar .side-module-head > span:nth-child(2),
+  .sidebar .side-independent-module > span:nth-child(2),
+  .sidebar .side-chevron,
+  .sidebar .side-module-arrow,
+  .sidebar .side-module-body{
+    display:none!important;
+  }
+
+  .sidebar .side-nav{
+    margin-top:0!important;
+    gap:5px!important;
+  }
+
+  .sidebar .side-item,
+  .sidebar .side-module-head,
+  .sidebar .side-independent-module,
+  .sidebar.collapsed .side-item,
+  .sidebar.collapsed .side-module-head,
+  .sidebar.collapsed .side-independent-module{
+    min-height:48px!important;
+    width:100%!important;
+    padding:5px 0!important;
+    justify-content:center!important;
+    border-radius:11px!important;
+  }
+
+  .sidebar .side-num,
+  .sidebar.collapsed .side-num{
+    width:36px!important;
+    min-width:36px!important;
+    height:36px!important;
+    margin:0!important;
+  }
+
+  .sidebar-bottom-icons{
+    padding:8px 2px!important;
+    gap:6px!important;
+  }
+
+  .sidebar-icon-btn,
+  .sidebar.collapsed .sidebar-icon-btn{
+    width:38px!important;
+    height:38px!important;
+    flex:0 0 38px!important;
+  }
+
+  .workspace,
+  .sidebar.collapsed + .workspace{
+    margin-left:58px!important;
+    width:calc(100% - 58px)!important;
+    min-width:0!important;
+    max-width:calc(100% - 58px)!important;
+  }
+
+  .topbar{
+    height:auto!important;
+    min-height:0!important;
+    padding:8px 10px 9px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    justify-content:flex-start!important;
+    gap:7px!important;
+    overflow:visible!important;
+  }
+
+  .crumbs{
+    width:100%!important;
+    min-width:0!important;
+    font-size:11px!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  .crumbs span{
+    padding:0 5px!important;
+  }
+
+  .top-actions{
+    width:100%!important;
+    min-width:0!important;
+    display:grid!important;
+    grid-template-columns:42px minmax(0,1fr) auto!important;
+    gap:7px!important;
+    align-items:center!important;
+  }
+
+  .global-search-wrap{
+    grid-column:1 / -1!important;
+    grid-row:1!important;
+    width:100%!important;
+    min-width:0!important;
+    order:unset!important;
+  }
+
+  .global-search-input{
+    width:100%!important;
+    min-width:0!important;
+    height:42px!important;
+    font-size:16px!important;
+  }
+
+  .notification-bell{
+    grid-column:1!important;
+    grid-row:2!important;
+    min-width:42px!important;
+    width:42px!important;
+    height:38px!important;
+  }
+
+  .offline-pill{
+    grid-column:2!important;
+    grid-row:2!important;
+    justify-self:start!important;
+    max-width:100%!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+  .top-actions > .top-btn:not(.primary-top){
+    grid-column:3!important;
+    grid-row:2!important;
+    min-height:38px!important;
+    padding:7px 10px!important;
+    white-space:nowrap!important;
+    font-size:12px!important;
+  }
+
+  .top-actions > .primary-top,
+  .top-actions > .save-state{
+    display:none!important;
+  }
+
+  main,
+  body.triage-wide main{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    padding:10px!important;
+  }
+
+  .card{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding:14px!important;
+    border-radius:15px!important;
+    overflow:hidden!important;
+  }
+
+  .overview-head{
+    width:100%!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    gap:12px!important;
+  }
+
+  .overview-head > div{
+    min-width:0!important;
+    width:100%!important;
+  }
+
+  #overviewTitle{
+    font-size:25px!important;
+    line-height:1.08!important;
+    overflow-wrap:anywhere!important;
+  }
+
+  #overviewSubtitle{
+    font-size:12px!important;
+    line-height:1.45!important;
+  }
+
+  .overview-head > .btn{
+    align-self:flex-start!important;
+    min-height:40px!important;
+  }
+
+  .overview-kpis{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+    margin:14px 0!important;
+  }
+
+  .overview-kpi{
+    min-width:0!important;
+    min-height:82px!important;
+    padding:12px!important;
+  }
+
+  .overview-grid{
+    grid-template-columns:1fr!important;
+    gap:10px!important;
+  }
+
+  .overview-panel{
+    min-width:0!important;
+    padding:14px!important;
+  }
+
+  .overview-panel-head{
+    min-width:0!important;
+    gap:8px!important;
+  }
+
+  .overview-panel-head > div{
+    min-width:0!important;
+  }
+
+  .overview-customize-btn{
+    flex:0 0 auto!important;
+    padding:7px 8px!important;
+    font-size:9px!important;
+  }
+
+  .assigned-filter-row{
+    grid-template-columns:1fr!important;
+  }
+
+  .ro-control-table-wrap,
+  #triageView > div[style*="overflow:auto"]{
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+
+  .triage-modal-overlay{
+    padding:10px!important;
+    align-items:flex-start!important;
+  }
+
+  .triage-modal{
+    width:100%!important;
+    max-width:100%!important;
+    border-radius:14px!important;
+  }
+
+  .triage-modal-head,
+  .triage-modal-body,
+  .triage-modal-foot{
+    padding-left:14px!important;
+    padding-right:14px!important;
+  }
+
+  .triage-ro-summary{
+    grid-template-columns:1fr!important;
+  }
+
+  .triage-form-grid{
+    grid-template-columns:1fr!important;
+  }
+
+  .notification-panel{
+    left:68px!important;
+    right:8px!important;
+    top:116px!important;
+    width:auto!important;
+    max-width:none!important;
+  }
+
+  input,select,textarea,button{
+    max-width:100%;
+  }
+}
+
+@media(max-width:390px){
+  .overview-kpis{
+    grid-template-columns:1fr!important;
+  }
+
+  .top-actions{
+    grid-template-columns:42px minmax(0,1fr)!important;
+  }
+
+  .top-actions > .top-btn:not(.primary-top){
+    grid-column:1 / -1!important;
+    grid-row:3!important;
+    width:100%!important;
+  }
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -4201,8 +4530,29 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v10';
-window.__NUCLEO_APP_BUILD='2026-09-25-v10';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v12';
+window.__NUCLEO_APP_BUILD='2026-09-25-v12';
+
+let __nucleoLastUserGestureAt=0;
+
+['pointerdown','touchstart','keydown'].forEach(evt=>{
+  window.addEventListener(evt,()=>{
+    __nucleoLastUserGestureAt=Date.now();
+  },{capture:true,passive:true});
+});
+
+function nucleoUserGestureRecent(maxAgeMs=2500){
+  return Date.now()-__nucleoLastUserGestureAt<=maxAgeMs;
+}
+
+function nucleoOpenUserWindow(url,target='_blank',features='noopener,noreferrer'){
+  if(!nucleoUserGestureRecent()){
+    console.warn('[NÚCLEO] abertura de nova janela bloqueada por não ter sido iniciada pelo usuário:',url);
+    return null;
+  }
+  return window.open(url,target,features);
+}
+
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -4837,37 +5187,48 @@ function portalJsonp(params,timeoutMs=15000){
 function portalPostForm(params){
   const base=portalApiBase();
   if(!base)return false;
-  try{
-    const frameName='portalBackendFrame_'+Date.now()+'_'+Math.floor(Math.random()*9999);
-    const iframe=document.createElement('iframe');
-    iframe.name=frameName;
-    iframe.style.display='none';
-    document.body.appendChild(iframe);
 
-    const form=document.createElement('form');
-    form.method='POST';
-    form.action=base;
-    form.target=frameName;
-    form.style.display='none';
+  try{
+    const body=new URLSearchParams();
 
     Object.entries(params||{}).forEach(([k,v])=>{
-      const input=document.createElement('input');
-      input.type='hidden';
-      input.name=k;
-      input.value=typeof v==='string'?v:JSON.stringify(v);
-      form.appendChild(input);
+      body.set(
+        k,
+        typeof v==='string' ? v : JSON.stringify(v)
+      );
     });
 
-    document.body.appendChild(form);
-    form.submit();
-    // Fotos de RNC podem tornar o POST grande. Não remova o iframe enquanto o upload ainda pode estar em andamento.
-    setTimeout(()=>{try{form.remove();iframe.remove()}catch(e){}},120000);
+    // IMPORTANTE:
+    // A versão antiga enviava POST criando <form> + <iframe> oculto.
+    // Em alguns navegadores esse target acabava virando janelas/abas
+    // about:blank em sequência. Não usamos mais navegação para salvar.
+    //
+    // "no-cors" permite enviar o POST ao Apps Script sem abrir página.
+    // A confirmação continua sendo feita pelas rotas JSONP/status já
+    // existentes, portanto não dependemos do corpo da resposta deste fetch.
+    fetch(base,{
+      method:'POST',
+      mode:'no-cors',
+      redirect:'follow',
+      cache:'no-store',
+      credentials:'omit',
+      headers:{
+        'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body:body.toString()
+    }).catch(err=>{
+      console.warn('[NÚCLEO] POST em segundo plano não confirmado pelo navegador',err);
+      try{queueOfflineOperation({kind:'save',params:{...(params||{})}})}catch(e){}
+    });
+
     return true;
+
   }catch(e){
     console.error('Falha ao enviar dados para base central.',e);
     return false;
   }
 }
+
 function portalBackendSave(collection,id,data){
   if(!portalBackendEnabled())return false;
   const params={acao:'portal_save',colecao:collection,id:String(id||''),dados:JSON.stringify(data||{}),ator:getSession()?.name||'Sistema'};
@@ -5616,12 +5977,12 @@ function startNucleoFullSafetySync(){
         console.warn('[NÚCLEO SYNC GLOBAL] sincronização de segurança falhou',e)
       );
     }
-  },15000);
+  },60000);
 }
 
 function startNucleoGlobalSync(){
   try{clearInterval(__nucleoGlobalSyncTimer)}catch(e){}
-  __nucleoGlobalSyncTimer=setInterval(()=>syncNucleoGlobalRevision(false),3000);
+  __nucleoGlobalSyncTimer=setInterval(()=>syncNucleoGlobalRevision(false),5000);
 }
 
 function scheduleBackendSync(){
@@ -7561,7 +7922,7 @@ function openExternalRoRegistrationForm(){
     }));
   }catch(e){}
 
-  window.open(
+  nucleoOpenUserWindow(
     'https://docs.google.com/forms/d/e/1FAIpQLScUUEmDzeajsPNzIv6yQVdQJSb9zV1wYG9d7nx4dhmWooaEPw/viewform?usp=dialog',
     '_blank',
     'noopener,noreferrer'
@@ -7606,7 +7967,7 @@ function openRoRegistrationForm(){
     }));
   }catch(e){}
 
-  window.open('https://docs.google.com/forms/d/1LSG3TpZAYmevKX77O0uVQM8BCTw1JCd-DB9fUJjTrBU/viewform','_blank','noopener,noreferrer');
+  nucleoOpenUserWindow('https://docs.google.com/forms/d/1LSG3TpZAYmevKX77O0uVQM8BCTw1JCd-DB9fUJjTrBU/viewform','_blank','noopener,noreferrer');
 }
 
 function logoutUser(){
@@ -8751,7 +9112,7 @@ function openExternalRoPdf(url){
   const frame=document.getElementById('pdfPreviewFrame');
   const head=modal?.querySelector('.pdf-preview-head');
   if(!modal || !frame || !head){
-    window.open(url,'_blank','noopener');
+    nucleoOpenUserWindow(url,'_blank','noopener');
     return;
   }
 
@@ -8831,7 +9192,7 @@ function openRoReportHtml(id){
 
   const blob=new Blob([page],{type:'text/html;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const w=window.open(url,'_blank');
+  const w=nucleoOpenUserWindow(url,'_blank');
   if(!w){
     const a=document.createElement('a');
     a.href=url;
@@ -9100,7 +9461,7 @@ function downloadCompleteRoPdf(id){
         'O PDF não retornou automaticamente para o sistema.\n\n'+
         'Deseja abrir a geração direta do PDF?'
       );
-      if(ok)window.open(fallback,'_blank','noopener,noreferrer');
+      if(ok)nucleoOpenUserWindow(fallback,'_blank','noopener,noreferrer');
     }
   },60000);
 }
@@ -9717,7 +10078,7 @@ function renderSacPdfArchive(){
       </div>
       <div style="margin-top:10px"><b>${escapeHtml(f.fileName||'PDF SAC')}</b></div>
       <div class="small" style="margin-top:5px">${escapeHtml(formatDateTimeBR(f.createdAt)||f.createdAt||'—')} · ${escapeHtml(f.createdBy||'—')}</div>
-      <button class="btn secondary" style="margin-top:12px" type="button" onclick="window.open('https://drive.google.com/file/d/${escapeHtml(f.fileId)}/view','_blank')">Abrir PDF</button>
+      <button class="btn secondary" style="margin-top:12px" type="button" onclick="nucleoOpenUserWindow('https://drive.google.com/file/d/${escapeHtml(f.fileId)}/view','_blank')">Abrir PDF</button>
     </div>`).join('')}
   </div>`:'<div class="card" style="padding:26px"><b>Nenhum PDF de SAC armazenado.</b><div class="small" style="margin-top:6px">Os PDFs gerados na finalização do SAC aparecerão aqui automaticamente.</div></div>';
 }
@@ -10391,7 +10752,7 @@ async function finalizeAndSendSac(id){
 function openSacPdf(id){
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r?.pdfFileId){alert('Este SAC ainda não possui PDF gerado.');return}
-  window.open('https://drive.google.com/file/d/'+encodeURIComponent(r.pdfFileId)+'/view','_blank','noopener,noreferrer');
+  nucleoOpenUserWindow('https://drive.google.com/file/d/'+encodeURIComponent(r.pdfFileId)+'/view','_blank','noopener,noreferrer');
 }
 
 
@@ -10594,7 +10955,7 @@ function closeSacPreview(){
 function printSacPreview(){
   const content=document.getElementById('sacPreviewContent');
   if(!content)return;
-  const w=window.open('','_blank');
+  const w=nucleoOpenUserWindow('','_blank');
   if(!w){alert('O navegador bloqueou a janela de impressão.');return}
   w.document.open();
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ficha SAC</title>
@@ -15862,7 +16223,7 @@ async function bootstrapRoData(){
 async function syncImportedRosFromConfiguredSources(options={}){
   const current=getSavedIntegrationSettings();
 
-  // REGRA FIXA: sincronização compartilhada nunca depende do filtro local do aparelho.
+  // REGRA FIXA: a base sincronizada é a mesma em qualquer dispositivo.
   const sharedSettings={
     ...current,
     roSyncPeriod:'all',
@@ -15875,23 +16236,35 @@ async function syncImportedRosFromConfiguredSources(options={}){
   }
 
   let data=null;
+  let fetchError=null;
 
   try{
-    const url=appendIntegrationParams(sharedSettings.apiUrl,sharedSettings,true);
-    const response=await fetch(url,{
-      method:'GET',
-      redirect:'follow',
-      cache:'no-store'
-    });
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),8000);
 
-    if(!response.ok)throw new Error('HTTP '+response.status);
-    data=await response.json();
+    try{
+      const url=appendIntegrationParams(sharedSettings.apiUrl,sharedSettings,true);
+      const response=await fetch(url,{
+        method:'GET',
+        redirect:'follow',
+        cache:'no-store',
+        signal:controller.signal
+      });
 
-  }catch(fetchError){
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      data=await response.json();
+    }finally{
+      clearTimeout(timer);
+    }
+
+  }catch(err){
+    fetchError=err;
+
+    // O Apps Script costuma funcionar melhor por JSONP em navegador móvel.
     data=await jsonpRequest(
       sharedSettings.apiUrl,
       sharedSettings.apiKey,
-      {} // sem período = todas as R.O.s
+      {}
     );
   }
 
@@ -15900,7 +16273,10 @@ async function syncImportedRosFromConfiguredSources(options={}){
   }
 
   if(!Array.isArray(data?.dados)){
-    throw new Error('A base central não devolveu a lista de R.O.s.');
+    throw new Error(
+      'A base central não devolveu a lista de R.O.s.'+
+      (fetchError?' Tentativa direta: '+String(fetchError?.message||fetchError):'')
+    );
   }
 
   applyImportedRos(data.dados,data);
@@ -16032,7 +16408,7 @@ function openIntegrationApi(){
     }
     return;
   }
-  window.open(appendIntegrationParams(s.apiUrl,s,false),'_blank','noopener,noreferrer');
+  nucleoOpenUserWindow(appendIntegrationParams(s.apiUrl,s,false),'_blank','noopener,noreferrer');
 }
 
 function jsonpRequest(baseUrl, apiKey, extraParams){
@@ -20441,69 +20817,56 @@ async function syncNow(){
 try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
 ensurePreviewSession();
 render();initLogin();refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
+async function nucleoBackgroundStartupSync(){
+  if(!getSession()?.authToken || !navigator.onLine)return;
+
+  try{
+    await syncImportedRosFromConfiguredSources({silent:true,force:true});
+
+    try{
+      localStorage.setItem('portal-sgq-ro-date-cache-version','ro-date-source-v4');
+    }catch(e){}
+
+    try{render()}catch(e){}
+    try{renderCurrentOverview()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{renderTriage()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+  }catch(e){
+    // O portal continua aberto com o cache/localStorage mesmo sem conexão.
+    console.warn('[NÚCLEO] sincronização inicial em segundo plano não concluída',e);
+  }
+
+  try{
+    await syncPortalBackend(false,{foreground:false});
+  }catch(e){
+    console.warn('[NÚCLEO] base central indisponível na abertura',e);
+  }
+}
+
 setTimeout(async()=>{
-  await showNucleoLoading('Recuperando R.O.s salvas...','Carregando NÚCLEO');
+  // A abertura depende apenas dos dados já salvos no aparelho.
+  // A rede nunca pode impedir a interface de abrir.
+  await showNucleoLoading('Recuperando dados salvos...','Abrindo NÚCLEO');
+
   try{
     await bootstrapRoData();
 
-    updateNucleoLoading('Conferindo bases Interna e Externa...');
+    try{render()}catch(e){}
+    try{renderCurrentOverview()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshNotificationBell()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
 
-    // Se o IndexedDB/cache não tiver as duas origens, completa pela API.
-    const hasInterna=ros.some(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna');
-    const hasExterna=ros.some(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa');
-    const startupSyncSettings=getSavedIntegrationSettings();
-    const startupPeriodFiltered=String(startupSyncSettings.roSyncPeriod||'all')!=='all';
-    if(!startupPeriodFiltered && (!hasInterna || !hasExterna)){
-      importedRoCacheNeedsRefresh=true;
-      updateNucleoLoading('Completando dados pela planilha...');
-    }
-
-    const RO_DATE_CACHE_VERSION='ro-date-source-v4';
-    const needDateRepair=localStorage.getItem('portal-sgq-ro-date-cache-version')!==RO_DATE_CACHE_VERSION;
-
-    if(needDateRepair){
-      importedRoCacheNeedsRefresh=true;
-      updateNucleoLoading('Atualizando datas diretamente da planilha de R.O.s...');
-    }
-
-    const repaired=await refreshLegacyRoCacheFromApi(needDateRepair);
-
-    // O cache local nunca decide o estado final.
-    try{
-      await syncImportedRosFromConfiguredSources({silent:true,force:true});
-    }catch(sharedSyncErr){
-      console.warn('[NÚCLEO] falha na sincronização compartilhada inicial de R.O.s',sharedSyncErr);
-    }
-
-    if(needDateRepair && repaired){
-      localStorage.setItem('portal-sgq-ro-date-cache-version',RO_DATE_CACHE_VERSION);
-      // Substitui também as datas antigas guardadas nos cards de SAC.
-      try{saveExternalRoControlsLocal(getExternalRoControls())}catch(e){}
-    }
-
-    console.info('NÚCLEO R.O.s em memória',{
-      total:ros.length,
-      interna:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna').length,
-      externa:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa').length
-    });
-
-    if(repaired){
-      try{refreshRoSummary()}catch(e){}
-      try{renderCurrentOverview()}catch(e){}
-      const triageView=document.getElementById('triageView');
-      if(triageView && !triageView.classList.contains('hidden')){
-        try{renderTriage()}catch(e){}
-      }
-      const indicatorView=document.getElementById('sgqIndicatorsView');
-      if(indicatorView && !indicatorView.classList.contains('hidden')){
-        try{renderSgqIndicators()}catch(e){}
-      }
-    }
   }catch(e){
-    console.warn('Falha ao completar carga de R.O.s.',e);
+    console.warn('[NÚCLEO] falha ao carregar cache local',e);
   }finally{
     hideNucleoLoading(true);
   }
+
+  // Só depois que a tela já abriu é que a rede entra em ação.
+  setTimeout(()=>nucleoBackgroundStartupSync(),250);
+
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
 try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
@@ -20713,7 +21076,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v10</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v12</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
