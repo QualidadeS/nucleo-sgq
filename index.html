@@ -4547,8 +4547,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v17';
-window.__NUCLEO_APP_BUILD='2026-09-25-v17';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v18';
+window.__NUCLEO_APP_BUILD='2026-09-25-v18';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -16417,6 +16417,16 @@ async function syncImportedRosFromConfiguredSources(options={}){
 
   applyImportedRos(data.dados,data);
   importedRoCacheNeedsRefresh=false;
+
+  try{
+    window.__NUCLEO_LAST_RO_SYNC={
+      total:Array.isArray(data.dados)?data.dados.length:0,
+      interna:Number(data.quantidadeInterna||0),
+      externa:Number(data.quantidadeExterna||0),
+      at:new Date().toISOString()
+    };
+  }catch(e){}
+
   return true;
 }
 
@@ -21244,7 +21254,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v17</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 25/09 · v18</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
