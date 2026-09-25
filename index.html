@@ -4541,8 +4541,8 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v15';
-window.__NUCLEO_APP_BUILD='2026-09-25-v15';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-25-v16';
+window.__NUCLEO_APP_BUILD='2026-09-25-v16';
 
 let __nucleoLastUserGestureAt=0;
 
@@ -5478,7 +5478,19 @@ function applyPortalBackendSnapshot(snapshot){
 
   const data=snapshot.dados||{};
   // A base central vence qualquer cache antigo deste navegador.
+  // As R.O.s também vêm no snapshot central; assim um computador novo
+  // não depende do IndexedDB/localStorage de outro computador.
   nucleoApplySharedState(data.sharedState);
+  if(Array.isArray(data.ros) && data.ros.length){
+    try{ applyImportedRos(data.ros,data.rosMeta||{}); }
+    catch(e){ console.warn('[NÚCLEO] não foi possível aplicar as R.O.s centrais',e); }
+  }else if(data.rosMeta && Number(data.rosMeta.quantidade||0)===0){
+    try{
+      ros.splice(0,ros.length);
+      selected=null;
+      saveImportedRosByOrigin([],[]);
+    }catch(e){}
+  }
   if(data.config && typeof data.config==='object'){
     const localIntegration=getSavedIntegrationSettings();
     const mergedConfig={
@@ -16279,6 +16291,8 @@ function restoreImportedRos(){
 
 
 async function bootstrapRoData(){
+  // O cache é apenas um arranque rápido. A fonte oficial é recarregada
+  // pelo snapshot central após o login, inclusive em computadores novos.
   // Primeiro tenta o cache grande e persistente.
   const restoredDurable=await restoreImportedRosDurable();
   if(restoredDurable){
@@ -16301,14 +16315,17 @@ async function syncImportedRosFromConfiguredSources(options={}){
   const current=getSavedIntegrationSettings();
 
   // REGRA FIXA: a base sincronizada é a mesma em qualquer dispositivo.
+  // A URL da fonte oficial não pode depender do cadastro local de cada
+  // navegador. Todas as máquinas devem consultar o mesmo Web App publicado.
   const sharedSettings={
     ...current,
+    apiUrl:NUCLEO_DEFAULT_API_URL,
     roSyncPeriod:'all',
     roSyncDateFrom:'',
     roSyncDateTo:''
   };
 
-  if(!sharedSettings?.apiUrl){
+  if(!sharedSettings.apiUrl){
     throw new Error('URL central das R.O.s não configurada.');
   }
 
