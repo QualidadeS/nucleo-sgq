@@ -2278,14 +2278,18 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 #nucleoLoadingOverlay{
   position:fixed;
   inset:0;
-  z-index:99999;
+  z-index:2147483000 !important;
   display:none;
   align-items:center;
   justify-content:center;
   background:rgba(255,255,255,.88);
   backdrop-filter:blur(2px);
 }
-#nucleoLoadingOverlay.show{display:flex}
+#nucleoLoadingOverlay.show{
+  display:flex !important;
+  z-index:2147483000 !important;
+  pointer-events:auto !important;
+}
 #nucleoLoadingCard{
   width:min(420px,calc(100vw - 40px));
   background:#fff;
@@ -4197,7 +4201,7 @@ Cancelada</textarea></label>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
 <script>
-window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v3';
+window.__NUCLEO_TRIAGE_BUILD='2026-09-24-v5';
 console.info('NÚCLEO TRIAGEM BUILD',window.__NUCLEO_TRIAGE_BUILD);
 
 const ACCESS_KEY='ro-pdca-access-v2';
@@ -5201,12 +5205,12 @@ function applyPortalBackendSnapshot(snapshot){
     localStorage.setItem(PDCA_DRAFTS_KEY,JSON.stringify(map));
   }
   if(Array.isArray(data.savedFilters))localStorage.setItem(SAVED_FILTERS_KEY,JSON.stringify(data.savedFilters));
-  if(Array.isArray(data.pdcaSent)&&data.pdcaSent.length){localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent));try{localStorage.setItem(SENT_KEY,JSON.stringify(data.pdcaSent))}catch(e){}}
+  if(Array.isArray(data.pdcaSent)){localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent));try{localStorage.setItem(SENT_KEY,JSON.stringify(data.pdcaSent))}catch(e){}}
   if(Array.isArray(data.favorites)){
     const mine=data.favorites.find(x=>String(x.userKey||x.id||'')===notificationUserKey());
     if(mine&&Array.isArray(mine.items))localStorage.setItem(FAVORITES_KEY,JSON.stringify(mine.items));
   }
-  if(Array.isArray(data.archives)&&data.archives.length&&Array.isArray(data.archives[0].items))localStorage.setItem(ARCHIVED_RO_KEY,JSON.stringify(data.archives[0].items));
+  if(Array.isArray(data.archives))localStorage.setItem(ARCHIVED_RO_KEY,JSON.stringify(Array.isArray(data.archives[0]?.items)?data.archives[0].items:[]));
   if(Array.isArray(data.announcementAcks)){
     const ackMap=getAnnouncementAcks();
     data.announcementAcks.forEach(x=>{
@@ -11699,7 +11703,10 @@ async function saveTriageRecord(){
         ]);
       }catch(syncErr){
         console.warn('[NUCLEO TRIAGEM] decisão salva localmente, mas planilha não confirmou',syncErr);
-        syncWarnings.push('A planilha não confirmou a atualização agora.');
+        syncWarnings.push(
+          'A planilha não confirmou a atualização: '+
+          String(syncErr?.message||syncErr||'erro não informado')
+        );
       }
 
       portalBackendSave('triage',record.roKey,record);
@@ -12357,14 +12364,14 @@ function nucleoAutoSyncIfDue(force=false){
   try{
     if(!getSession()?.authToken||document.visibilityState==='hidden'||portalBackendSyncInProgress)return;
     const now=Date.now();
-    if(!force && now-__nucleoLastAutoSyncAttempt<300000)return;
+    if(!force && now-__nucleoLastAutoSyncAttempt<60000)return;
     __nucleoLastAutoSyncAttempt=now;
     syncPortalBackend(false);
   }catch(e){}
 }
 function startNucleoCentralRefresh(){
   try{clearInterval(__nucleoCentralRefreshTimer)}catch(e){}
-  __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),300000);
+  __nucleoCentralRefreshTimer=setInterval(()=>nucleoAutoSyncIfDue(false),60000);
 }
 setTimeout(retryPendingRncDeletes,1800);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoAutoSyncIfDue(false)});
@@ -20342,7 +20349,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <div class="triage-modal-foot">
-      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v3</span>
+      <span class="small" style="margin-right:auto;opacity:.55">Triagem 24/09 · v5</span>
       <button class="btn secondary" type="button" onclick="closeTriageModal()">Cancelar</button>
       <button class="btn primary" type="button" onclick="saveTriageRecord()">Salvar triagem</button>
     </div>
