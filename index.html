@@ -4142,7 +4142,7 @@ Cancelada</textarea></label>
       <h3>Área protegida</h3>
       <p class="help">As configurações de integração alteram a conexão do NÚCLEO com as planilhas. Informe a senha administrativa para visualizar ou modificar esta área.</p>
       <div class="settings-grid">
-        <label><div class="label">Senha da integração</div><input id="integrationAdminPassword" type="password" autocomplete="off" placeholder="Digite a senha" onkeydown="if(event.key===\'Enter\'){event.preventDefault();unlockIntegrationSettings()}"></label>
+        <label><div class="label">Senha da integração</div><input id="integrationAdminPassword" type="password" autocomplete="off" placeholder="Digite a senha" onkeydown="if(event.key==='Enter'){event.preventDefault();unlockIntegrationSettings()}"></label>
       </div>
       <div class="actions">
         <button class="btn primary" type="button" onclick="unlockIntegrationSettings()">Desbloquear integração</button>
@@ -4789,7 +4789,7 @@ function portalBase64EncodeJson(obj){
   const json=JSON.stringify(obj||{});
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function portalJsonp(params,timeoutMs=15000){
+function portalJsonp(params,timeoutMs=60000){
   return new Promise((resolve,reject)=>{
     const base=portalApiBase();
     if(!base){reject(new Error('URL do Apps Script não configurada.'));return;}
@@ -6783,7 +6783,7 @@ async function saveSectorConfiguration(){
 
 async function syncPublicPortalConfig(){
   try{
-    const res=await portalJsonp({acao:'portal_public_config'},12000);
+    const res=await portalJsonp({acao:'portal_public_config'},60000);
     if(!res?.sucesso||!res.config)return false;
     const local=getAdminConfig();
     const merged={...local,...res.config};
@@ -6876,7 +6876,7 @@ async function loginUser(){
   try{
     const remote=await portalJsonp({
       acao:'portal_login_jsonp', nome:name, unidade:unit, setor:sector, senha:password
-    },20000);
+    },60000);
     if(!remote || remote.sucesso!==true){
       if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
       return;
@@ -15726,7 +15726,7 @@ async function testConnection(){
   }
   if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='Testando a resposta da API...';}
   try{
-    const data=await portalJsonp({acao:'portal_public_config'},20000);
+    const data=await portalJsonp({acao:'portal_public_config'},60000);
     if(!data?.sucesso)throw new Error(data?.erro||'A implantação não confirmou a conexão.');
     if(result){result.className='statusline okline';result.classList.remove('hidden');result.textContent='API conectada. Para buscar as R.O.s, clique em Sincronizar.';}
   }catch(err){
