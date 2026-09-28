@@ -15584,6 +15584,36 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
+async function loadOfficialRosPaged(settings,onProgress){
+  const s=settings||getSavedIntegrationSettings();
+  const period=roSyncPeriodParams(s);
+  const all=[];
+  let total=null,internas=null,externas=null,meta=null;
+  const pageSize=40;
+  for(let offset=0;offset===0||offset<total;offset+=pageSize){
+    if(offset>20000)throw new Error('A base ultrapassou o limite de leitura por páginas.');
+    const page=await portalJsonp({
+      acao:'portal_ro_page',...period,offset,limite:pageSize
+    },60000);
+    if(page?.sucesso===false)throw new Error(page.erro||'A planilha recusou a leitura.');
+    if(!page?.paginado||!Array.isArray(page.dados))
+      throw new Error('A implantação do Apps Script ainda não contém a leitura por páginas. Publique o script atualizado na mesma URL /exec.');
+    const expected=Number(page.quantidade);
+    if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset)
+      throw new Error('A planilha devolveu uma página inválida.');
+    if(total===null){total=expected;internas=Number(page.quantidadeInterna);externas=Number(page.quantidadeExterna);meta=page}
+    if(total!==expected||internas!==Number(page.quantidadeInterna)||externas!==Number(page.quantidadeExterna))
+      throw new Error('A planilha mudou durante a leitura. Execute Sincronizar novamente.');
+    if(page.dados.length>pageSize||(!page.dados.length && offset<total))
+      throw new Error('A planilha devolveu uma página incompleta.');
+    all.push(...page.dados);
+    if(onProgress)onProgress(Math.min(all.length,total),total);
+    // Deixa a interface responder entre as páginas.
+    await new Promise(resolve=>setTimeout(resolve,0));
+  }
+  if(all.length!==total)throw new Error('A leitura terminou com registros faltando. Tente sincronizar novamente.');
+  return {...meta,quantidade:total,quantidadeInterna:internas,quantidadeExterna:externas,dados:all};
+}
 async function refreshLegacyRoCacheFromApi(force=false){
   if(nucleoRoCentralRefreshPromise)return nucleoRoCentralRefreshPromise;
   nucleoRoCentralRefreshPromise=refreshRosFromOfficialSheets(force);
@@ -15599,19 +15629,10 @@ async function refreshRosFromOfficialSheets(force=false){
   if(!s?.apiUrl)return false;
 
   try{
-    let data;
-    try{
-      const url=appendIntegrationParams(s.apiUrl,s,true);
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),20000);
-      try{
-        const response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store',signal:controller.signal});
-        if(!response.ok)throw new Error('HTTP '+response.status);
-        data=await response.json();
-      }finally{clearTimeout(timeout)}
-    }catch(fetchError){
-      data=await jsonpRequest(s.apiUrl,s.apiKey,roSyncPeriodParams(s),90000);
-    }
+    const data=await loadOfficialRosPaged(s,(loaded,total)=>{
+      const status=document.getElementById('syncMsg');
+      if(status)status.textContent='Lendo R.O.s e SACs: '+loaded+' de '+total+'...';
+    });
 
     if(data?.sucesso===false)throw new Error(data.erro||'Falha ao carregar R.O.s.');
     if(!Array.isArray(data?.dados))throw new Error('Resposta sem lista de R.O.s.');
@@ -19977,20 +19998,17 @@ async function syncNow(){
   syncMsg.className='statusline';
 
   try{
-    let data;
-    try{
-      const url=appendIntegrationParams(s.apiUrl,s,true);
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),20000);
-      let response;
-      try{
-        response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store',signal:controller.signal});
-        if(!response.ok)throw new Error('HTTP '+response.status);
-        data=await response.json();
-      }finally{clearTimeout(timeout);}
-    }catch(e){
-      data=await jsonpRequest(s.apiUrl,s.apiKey,roSyncPeriodParams(s),90000);
+    if(nucleoRoCentralRefreshPromise){
+      const ok=await nucleoRoCentralRefreshPromise;
+      if(!ok)throw new Error(document.getElementById('syncMsg')?.textContent||'A leitura central falhou.');
+      syncMsg.textContent='R.O.s e SACs atualizados pela base central.';
+      syncMsg.className='statusline okline';
+      return;
     }
+    const data=await loadOfficialRosPaged(s,(loaded,total)=>{
+      updateNucleoLoading('Buscando R.O.s e SACs: '+loaded+' de '+total+'...');
+      syncMsg.textContent='Lendo '+loaded+' de '+total+'...';
+    });
 
     if(data?.sucesso===false) throw new Error(data.erro||'Falha informada pelo Apps Script.');
     if(!Array.isArray(data?.dados)) throw new Error('Resposta sem a lista "dados".');
