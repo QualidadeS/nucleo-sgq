@@ -2658,7 +2658,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
       <span id="networkStatePill" class="offline-pill">● Online</span>
       <span class="save-state">Salvo</span>
       <button class="top-btn" onclick="syncNow()">↻ Sincronizar</button>
-      <span id="syncMsg" role="status" title="Última consulta às planilhas centrais" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"></span>
+      <span id="syncMsg" role="status" title="Clique para ler a mensagem completa" onclick="if(this.textContent)alert(this.textContent)" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;cursor:pointer"></span>
       <button class="top-btn primary-top" onclick="alert('Rascunho salvo nesta demonstração.')">Salvar</button>
     </div>
   </header>
@@ -15040,8 +15040,14 @@ function normalizeImportedRo(raw,index){
 
 function notifyNewImportedRos(previousNumbers,newRecords){
   if(!isAdmin())return;
+  // A primeira leitura de uma máquina nova não é um lote de novas R.O.s.
+  // Evita centenas de notificações, e-mails e POSTs ocultos simultâneos.
+  if(!Array.isArray(previousNumbers)||previousNumbers.length===0)return;
   const before=new Set(previousNumbers||[]);
   const fresh=(newRecords||[]).filter(r=>!before.has(String(r.numero||'')));
+  // Uma importação grande indica troca de período/base ou recuperação de cache.
+  // Notificações individuais só fazem sentido para poucas entradas incrementais.
+  if(fresh.length>5){console.info('NÚCLEO: carga em lote sem disparar notificações individuais:',fresh.length);return}
   fresh.forEach(r=>createNotification({
     type:'ro',
     audience:'admin',
