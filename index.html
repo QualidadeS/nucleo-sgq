@@ -2658,6 +2658,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
       <span id="networkStatePill" class="offline-pill">● Online</span>
       <span class="save-state">Salvo</span>
       <button class="top-btn" onclick="syncNow()">↻ Sincronizar</button>
+      <span id="syncMsg" role="status" title="Última consulta às planilhas centrais" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"></span>
       <button class="top-btn primary-top" onclick="alert('Rascunho salvo nesta demonstração.')">Salvar</button>
     </div>
   </header>
@@ -4165,7 +4166,7 @@ Cancelada</textarea></label>
       <div class="actions">
         <button class="btn secondary" type="button" onclick="openIntegrationApi()">Abrir API</button>
         <button class="btn secondary" type="button" onclick="testConnection()">Testar conexão</button>
-        <button class="btn primary" type="button" onclick="saveIntegrationSettings()">Salvar integração</button>
+        <button class="btn primary" type="button" onclick="saveIntegrationSettingsConfirmed()">Salvar integração</button>
       </div>
       <div id="testResult" class="statusline hidden"></div>
 
@@ -5112,10 +5113,10 @@ function applyPortalBackendSnapshot(snapshot){
       ...data.config,
       apiUrl:localIntegration.apiUrl||data.config.apiUrl||'',
       apiKey:localIntegration.apiKey||data.config.apiKey||'',
-      autoSync:localIntegration.autoSync||data.config.autoSync||'0',
-      roSyncPeriod:localIntegration.roSyncPeriod||data.config.roSyncPeriod||'all',
-      roSyncDateFrom:localIntegration.roSyncDateFrom||data.config.roSyncDateFrom||'',
-      roSyncDateTo:localIntegration.roSyncDateTo||data.config.roSyncDateTo||''
+      autoSync:data.config.autoSync??localIntegration.autoSync??'0',
+      roSyncPeriod:data.config.roSyncPeriod??localIntegration.roSyncPeriod??'all',
+      roSyncDateFrom:data.config.roSyncDateFrom??localIntegration.roSyncDateFrom??'',
+      roSyncDateTo:data.config.roSyncDateTo??localIntegration.roSyncDateTo??''
     };
     localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(mergedConfig));
 
@@ -6924,6 +6925,7 @@ async function loginUser(){
     setTimeout(async()=>{
       try{
         await syncPortalBackend(false);
+        await refreshLegacyRoCacheFromApi(true);
         refreshSectorSelectors();
         try{populateTriageSectors()}catch(e){}
         try{render()}catch(e){}
@@ -14521,6 +14523,28 @@ async function adminDeleteTestDataForRo(){
 }
 
 
+async function saveIntegrationSettingsConfirmed(){
+  if(!isAdmin()){alert('Configuração indisponível.');return false}
+  const sync=saveIntegrationSettings(true);
+  if(!sync)return false;
+  const st=document.getElementById('configSavedState');
+  if(st){st.classList.remove('hidden');st.textContent='Confirmando integração na base central...'}
+  try{
+    const res=await portalJsonp({
+      acao:'portal_save_config',
+      dados:JSON.stringify(getAdminConfig()),
+      ator:getSession()?.name||'SGQ'
+    },60000);
+    if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
+    if(st)st.textContent='Integração salva na base central.';
+    alert('Integração atualizada para todos os usuários.');
+    return true;
+  }catch(e){
+    if(st)st.textContent='Integração não confirmada na base central.';
+    alert('Não foi possível salvar a integração para todos: '+(e?.message||e));
+    return false;
+  }
+}
 function saveIntegrationSettings(silent=false){
   if(!requireIntegrationUnlock())return;
 
@@ -15405,7 +15429,9 @@ function applyImportedRos(records,meta){
   }
 
   const incoming=prepared.map(normalizeImportedRo).filter(r=>r.numero);
-  if(!incoming.length) throw new Error('Nenhuma R.O. válida foi encontrada.');
+  // Uma resposta oficial vazia é válida: não mantenha registros antigos por causa dela.
+  if(!incoming.length && !(meta && Number(meta.quantidadeInterna)===0 && Number(meta.quantidadeExterna)===0))
+    throw new Error('Nenhuma R.O. válida foi encontrada.');
 
   const hasOriginMarkers=prepared.some(x=>String(x?.__origemBase||'').trim());
   let normalized=incoming;
@@ -15430,8 +15456,8 @@ function applyImportedRos(records,meta){
     // Mesmo que uma resposta informe 0 registros de uma origem, preservamos o que
     // já estava memorizado até recebermos registros concretos dessa origem.
     const filteredPeriod=Boolean(meta?.filtroPeriodo?.ativo);
-    let internas=filteredPeriod ? incomingInterna : (incomingInterna.length ? incomingInterna : prevInternas);
-    let externas=filteredPeriod ? incomingExterna : (incomingExterna.length ? incomingExterna : prevExternas);
+    let internas=(filteredPeriod||authoritativeInterna) ? incomingInterna : (incomingInterna.length ? incomingInterna : prevInternas);
+    let externas=(filteredPeriod||authoritativeExterna) ? incomingExterna : (incomingExterna.length ? incomingExterna : prevExternas);
 
     // Sem filtro, preserva a outra origem em sincronizações parciais.
     // Com filtro de período, zero registros é um resultado válido e deve permanecer zero.
@@ -15551,7 +15577,14 @@ async function bootstrapRoData(){
   return restoredLegacy;
 }
 
+let nucleoRoCentralRefreshPromise=null;
 async function refreshLegacyRoCacheFromApi(force=false){
+  if(nucleoRoCentralRefreshPromise)return nucleoRoCentralRefreshPromise;
+  nucleoRoCentralRefreshPromise=refreshRosFromOfficialSheets(force);
+  try{return await nucleoRoCentralRefreshPromise}
+  finally{nucleoRoCentralRefreshPromise=null}
+}
+async function refreshRosFromOfficialSheets(force=false){
   const splitNow=readImportedRosByOrigin();
   const s=getSavedIntegrationSettings();
   const periodFiltered=String(s.roSyncPeriod||'all')!=='all';
@@ -15563,11 +15596,15 @@ async function refreshLegacyRoCacheFromApi(force=false){
     let data;
     try{
       const url=appendIntegrationParams(s.apiUrl,s,true);
-      const response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store'});
-      if(!response.ok)throw new Error('HTTP '+response.status);
-      data=await response.json();
+      const controller=new AbortController();
+      const timeout=setTimeout(()=>controller.abort(),20000);
+      try{
+        const response=await fetch(url,{method:'GET',redirect:'follow',cache:'no-store',signal:controller.signal});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        data=await response.json();
+      }finally{clearTimeout(timeout)}
     }catch(fetchError){
-      data=await jsonpRequest(s.apiUrl,s.apiKey,roSyncPeriodParams(s));
+      data=await jsonpRequest(s.apiUrl,s.apiKey,roSyncPeriodParams(s),90000);
     }
 
     if(data?.sucesso===false)throw new Error(data.erro||'Falha ao carregar R.O.s.');
@@ -15575,9 +15612,13 @@ async function refreshLegacyRoCacheFromApi(force=false){
 
     applyImportedRos(data.dados,data);
     importedRoCacheNeedsRefresh=false;
+    const syncMsg=document.getElementById('syncMsg');
+    if(syncMsg){syncMsg.textContent='R.O.s e SACs atualizados pelas planilhas centrais às '+new Date().toLocaleTimeString('pt-BR')+'.';syncMsg.className='statusline okline'}
     return true;
   }catch(e){
-    console.warn('Não foi possível atualizar o cache antigo de R.O.s.',e);
+    console.warn('Não foi possível consultar R.O.s e SACs nas planilhas centrais.',e);
+    const syncMsg=document.getElementById('syncMsg');
+    if(syncMsg){syncMsg.textContent='R.O.s e SACs não conferidos com a base central: '+(e?.message||e)+'. Os números na tela podem estar desatualizados.';syncMsg.className='statusline'}
     return false;
   }
 }
@@ -19914,6 +19955,7 @@ async function syncNow(){
   // Links, chave, regras e período continuam protegidos na Administração.
   if(syncNow.inProgress)return;
   syncNow.inProgress=true;
+  const syncMsg=document.getElementById('syncMsg');
   const s=getSavedIntegrationSettings();
   await showNucleoLoading('Buscando '+integrationPeriodLabel(s)+' nas abas Interna e Externa...','Sincronizando com a planilha');
 
@@ -20008,6 +20050,9 @@ setTimeout(async()=>{
       interna:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna').length,
       externa:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa').length
     });
+    // O cache acelera a abertura, mas a fonte oficial é a planilha central.
+    // Faça uma leitura real mesmo quando o cache já contém as duas origens.
+    if(getSession()?.authToken)void refreshLegacyRoCacheFromApi(true);
 
     if(repaired){
       try{refreshRoSummary()}catch(e){}
