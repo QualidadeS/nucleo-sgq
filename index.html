@@ -14674,6 +14674,7 @@ const IMPORTED_ROS_KEY='ro-pdca-imported-ros-v1';
 const IMPORTED_ROS_INTERNA_KEY='ro-pdca-imported-ros-interna-v1';
 const IMPORTED_ROS_EXTERNA_KEY='ro-pdca-imported-ros-externa-v1';
 const IMPORTED_RO_ORIGIN_REGISTRY_KEY='nucleo-ro-origin-registry-v1';
+let nucleoBulkRoOriginRegistry=null;
 const IMPORTED_RAW_KEY='ro-pdca-imported-raw-v1';
 const NUCLEO_RO_DB_NAME='nucleo-ro-cache-v1';
 const NUCLEO_RO_DB_STORE='cache';
@@ -14756,6 +14757,7 @@ function roOriginFromNumber(value,fallbackOrigin){
 
 
 function getRoOriginRegistry(){
+  if(nucleoBulkRoOriginRegistry)return nucleoBulkRoOriginRegistry;
   try{
     const obj=JSON.parse(localStorage.getItem(IMPORTED_RO_ORIGIN_REGISTRY_KEY)||'{}');
     return obj&&typeof obj==='object'?obj:{};
@@ -14763,8 +14765,14 @@ function getRoOriginRegistry(){
 }
 
 function saveRoOriginRegistry(registry){
+  if(nucleoBulkRoOriginRegistry){
+    nucleoBulkRoOriginRegistry=registry||{};
+    return true;
+  }
   try{
-    localStorage.setItem(IMPORTED_RO_ORIGIN_REGISTRY_KEY,JSON.stringify(registry||{}));
+    const serialized=JSON.stringify(registry||{});
+    if(localStorage.getItem(IMPORTED_RO_ORIGIN_REGISTRY_KEY)===serialized)return true;
+    localStorage.setItem(IMPORTED_RO_ORIGIN_REGISTRY_KEY,serialized);
     return true;
   }catch(e){
     console.warn('NÚCLEO: não foi possível salvar o mapa de origem das R.O.s.',e);
@@ -15434,7 +15442,17 @@ function applyImportedRos(records,meta){
     throw new Error('A API informou quantidades de Interna/Externa incompatíveis com a lista recebida.');
   }
 
-  const incoming=prepared.map(normalizeImportedRo).filter(r=>r.numero);
+  // Durante uma importação grande, rememberRoOrigin é chamado para cada linha.
+  // Acumula o mapa em memória e envia somente uma gravação central ao final.
+  nucleoBulkRoOriginRegistry=getRoOriginRegistry();
+  let incoming;
+  try{
+    incoming=prepared.map(normalizeImportedRo).filter(r=>r.numero);
+  }finally{
+    const registry=nucleoBulkRoOriginRegistry;
+    nucleoBulkRoOriginRegistry=null;
+    if(registry)saveRoOriginRegistry(registry);
+  }
   // Uma resposta oficial vazia é válida: não mantenha registros antigos por causa dela.
   if(!incoming.length && !(meta && Number(meta.quantidadeInterna)===0 && Number(meta.quantidadeExterna)===0))
     throw new Error('Nenhuma R.O. válida foi encontrada.');
