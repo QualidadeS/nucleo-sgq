@@ -15589,7 +15589,7 @@ async function loadOfficialRosPaged(settings,onProgress){
   const period=roSyncPeriodParams(s);
   const all=[];
   let total=null,internas=null,externas=null,meta=null;
-  const pageSize=40;
+  const pageSize=200;
   const started=Date.now();
   for(let offset=0;offset===0||offset<total;offset+=pageSize){
     if(Date.now()-started>240000)throw new Error('A leitura central ultrapassou 4 minutos. A carga foi interrompida sem substituir os dados exibidos.');
