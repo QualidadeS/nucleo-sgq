@@ -899,9 +899,11 @@ function nucleoApplySharedState(list){
 }
 
 function applyPortalBackendSnapshot(snapshot){
+  claimantIdentityCache=null;
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
+  if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
   nucleoApplySharedState(data.sharedState);
   if(data.config && typeof data.config==='object'){
@@ -2684,6 +2686,8 @@ async function loginUser(){
     const u=remote.user||remote.usuario||{};
     const rawRole=String(u.role||u.perfil||u.tipoAcesso||'operational').toLowerCase();
     const session={
+      personId:u.personId||'',
+      description:u.description||'',
       name:u.name||u.nome||name,
       email:u.email||u.e_mail||'',
       unit:u.unit||u.unidade||unit,
@@ -3275,6 +3279,7 @@ function getOperationalUsers(){
   return users;
 }
 function saveOperationalUsers(users){
+  claimantIdentityCache=null;
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
   if(portalBackendEnabled()){
     (users||[]).forEach(u=>portalBackendSave('users',u.email||u.name,u));
@@ -14537,18 +14542,30 @@ function roRegistrantName(ro){
   ])||'').trim();
 }
 
+function personNameKey(v){return normalizePersonName(String(v||'').replace(/\s*\([^()]*\)\s*$/,''));}
+function claimantRoKey(ro){return String(ro.numero||ro.id||ro.codigo||'').trim().toUpperCase();}
+let claimantIdentityCache=null;
+function claimantIdentityIndex(){
+  if(claimantIdentityCache)return claimantIdentityCache;
+  let users=[],bindings=[];try{users=JSON.parse(localStorage.getItem(USERS_KEY)||'[]');bindings=JSON.parse(localStorage.getItem('nucleo-claimant-bindings-v1')||'[]');}catch(_){}
+  users=users.filter(u=>String(u.approvalStatus||'approved')==='approved'&&!isDeletedUserRecord(u));
+  const names=new Map();users.forEach(u=>{new Set([u.name].concat(u.aliases||[]).map(personNameKey).filter(Boolean)).forEach(k=>{if(!names.has(k))names.set(k,[]);names.get(k).push(u);});});
+  return claimantIdentityCache={users,names,bindings:new Map(bindings.map(b=>[b.id,b]))};
+}
+function resolveRoClaimant(ro){
+  const name=personNameKey(roRegistrantName(ro));if(!name)return null;
+  const users=claimantIdentityIndex().users;
+  const saved=claimantIdentityIndex().bindings.get(claimantRoKey(ro));
+  const binding=saved&&personNameKey(saved.registrant)===name?saved:null;
+  if(binding)return users.find(u=>u.personId&&u.personId===binding.personId)||null;
+  const matches=(claimantIdentityIndex().names.get(name)||[]).filter(u=>!roUnit(ro)||normalizePortalUnit(u.unit)==='todas'||normalizePortalUnit(u.unit)===roUnit(ro));
+  return matches.length===1?matches[0]:null;
+}
 function wasRoSubmittedByCurrentUser(ro){
   if(isAdmin()||!ro)return false;
-  const session=getSession()||{};
-  const userName=normalizePersonName(session.name);
-  const registrant=normalizePersonName(roRegistrantName(ro));
-  if(!userName||!registrant)return false;
-
-  // Exact normalized match is preferred. A full-name containment fallback
-  // supports minor differences such as an extra middle surname.
-  return registrant===userName ||
-    (registrant.length>=6 && userName.length>=6 &&
-      (registrant.includes(userName)||userName.includes(registrant)));
+  const user=resolveRoClaimant(ro),session=getSession()||{};if(!user)return false;
+  if(session.personId&&user.personId)return session.personId===user.personId;
+  return !!session.email&&String(session.email).trim().toLowerCase()===String(user.email||'').trim().toLowerCase();
 }
 
 
@@ -16018,3 +16035,35 @@ document.addEventListener('DOMContentLoaded',()=>{
   try{refreshRoRegistrationAccess()}catch(e){}
   try{refreshRoleNavigationLabels()}catch(e){}
 });
+
+// Administração explícita; gravação confirmada antes de atualizar a tela.
+function openPersonIdentityManager(){
+  if(!isAdmin())return;
+  let box=document.getElementById('personIdentityManager');
+  if(!box){box=document.createElement('div');box.id='personIdentityManager';box.className='settings-block';document.getElementById('cfgUsers').appendChild(box);}
+  const users=getOperationalUsers();
+  box.innerHTML='<h3>Identidade das pessoas e reclamantes</h3><p>Nomes alternativos só devem ser cadastrados após confirmação do SGQ.</p><select id="identityPerson">'+users.map((u,i)=>'<option value="'+i+'">'+escapeHtml(u.name+(u.description?' ('+u.description+')':'')+' · '+(u.email||'sem e-mail'))+'</option>').join('')+'</select><div class="actions"><button class="btn secondary" id="identityEdit">Editar nome e nomes alternativos</button></div><label>Buscar R.O. ou nome no formulário</label><input id="identitySearch"><div id="identityRos"></div><p id="identityStatus"></p>';
+  document.getElementById('identityEdit').onclick=async()=>{
+    const u=users[Number(document.getElementById('identityPerson').value)];if(!u)return;
+    const match=String(u.name||'').match(/\s*\(([^()]*)\)\s*$/);
+    const name=prompt('Nome completo:',String(u.name||'').replace(/\s*\([^()]*\)\s*$/,''));if(name===null)return;
+    const description=prompt('Descrição (ex.: Representante):',u.description||(match?match[1]:''));if(description===null)return;
+    const aliases=prompt('Nomes alternativos confirmados, separados por ponto e vírgula:',(u.aliases||[]).join('; '));if(aliases===null)return;
+    await save({acao:'portal_person_identity',person:u.personId||u.email||u.name,name,description,aliases:JSON.stringify(aliases.split(';').map(x=>x.trim()).filter(Boolean))});
+  };
+  let timer;document.getElementById('identitySearch').oninput=()=>{clearTimeout(timer);timer=setTimeout(draw,250);};
+  function draw(){
+    const query=normalizePersonName(document.getElementById('identitySearch').value);const out=document.getElementById('identityRos');
+    if(query.length<2){out.textContent='Digite pelo menos 2 caracteres para localizar a R.O.';return;}
+    const all=getAllRoRecords().filter(ro=>normalizePersonName(claimantRoKey(ro)+' '+roRegistrantName(ro)).includes(query));
+    out.innerHTML='<p>'+all.length+' resultado(s). Mostrando até 60.</p>';
+    all.slice(0,60).forEach(ro=>{
+      const row=document.createElement('div');row.style.padding='10px 0';
+      const text=document.createElement('span');const person=resolveRoClaimant(ro);text.textContent=claimantRoKey(ro)+' · '+roRegistrantName(ro)+' → '+(person?person.name:'Aguardando confirmação')+' ';row.appendChild(text);
+      const btn=document.createElement('button');btn.className='btn secondary';btn.textContent='Confirmar pessoa selecionada';
+      btn.onclick=async()=>{const u=users[Number(document.getElementById('identityPerson').value)];if(!u)return;if(!confirm('Confirmar '+claimantRoKey(ro)+' para '+u.name+'?'))return;const alias=confirm('Guardar "'+roRegistrantName(ro)+'" como nome alternativo desta pessoa? Cancelar confirma somente esta R.O.');await save({acao:'portal_claimant_confirm',person:u.personId||u.email||u.name,ro:claimantRoKey(ro),registrant:roRegistrantName(ro),alias:alias?'1':'0'});};row.appendChild(btn);out.appendChild(row);
+    });
+  }
+  async function save(params){const status=document.getElementById('identityStatus');const buttons=box.querySelectorAll('button');buttons.forEach(b=>b.disabled=true);status.textContent='Salvando na base central...';try{const res=await portalJsonp(params,60000);if(!res?.sucesso)throw new Error(res?.erro||'A base não confirmou a alteração.');const synced=await syncPortalBackend();if(!synced)throw new Error('A alteração foi salva, mas a atualização da tela falhou. Sincronize novamente.');openPersonIdentityManager();document.getElementById('identityStatus').textContent='Salvo na base central.';}catch(e){status.textContent=String(e.message||e);}finally{buttons.forEach(b=>b.disabled=false);}}
+  draw();box.scrollIntoView({behavior:'smooth'});
+}
