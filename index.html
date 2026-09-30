@@ -2548,8 +2548,11 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 
     <div id="registerMode" class="hidden">
       <p>Crie seu acesso. Novos cadastros entram como usuário operacional.</p>
-      <div class="label">Nome completo</div>
-      <input id="registerName" placeholder="Seu nome completo">
+      <div class="label">Nome de acesso</div>
+      <input id="registerName" placeholder="Ex.: Ricardo ou Ricardo Pense">
+      <div class="small">Use este nome para entrar. Ele precisa ser único.</div>
+      <div class="label">Descrição (opcional)</div>
+      <input id="registerDescription" placeholder="Ex.: Representante — empresa Pense">
       <div class="label">E-mail SETA</div>
       <input id="registerEmail" type="email" autocomplete="email" placeholder="seu.email@seta...">
       <div class="small" style="margin:5px 0 10px;color:#667085">Use seu e-mail corporativo. Ele será usado para identificar você nos direcionamentos do portal.</div>
@@ -3722,7 +3725,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <p class="small">Aqui cada usuário pode atualizar os próprios dados. O nível de acesso não pode ser alterado pelo próprio usuário.</p>
 
   <div class="profile-grid">
-    <label><div class="label">Nome</div><input id="profileName"></label>
+    <label><div class="label">Nome de acesso</div><input id="profileName"></label>
     <label><div class="label">E-mail SETA</div><input id="profileEmail" type="email" autocomplete="email"></label>
     <label><div class="label">Unidade</div><select id="profileUnit"><option>Matriz</option><option>Filial</option><option>Todas</option></select></label>
     <label><div class="label">Setor</div><select id="profileSector"><option value="">Selecione o setor...</option></select></label>
@@ -3958,7 +3961,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
       <h3>Usuários e acessos</h3>
       <p class="help">O setor define quais R.O.s e PDCAs o usuário pode visualizar. Por segurança, o painel mostra apenas se existe senha cadastrada; a senha atual não é exibida.</p>
       <div class="settings-grid">
-        <label><div class="label">Nome</div><input id="newUserName" placeholder="Nome do usuário"></label>
+        <label><div class="label">Nome</div><input id="newUserName" placeholder="Nome de acesso único"></label>
         <label><div class="label">E-mail SETA</div><input id="newUserEmail" type="email" placeholder="nome@seta..."></label>
         <label><div class="label">Setor principal</div><select id="newUserSector"><option value="">Selecione o setor...</option></select></label>
         <label><div class="label">Unidade</div><select id="newUserUnit"><option value="Unidade São Bento do Sul - Matriz">SETA SC - Matriz</option><option value="Unidade Linhares - Filial">SETA ES - Filial</option></select></label>
@@ -4202,7 +4205,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js"></script>
+<script src="assets/nucleo-app.js?v=20260930-identidade2"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4661,7 +4664,7 @@ Cancelada</textarea></label>
       <button class="btn secondary" type="button" onclick="closeUserRegistrationEditor()">Fechar</button>
     </div>
     <div class="triage-modal-body">
-      <input id="userRegistrationEditKey" type="hidden">
+      <input id="userRegistrationEditKey" type="hidden"><label><div class="label">Nome de acesso (único)</div><input id="userRegistrationEditName"></label><label><div class="label">Descrição (opcional)</div><input id="userRegistrationEditDescription"></label><p class="small">A sugestão separa nomes antigos com traço ou parênteses. Confira antes de salvar. O nome anterior será preservado para reconhecer as R.O.s.</p>
       <div class="settings-grid">
         <label>
           <div class="label">Unidade</div>
