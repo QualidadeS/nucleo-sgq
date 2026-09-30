@@ -4045,7 +4045,7 @@ Cancelada</textarea></label>
 
   <div id="cfgNotifications" class="config-section">
     <h2 style="margin:0 0 12px">4. Avisos e e-mails</h2>
-    <div class="settings-block"><h3>Cópias fixas por unidade</h3><p class="help">Estes destinatários recebem cópia (CC) de todos os e-mails enviados pelo Núcleo para a unidade correspondente. Deixe vazio para remover.</p><div class="settings-grid"><label><div class="label">Matriz — e-mail 1</div><input type="email" id="fixedCopyMatriz1"></label><label><div class="label">Matriz — e-mail 2</div><input type="email" id="fixedCopyMatriz2"></label><label><div class="label">Filial — e-mail 1</div><input type="email" id="fixedCopyFilial1"></label><label><div class="label">Filial — e-mail 2</div><input type="email" id="fixedCopyFilial2"></label></div><button class="btn primary" id="fixedCopiesSave" type="button" onclick="saveFixedEmailCopies()">Salvar cópias na base central</button><p class="small" id="fixedCopiesStatus" aria-live="polite"></p></div>
+    <div class="settings-block" id="fixedEmailCopiesPanel"><h3>Cópias fixas por unidade</h3><p class="help">Estes destinatários recebem cópia (CC) de todos os e-mails enviados pelo Núcleo para a unidade correspondente. Deixe vazio para remover.</p><div class="settings-grid"><label><div class="label">Matriz — e-mail 1</div><input type="email" id="fixedCopyMatriz1"></label><label><div class="label">Matriz — e-mail 2</div><input type="email" id="fixedCopyMatriz2"></label><label><div class="label">Filial — e-mail 1</div><input type="email" id="fixedCopyFilial1"></label><label><div class="label">Filial — e-mail 2</div><input type="email" id="fixedCopyFilial2"></label></div><button class="btn primary" id="fixedCopiesSave" type="button" onclick="saveFixedEmailCopies()">Salvar cópias na base central</button><p class="small" id="fixedCopiesStatus" aria-live="polite"></p></div>
 
     <div class="settings-block">
       <h3>Notificações no aplicativo</h3>
@@ -4206,7 +4206,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20260930-copias"></script>
+<script src="assets/nucleo-app.js?v=20260930-copias-visivel"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
