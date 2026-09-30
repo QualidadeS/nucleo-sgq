@@ -903,6 +903,7 @@ function applyPortalBackendSnapshot(snapshot){
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
+  if(Array.isArray(data.fixedEmailCopies)){localStorage.setItem('nucleo-fixed-email-copies',JSON.stringify(data.fixedEmailCopies));loadFixedEmailCopies();}
   if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
   nucleoApplySharedState(data.sharedState);
@@ -2785,7 +2786,8 @@ async function registerUser(){
     showRegisterMessage('As senhas não coincidem. Confira a confirmação da senha.'); return;
   }
 
-  const created={name,email,unit,sector,selfRegistered:true,password,role:'operational',approvalStatus:portalBackendEnabled()?'pending':'approved',createdAt:new Date().toISOString()};
+  const description=(el('registerDescription')?.value||'').trim();
+  const created={name,description,email,unit,sector,selfRegistered:true,password,role:'operational',approvalStatus:portalBackendEnabled()?'pending':'approved',createdAt:new Date().toISOString()};
 
   if(portalBackendEnabled()){
     showRegisterMessage('Enviando cadastro para o SGQ...','info');
@@ -3376,6 +3378,9 @@ function openUserRegistrationEditor(key){
   const sectorSel=document.getElementById('userRegistrationEditSector');
   if(title)title.textContent='Editar cadastro · '+String(u.name||u.email||'Usuário');
   if(keyEl)keyEl.value=String(u.email||u.name||'');
+  const parts=splitPersonNameDescription(u.name,u.description);
+  document.getElementById('userRegistrationEditName').value=parts.name;
+  document.getElementById('userRegistrationEditDescription').value=parts.description;
   if(unitSel)unitSel.value=canonicalPortalUnit(u.unit);
   if(sectorSel){
     const sectors=getConfiguredSectorsForTriage();
@@ -3402,8 +3407,11 @@ async function saveUserRegistrationEditor(){
   const idx=users.findIndex(u=>String(u.email||u.name)===key);
   if(idx<0){alert('Usuário não encontrado.');return}
   const before={unit:users[idx].unit||'',sector:users[idx].sector||''};
+  const name=String(document.getElementById('userRegistrationEditName').value||'').trim();
+  const description=String(document.getElementById('userRegistrationEditDescription').value||'').trim();
+  if(!name){alert('Informe o nome de acesso.');return;}
   const updated={
-    ...users[idx],
+    ...users[idx],name,description,
     unit:canonicalPortalUnit(unit),
     sector,
     updatedAt:new Date().toISOString(),
@@ -3412,7 +3420,14 @@ async function saveUserRegistrationEditor(){
 
   await showNucleoLoading('Salvando alteração na base central...','Atualizando cadastro');
   try{
-    await portalBackendSaveConfirmed('users',updated.email||updated.name,updated);
+    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:canonicalPortalUnit(unit),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
+    if(!result?.sucesso)throw new Error(result?.erro||'Alteração não confirmada.');
+    const fresh=await portalJsonp({acao:'portal_load'},60000);
+    if(!fresh?.sucesso)throw new Error('Nome salvo; sincronize novamente para atualizar o cadastro.');
+    applyPortalBackendSnapshot(fresh);
+    const remote=(fresh.dados?.users||[]).find(u=>u.personId===updated.personId||String(u.email||u.name)===key);
+    if(remote)Object.assign(updated,remote);
+    claimantIdentityCache=null;
     users[idx]=updated;
     localStorage.setItem(USERS_KEY,JSON.stringify(users));
     addPortalAuditEvent('editar_cadastro_usuario',updated.email||updated.name,{
@@ -3423,7 +3438,7 @@ async function saveUserRegistrationEditor(){
 
     const session=getSession();
     if(session && String(session.email||'').toLowerCase()===String(updated.email||'').toLowerCase()){
-      setSession({...session,unit:updated.unit,sector:updated.sector});
+      setSession({...session,name:updated.name,description:updated.description,personId:updated.personId,unit:updated.unit,sector:updated.sector});
     }
 
     closeUserRegistrationEditor();
@@ -3493,9 +3508,44 @@ function saveAdminResetPassword(){
   alert('Senha de '+(users[idx].name||'usuário')+' redefinida com sucesso.');
 }
 
+let operationalUsersLimit=5;
+function filterOperationalUsers(){operationalUsersLimit=5;renderOperationalUsers();}
+function showMoreOperationalUsers(){operationalUsersLimit+=5;renderOperationalUsers();}
+function clearOperationalUsersFilters(){
+  ['operationalUserSearch','operationalUserSector','operationalUserUnit','operationalUserStatus'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  filterOperationalUsers();
+}
 function renderOperationalUsers(){
   const box=document.getElementById('operationalUsersList'); if(!box)return;
-  const users=getOperationalUsers();
+  const allUsers=getOperationalUsers();
+  let controls=document.getElementById('operationalUsersFilters');
+  if(!controls){
+    controls=document.createElement('div');controls.id='operationalUsersFilters';
+    controls.innerHTML='<div class="settings-grid"><label><div class="label">Buscar pessoa</div><input id="operationalUserSearch" placeholder="Nome, descrição ou e-mail"></label><label><div class="label">Setor</div><select id="operationalUserSector"></select></label><label><div class="label">Unidade</div><select id="operationalUserUnit"></select></label><label><div class="label">Situação</div><select id="operationalUserStatus"><option value="">Todos os cadastros</option><option value="pending">Aguardando aprovação</option><option value="approved">Aprovados</option><option value="rejected">Recusados</option><option value="inactive">Desativados</option></select></label></div><div class="actions"><button class="btn secondary" type="button" onclick="clearOperationalUsersFilters()">Limpar filtros</button></div><p class="small" id="operationalUsersCount" aria-live="polite"></p>';
+    box.before(controls);
+    document.getElementById('operationalUserSearch').addEventListener('input',filterOperationalUsers);
+    ['operationalUserSector','operationalUserUnit','operationalUserStatus'].forEach(id=>document.getElementById(id).addEventListener('change',filterOperationalUsers));
+  }
+  function options(id,values,label){
+    const el=document.getElementById(id),selected=el.value;
+    el.innerHTML='<option value="">'+label+'</option>'+[...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')).map(v=>'<option value="'+escapeHtml(v)+'">'+escapeHtml(v)+'</option>').join('');
+    el.value=selected;
+  }
+  options('operationalUserSector',allUsers.flatMap(u=>[u.sector,...(u.managedSectors||[])]),'Todos os setores');
+  options('operationalUserUnit',allUsers.map(u=>portalUnitDisplay(u.unit)),'Todas as unidades');
+  const query=normalizePersonName(document.getElementById('operationalUserSearch').value);
+  const sector=document.getElementById('operationalUserSector').value;
+  const unit=document.getElementById('operationalUserUnit').value;
+  const status=document.getElementById('operationalUserStatus').value;
+  const filtered=allUsers.filter(u=>{
+    const state=u.approvalStatus||'approved';
+    return (!query||normalizePersonName([u.name,u.description,u.email,...(u.aliases||[])].join(' ')).includes(query))&&
+      (!sector||u.sector===sector||(u.managedSectors||[]).includes(sector))&&
+      (!unit||portalUnitDisplay(u.unit)===unit)&&
+      (!status||(status==='inactive'?['inactive','disabled'].includes(state):state===status));
+  }).sort((a,b)=>Number(b.approvalStatus==='pending')-Number(a.approvalStatus==='pending')||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  const users=filtered.slice(0,operationalUsersLimit);
+  document.getElementById('operationalUsersCount').textContent='Exibindo '+users.length+' de '+filtered.length+' cadastro(s)'+(filtered.length!==allUsers.length?' encontrados · '+allUsers.length+' no total':'')+'.';
 
   const pending=users.filter(u=>u.role!=='admin'&&u.approvalStatus==='pending');
   const approved=users.filter(u=>u.role==='admin'||u.approvalStatus!=='pending');
@@ -3511,7 +3561,7 @@ function renderOperationalUsers(){
           <div class="admin-user-info">
             <div class="admin-avatar">${escapeHtml((u.name||'?').charAt(0).toUpperCase())}</div>
             <div>
-              <div class="admin-email">${escapeHtml(u.name||u.email||'Usuário')}</div>
+              <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
               <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'—')}</div>
               <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
               <span class="role-tag">Aguardando aprovação</span>
@@ -3531,7 +3581,7 @@ function renderOperationalUsers(){
       <div class="admin-user-info">
         <div class="admin-avatar">${escapeHtml((u.name||u.email||'?').charAt(0).toUpperCase())}</div>
         <div>
-          <div class="admin-email">${escapeHtml(u.name||u.email||'Usuário')}</div>
+          <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
           <span class="role-tag">${u.role==='admin'?'Administrador SGQ':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
@@ -3544,9 +3594,9 @@ function renderOperationalUsers(){
         <button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button>
         <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Apagar</button>
       </div>`}
-    </div>`).join(''):'<div class="small">Nenhum usuário aprovado.</div>';
+    </div>`).join(''):'';
 
-  box.innerHTML=pendingHtml+approvedHtml;
+  box.innerHTML=filtered.length?pendingHtml+approvedHtml+(users.length<filtered.length?'<div class="actions"><button class="btn secondary" type="button" onclick="showMoreOperationalUsers()">Mostrar mais 5</button></div>':''):'<div class="small">Nenhum cadastro encontrado com estes filtros.</div>';
 }
 async function approvePortalUser(key){
   if(!isAdmin())return;
@@ -3674,7 +3724,7 @@ function addPortalAuditEvent(action,recordId,data){
   portalBackendSave('audit',item.id,item);
 }
 
-function addOperationalUser(){
+async function addOperationalUser(){
   if(!isAdmin())return;
   const name=(document.getElementById('newUserName')?.value||'').trim();
   const email=(document.getElementById('newUserEmail')?.value||'').trim().toLowerCase();
@@ -3688,11 +3738,12 @@ function addOperationalUser(){
   if(role==='manager'&&!managedSectors.length){alert('Selecione pelo menos um setor sob gestão.');return}
   const users=getOperationalUsers();
   if(users.some(u=>String(u.email||'').toLowerCase()===email)){alert('Já existe um usuário com este e-mail.');return}
-  const newUser={name,email,sector,unit,password,role,managedSectors,approvalStatus:'approved',createdAt:new Date().toISOString()};
-  users.push(newUser);
+  const description=String(document.getElementById('newUserDescription')?.value||'').trim();
+  const newUser={name,description,email,sector,unit,password,role,managedSectors,approvalStatus:'approved',createdAt:new Date().toISOString()};
+  try{await portalBackendSaveConfirmed('users',newUser.email,newUser);}catch(e){alert(e.message||e);return;}
+  users.push(newUser);claimantIdentityCache=null;
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
-  portalBackendSave('users',newUser.email,newUser);
-  ['newUserName','newUserEmail','newUserSector'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['newUserName','newUserDescription','newUserEmail','newUserSector'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const roleEl=document.getElementById('newUserRole');if(roleEl)roleEl.value='operational';
   refreshNewUserManagerFields();
   renderOperationalUsers();
@@ -14542,7 +14593,14 @@ function roRegistrantName(ro){
   ])||'').trim();
 }
 
-function personNameKey(v){return normalizePersonName(String(v||'').replace(/\s*\([^()]*\)\s*$/,''));}
+function splitPersonNameDescription(value,description){
+  let name=String(value||'').trim(),extras=[];
+  const par=name.match(/\s*\(([^()]*)\)\s*$/);if(par){extras.push(par[1].trim());name=name.slice(0,par.index).trim();}
+  const dash=name.match(/\s+[-–—]\s+/);if(dash){extras.unshift(name.slice(dash.index+dash[0].length).trim());name=name.slice(0,dash.index).trim();}
+  return {name,description:description===undefined?extras.filter(Boolean).join(' — '):String(description||'').trim()};
+}
+function personDisplayName(u){const p=splitPersonNameDescription(u.name,u.description);return p.name+(p.description?' ('+p.description+')':'');}
+function personNameKey(v){return normalizePersonName(splitPersonNameDescription(v).name);}
 function claimantRoKey(ro){return String(ro.numero||ro.id||ro.codigo||'').trim().toUpperCase();}
 let claimantIdentityCache=null;
 function claimantIdentityIndex(){
@@ -15134,6 +15192,8 @@ function showAssignedRos(){
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
+  ensureFixedEmailCopiesPanel();
+  loadFixedEmailCopies();
   if(!isAdmin()){showList();return;}
   view('settingsView');
   setNav('admin');
@@ -16045,9 +16105,9 @@ function openPersonIdentityManager(){
   box.innerHTML='<h3>Identidade das pessoas e reclamantes</h3><p>Nomes alternativos só devem ser cadastrados após confirmação do SGQ.</p><select id="identityPerson">'+users.map((u,i)=>'<option value="'+i+'">'+escapeHtml(u.name+(u.description?' ('+u.description+')':'')+' · '+(u.email||'sem e-mail'))+'</option>').join('')+'</select><div class="actions"><button class="btn secondary" id="identityEdit">Editar nome e nomes alternativos</button></div><label>Buscar R.O. ou nome no formulário</label><input id="identitySearch"><div id="identityRos"></div><p id="identityStatus"></p>';
   document.getElementById('identityEdit').onclick=async()=>{
     const u=users[Number(document.getElementById('identityPerson').value)];if(!u)return;
-    const match=String(u.name||'').match(/\s*\(([^()]*)\)\s*$/);
-    const name=prompt('Nome completo:',String(u.name||'').replace(/\s*\([^()]*\)\s*$/,''));if(name===null)return;
-    const description=prompt('Descrição (ex.: Representante):',u.description||(match?match[1]:''));if(description===null)return;
+    const parts=splitPersonNameDescription(u.name,u.description);
+    const name=prompt('Nome de acesso único:',parts.name);if(name===null)return;
+    const description=prompt('Descrição (ex.: Representante):',parts.description);if(description===null)return;
     const aliases=prompt('Nomes alternativos confirmados, separados por ponto e vírgula:',(u.aliases||[]).join('; '));if(aliases===null)return;
     await save({acao:'portal_person_identity',person:u.personId||u.email||u.name,name,description,aliases:JSON.stringify(aliases.split(';').map(x=>x.trim()).filter(Boolean))});
   };
@@ -16066,4 +16126,29 @@ function openPersonIdentityManager(){
   }
   async function save(params){const status=document.getElementById('identityStatus');const buttons=box.querySelectorAll('button');buttons.forEach(b=>b.disabled=true);status.textContent='Salvando na base central...';try{const res=await portalJsonp(params,60000);if(!res?.sucesso)throw new Error(res?.erro||'A base não confirmou a alteração.');const synced=await syncPortalBackend();if(!synced)throw new Error('A alteração foi salva, mas a atualização da tela falhou. Sincronize novamente.');openPersonIdentityManager();document.getElementById('identityStatus').textContent='Salvo na base central.';}catch(e){status.textContent=String(e.message||e);}finally{buttons.forEach(b=>b.disabled=false);}}
   draw();box.scrollIntoView({behavior:'smooth'});
+}
+
+function loadFixedEmailCopies(){
+  let records=[];try{records=JSON.parse(localStorage.getItem('nucleo-fixed-email-copies')||'[]');}catch(_){}
+  const scope=normalizePortalUnit(getSession()?.unit||'');
+  ['matriz','filial'].forEach(unit=>{const emails=records.find(r=>r.id===unit)?.emails||[];[1,2].forEach(n=>{const el=document.getElementById('fixedCopy'+(unit==='matriz'?'Matriz':'Filial')+n);if(el){el.value=emails[n-1]||'';el.disabled=scope!=='todas'&&scope!==unit;}});});
+}
+async function saveFixedEmailCopies(){
+  if(!isAdmin())return;
+  const data={},scope=normalizePortalUnit(getSession()?.unit||'');
+  for(const unit of ['matriz','filial']){if(scope!=='todas'&&scope!==unit)continue;const emails=[1,2].map(n=>document.getElementById('fixedCopy'+(unit==='matriz'?'Matriz':'Filial')+n).value.trim()).filter(Boolean);if(emails.some(e=>! /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(e))){alert('Confira os e-mails de '+unit+'. Informe um endereço por campo.');return;}data[unit]=emails;}
+  const button=document.getElementById('fixedCopiesSave'),status=document.getElementById('fixedCopiesStatus');button.disabled=true;status.textContent='Salvando...';
+  try{const result=await portalJsonp({acao:'portal_save_fixed_email_copies',data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'A base não confirmou.');const snapshot=await portalJsonp({acao:'portal_load'},60000);if(!snapshot?.sucesso)throw new Error('Salvo. Sincronize para atualizar os campos.');applyPortalBackendSnapshot(snapshot);status.textContent='Cópias salvas na base central.';}catch(e){status.textContent=e.message||String(e);}finally{button.disabled=false;}
+}
+
+function ensureFixedEmailCopiesPanel(){
+  const settings=document.getElementById("settingsView");if(!settings)return;
+  let panel=document.getElementById("fixedEmailCopiesPanel");
+  if(!panel){const existing=document.getElementById("fixedCopiesSave");if(existing){panel=existing.closest(".settings-block");if(panel)panel.id="fixedEmailCopiesPanel";}}
+  if(!panel){const wrap=document.createElement("div");wrap.innerHTML="<div class=\"settings-block\" id=\"fixedEmailCopiesPanel\"><h3>Cópias fixas por unidade</h3><p class=\"help\">Estes destinatários recebem cópia (CC) de todos os e-mails enviados pelo Núcleo para a unidade correspondente. Deixe vazio para remover.</p><div class=\"settings-grid\"><label><div class=\"label\">Matriz — e-mail 1</div><input type=\"email\" id=\"fixedCopyMatriz1\"></label><label><div class=\"label\">Matriz — e-mail 2</div><input type=\"email\" id=\"fixedCopyMatriz2\"></label><label><div class=\"label\">Filial — e-mail 1</div><input type=\"email\" id=\"fixedCopyFilial1\"></label><label><div class=\"label\">Filial — e-mail 2</div><input type=\"email\" id=\"fixedCopyFilial2\"></label></div><button class=\"btn primary\" id=\"fixedCopiesSave\" type=\"button\" onclick=\"saveFixedEmailCopies()\">Salvar cópias na base central</button><p class=\"small\" id=\"fixedCopiesStatus\" aria-live=\"polite\"></p></div>";panel=wrap.firstElementChild;}
+  const users=document.getElementById("cfgUsers");
+  if(users)users.before(panel);else settings.prepend(panel);
+  panel.style.display="block";
+  let shortcut=document.getElementById("fixedCopiesShortcut");
+  if(!shortcut){shortcut=document.createElement("button");shortcut.id="fixedCopiesShortcut";shortcut.type="button";shortcut.className="btn secondary";shortcut.textContent="Cópias de e-mail — Matriz e Filial";shortcut.onclick=()=>panel.scrollIntoView({behavior:"smooth",block:"start"});const nav=settings.querySelector(".config-nav");if(nav)nav.appendChild(shortcut);else panel.before(shortcut);}
 }
