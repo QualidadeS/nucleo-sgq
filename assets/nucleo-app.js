@@ -6,6 +6,10 @@ const ACCESS_KEY='ro-pdca-access-v2';
 
 const SESSION_KEY='ro-pdca-session-v63';
 const SKIP_LOGIN_PREVIEW=false;
+const ADMIN_MODULES_KEY='portal-sgq-admin-modules-v2';
+const STANDARD_DOCUMENTS_KEY='portal-sgq-standard-documents-v1';
+const DOCUMENT_DELIVERIES_KEY='portal-sgq-document-deliveries-v1';
+const RNC_DELETED_TOMBSTONES_KEY='portal-sgq-rnc-deleted-v1';
 const ADMIN_CONFIG_KEY='ro-pdca-admin-config-v1';
 const INTEGRATION_PERSIST_KEY='nucleo-integration-settings-v1';
 const INTEGRATION_ADMIN_PASSWORD='TI1011';
@@ -1006,7 +1010,7 @@ function applyPortalBackendSnapshot(snapshot){
     localStorage.setItem(PDCA_DRAFTS_KEY,JSON.stringify(map));
   }
   if(Array.isArray(data.savedFilters))localStorage.setItem(SAVED_FILTERS_KEY,JSON.stringify(data.savedFilters));
-  if(Array.isArray(data.pdcaSent)){localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent));try{localStorage.setItem(SENT_KEY,JSON.stringify(data.pdcaSent))}catch(e){}}
+  if(Array.isArray(data.pdcaSent)){localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent));try{localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent))}catch(e){}}
   if(Array.isArray(data.favorites)){
     const mine=data.favorites.find(x=>String(x.userKey||x.id||'')===notificationUserKey());
     if(mine&&Array.isArray(mine.items))localStorage.setItem(FAVORITES_KEY,JSON.stringify(mine.items));
@@ -3790,7 +3794,7 @@ function presentPdca(id,presenterName){
   sent[idx].apresentadoEm=new Date().toLocaleString('pt-BR');
   sent[idx].apresentadoPor=(presenterName||sent[idx].responsavel||'').trim();
   sent[idx].apresentacaoRegistradaPor=session?.name||currentEmail()||'Usuário';
-  localStorage.setItem(SENT_KEY,JSON.stringify(sent));
+  localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(sent));
   window.currentReportPdca=sent[idx];
   return true;
 }
@@ -4062,7 +4066,7 @@ function markActionCompleted(pdcaId){
   const session=getSession();
   sent[idx].acaoConferidaEm=new Date().toLocaleString('pt-BR');
   sent[idx].acaoConferidaPor=session?.name||currentEmail()||'Usuário';
-  localStorage.setItem(SENT_KEY,JSON.stringify(sent));
+  localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(sent));
   portalUpdateRoSheet(sent[idx].ro||'',{
     status:'Concluído',
     resultado:'AÇÃO CONFERIDA PELO SGQ'
@@ -4122,7 +4126,7 @@ async function registerActionEvidence(pdcaId,actionId){
   if(String(a.id).endsWith('-A1')){p.mainActionEvidenceNote=a.evidenceNote;p.mainActionCompletedAt=a.completedAt}
   else{const ai=(p.actions||[]).findIndex(x=>String(x.id)===String(a.id));if(ai>=0)p.actions[ai]={...p.actions[ai],evidenceNote:a.evidenceNote,completedAt:a.completedAt,completedBy:a.completedBy}}
   const sent=getSentPdca();const pi=sent.findIndex(x=>String(x.id)===String(p.id));if(pi>=0)sent[pi]=p;
-  localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(sent));try{localStorage.setItem(SENT_KEY,JSON.stringify(sent))}catch(e){}
+  localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(sent));try{localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(sent))}catch(e){}
   portalBackendSave('pdca_sent',p.id,p);portalBackendSave('pdca_actions',a.id,a);
   portalUpdateRoSheet(p.ro||'',{
     acaoPrevista:a.action||'',
@@ -10226,7 +10230,7 @@ function removePdcaLocalRecords(roKey,pdcas){
 
   const sent=getSentPdca().filter(p=>!ids.has(String(p.id||'')));
   safeStorageSet(SENT_PDCA_KEY,JSON.stringify(sent));
-  try{safeStorageSet(SENT_KEY,JSON.stringify(sent))}catch(e){}
+  try{safeStorageSet(SENT_PDCA_KEY,JSON.stringify(sent))}catch(e){}
 
   try{
     const drafts=getPdcaDrafts();
@@ -15438,7 +15442,7 @@ function updateActionSectorAssignment(pdcaId,actionId,sector,keepAssigned){
     p.actions[ai]={...p.actions[ai],responsibleSectors:sectors,owner:sectors.join(' | ')};
   }
   all[pi]=p;
-  safeStorageSet(SENT_PDCA_KEY,JSON.stringify(all));try{safeStorageSet(SENT_KEY,JSON.stringify(all))}catch(e){}
+  safeStorageSet(SENT_PDCA_KEY,JSON.stringify(all));try{safeStorageSet(SENT_PDCA_KEY,JSON.stringify(all))}catch(e){}
   portalBackendSave('pdca_sent',p.id,p);
   allPdcaActionsForRecord(p).forEach(a=>portalBackendSave('pdca_actions',a.id,a));
   return true;
@@ -15785,7 +15789,7 @@ async function finishPDCA(){
     sent.unshift(record);
     try{refreshPdcaSidebarBadge()}catch(e){}
     const savedLocal=safeStorageSet(SENT_PDCA_KEY,JSON.stringify(sent));
-    try{safeStorageSet(SENT_KEY,JSON.stringify(sent))}catch(e){}
+    try{safeStorageSet(SENT_PDCA_KEY,JSON.stringify(sent))}catch(e){}
 
     selected.status='PDCA enviado';
     selected.pdca='Enviado';
