@@ -636,6 +636,8 @@ function portalJsonp(params,timeoutMs=60000){
   });
 }
 function portalPostForm(params){
+  params={...(params||{})};if(getSession()?.role==='quality'&&params.acao==='portal_upload_standard_document'){const metadata=JSON.parse(params.metadata||'{}');if(!metadata.unit&&!metadata.unidade)metadata.unit='Filial';params.metadata=JSON.stringify(metadata);}
+  const authToken=getSession()?.authToken;if(authToken&&!params.token)params.token=authToken;
   const base=portalApiBase();
   if(!base)return false;
   try{
@@ -670,6 +672,7 @@ function portalPostForm(params){
   }
 }
 function portalBackendSave(collection,id,data){
+  if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
   if(!portalBackendEnabled())return false;
   const params={acao:'portal_save',colecao:collection,id:String(id||''),dados:JSON.stringify(data||{}),ator:getSession()?.name||'Sistema'};
   if(!navigator.onLine){queueOfflineOperation({kind:'save',params});return true}
@@ -678,6 +681,7 @@ function portalBackendSave(collection,id,data){
   return ok;
 }
 async function portalBackendSaveConfirmed(collection,id,data){
+  if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
   const res=await portalJsonp({
     acao:'portal_save',
@@ -691,6 +695,7 @@ async function portalBackendSaveConfirmed(collection,id,data){
 }
 
 async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=150000){
+  if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
 
   const eventoId='PORTALSAVE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
@@ -907,6 +912,8 @@ function applyPortalBackendSnapshot(snapshot){
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
+  if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
+  if(Array.isArray(data.unitConfigs))localStorage.setItem('nucleo-unit-configs',JSON.stringify(data.unitConfigs));
   if(Array.isArray(data.fixedEmailCopies)){localStorage.setItem('nucleo-fixed-email-copies',JSON.stringify(data.fixedEmailCopies));loadFixedEmailCopies();}
   if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
@@ -1312,7 +1319,7 @@ function getNotificationReadMap(){
 function isNotificationForCurrentUser(n){
   const s=getSession();
   if(!s)return false;
-  if(s.role==='admin')return n.audience==='admin'||n.audience==='all';
+  if(['admin','quality'].includes(s.role))return n.audience==='admin'||n.audience==='all';
   if(n.audience==='all')return true;
   if(n.audience==='user' && n.userKey===notificationUserKey())return true;
   if(n.audience==='sector' && (sameSector(n.sector)||managesSector(n.sector)))return true;
@@ -1558,16 +1565,16 @@ function saveSectorEmailMap(map){
   localStorage.setItem(SECTOR_EMAIL_KEY,JSON.stringify(map||{}));
 }
 
-function emailForSector(sector){
+function emailForSector(sector,unit){
   const wanted=normalizeAnswer(String(sector||''));
   if(!wanted)return '';
 
   // Os e-mails dos setores vêm dos usuários cadastrados/aprovados.
   // Se houver mais de uma pessoa no setor, todos os e-mails corporativos
   // válidos daquele setor entram como destinatários.
-  const emails=getOperationalUsers()
+  const emails=activeOperationalUsers()
     .filter(u=>u && String(u.approvalStatus||'approved').toLowerCase()==='approved')
-    .filter(u=>normalizeAnswer(String(u.sector||''))===wanted)
+    .filter(u=>unit?userHasUnitSector(u,normalizePortalUnit(unit),sector):normalizeAnswer(String(u.sector||''))===wanted||(u.sectorMemberships||[]).some(m=>normalizeAnswer(m.sector)===wanted))
     .map(u=>String(u.email||'').trim().toLowerCase())
     .filter(email=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
 
@@ -1614,13 +1621,14 @@ function emailForNotification(n){
 }
 
 function dispatchNotificationEmail(n){
+  const unitCfg=unitConfiguration(normalizePortalUnit(n?.unidade||''));
   // R.O. direcionada deve gerar e-mail sempre, independentemente de configuração/cache local.
   const isDirectedRo=!!(n && n.type==='ro' && (n.audience==='sector'||n.audience==='user'));
   if(!isDirectedRo && !isPriorityEmailNotification(n))return false;
 
   const target=isDirectedRo
-    ? (n.audience==='user' ? String(n.userKey||'').trim() : emailForSector(n.sector))
-    : emailForNotification(n);
+    ? (n.audience==='user' ? String(n.userKey||'').trim() : emailForSector(n.sector,n.unidade))
+    : (n.audience==='admin'&&unitCfg?.sgqNotificationEmail?unitCfg.sgqNotificationEmail:emailForNotification(n));
   if(!target){
     console.error('Portal SGQ: R.O. direcionada sem e-mail de destino.',n);
     return false;
@@ -1696,15 +1704,28 @@ function createNotification(data){
   return n;
 }
 
+let emailHistoryVisibleLimit=5;
+let emailHistoryLoaded=[];
+function renderEmailHistory(){
+  const rows=document.getElementById('emailHistoryRows');if(!rows)return;
+  const h=emailHistoryLoaded;
+  rows.innerHTML=h.length?h.slice(0,emailHistoryVisibleLimit).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
+  let controls=document.getElementById('emailHistoryPagination');
+  if(!controls){controls=document.createElement('div');controls.id='emailHistoryPagination';controls.className='actions';rows.closest('table').parentElement.after(controls);}
+  controls.innerHTML='<span class="small">Exibindo '+Math.min(h.length,emailHistoryVisibleLimit)+' de '+h.length+' registro(s) carregados.</span>'+(h.length>emailHistoryVisibleLimit?'<button class="btn secondary" type="button" onclick="showMoreEmailHistory()">Mostrar mais 5</button>':'');
+}
+function showMoreEmailHistory(){emailHistoryVisibleLimit+=5;renderEmailHistory();}
 async function refreshEmailHistory(){
   const rows=document.getElementById('emailHistoryRows'),sum=document.getElementById('emailQueueSummary');
+  emailHistoryVisibleLimit=5;
+  const controls=document.getElementById('emailHistoryPagination');if(controls)controls.innerHTML='';
   if(rows)rows.innerHTML='<tr><td colspan="5">Carregando...</td></tr>';
   try{
     const res=await portalJsonp({acao:'portal_email_status'});
     if(!res?.sucesso)throw new Error(res?.erro||'Falha ao carregar histórico.');
     const q=res.queue||[],h=res.history||[];
     if(sum)sum.textContent='Fila: '+q.filter(x=>x.status==='queued'||x.status==='error').length+' pendente(s) · '+h.length+' registro(s) no histórico';
-    if(rows)rows.innerHTML=h.length?h.slice().reverse().slice(0,50).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
+    emailHistoryLoaded=h.slice().reverse();renderEmailHistory();
   }catch(e){if(rows)rows.innerHTML='<tr><td colspan="5">Não foi possível carregar.</td></tr>';if(sum)sum.textContent=e.message||String(e)}
 }
 function requestEmailQueueProcessing(){
@@ -2487,14 +2508,17 @@ function normalizeSectorList(value){
   return result;
 }
 
-function getConfiguredSectors(){
+function getConfiguredSectors(unit){
   let cfg={};
   try{cfg=JSON.parse(localStorage.getItem(ADMIN_CONFIG_KEY)||'{}')||{};}catch(e){}
 
-  let sectors=normalizeSectorList(cfg.sectorList);
+  unit=unit||adminScopeUnit();
+  const own=unitConfiguration(unit);
+  let sectors=normalizeSectorList(own?.sectorList??(unit==='filial'?'':cfg.sectorList));
+  if(unit==='todas'){const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');sectors=[...new Set(sectors.concat(configs.flatMap(c=>normalizeSectorList(c.sectorList))))];}
 
   // Na primeira utilização, usa a lista padrão exibida nas configurações.
-  if(!sectors.length){
+  if(!sectors.length&&unit!=='filial'){
     const field=document.getElementById('sectorList');
     sectors=normalizeSectorList(field?.value||DEFAULT_PORTAL_SECTORS);
   }
@@ -2507,7 +2531,9 @@ function fillSectorSelect(selectId,{includeSgq=false,selectedValue=''}={}){
   if(!sel)return;
 
   const current=selectedValue || sel.value || '';
-  let sectors=getConfiguredSectors().slice();
+  const unitField={registerSector:'registerUnit',loginSector:'loginUnit',newUserSector:'newUserUnit'}[selectId];
+  const unit=unitField?normalizePortalUnit(document.getElementById(unitField)?.value):adminScopeUnit();
+  let sectors=getConfiguredSectors(unit).slice();
 
   if(includeSgq && !sectors.some(s=>s.toLocaleLowerCase('pt-BR')==='sgq')){
     sectors.unshift('SGQ');
@@ -2589,6 +2615,7 @@ async function saveSectorConfiguration(){
 async function syncPublicPortalConfig(){
   try{
     const res=await portalJsonp({acao:'portal_public_config'},60000);
+    if(res?.config?.sectorListsByUnit)localStorage.setItem('nucleo-unit-public-sectors',JSON.stringify(res.config.sectorListsByUnit));
     if(!res?.sucesso||!res.config)return false;
     const local=getAdminConfig();
     const merged={...local,...res.config};
@@ -2697,7 +2724,8 @@ async function loginUser(){
       email:u.email||u.e_mail||'',
       unit:u.unit||u.unidade||unit,
       sector:u.sector||u.setor||sector,
-      role:(rawRole==='admin'||rawRole.includes('admin'))?'admin':((rawRole==='manager'||rawRole.includes('gest'))?'manager':'operational'),
+      role:rawRole==='quality'?'quality':((rawRole==='admin'||rawRole.includes('admin'))?'admin':((rawRole==='manager'||rawRole.includes('gest'))?'manager':'operational')),
+      sectorMemberships:Array.isArray(u.sectorMemberships)?u.sectorMemberships:[],
       managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
       approvalStatus:u.approvalStatus||'approved',
       authToken:remote.authToken||remote.token||''
@@ -2738,7 +2766,7 @@ async function loginUser(){
       }catch(e){console.warn('Sincronização pós-login falhou:',e)}
     },3000);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
-    if(session.role==='admin'){
+    if(['admin','quality'].includes(session.role)){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
       try{clearInterval(window.__nucleoPendingUsersTimer)}catch(e){}
       window.__nucleoPendingUsersTimer=setInterval(()=>{
@@ -2914,7 +2942,7 @@ function showProfile(){
     sector.value=s.sector||'';
   }
 
-  if(role)role.value=s.role==='admin'?'Administrador':s.role==='manager'?'Gestor':'Usuário operacional';
+  if(role)role.value=s.role==='admin'?'SGQ':s.role==='quality'?'Qualidade — Filial':s.role==='manager'?'Gestor':'Usuário operacional';
 
   view('profileView');
   setNav('profile');
@@ -3240,6 +3268,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&u.role!=='admin'&&normalizePortalUnit(u.unit)==='filial');
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -3588,10 +3617,11 @@ function renderOperationalUsers(){
           <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
-          <span class="role-tag">${u.role==='admin'?'Administrador SGQ':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
+          <span class="role-tag">${u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
           ${u.role==='manager'?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
         </div>
       </div>
+      ${getSession()?.role==='admin'?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Perfil e vínculos por unidade</button>`:''}
       ${u.role==='admin'?`<div class="actions"><button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button></div>`:`<div class="actions">
         <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">${u.role==='manager'?'Editar gestão':'Tornar gestor'}</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
@@ -3743,7 +3773,7 @@ async function addOperationalUser(){
   const users=getOperationalUsers();
   if(users.some(u=>String(u.email||'').toLowerCase()===email)){alert('Já existe um usuário com este e-mail.');return}
   const description=String(document.getElementById('newUserDescription')?.value||'').trim();
-  const newUser={name,description,email,sector,unit,password,role,managedSectors,approvalStatus:'approved',createdAt:new Date().toISOString()};
+  const newUser={name,description,email,sector,unit:role==='quality'?'Unidade Linhares - Filial':unit,password,role,managedSectors,approvalStatus:'approved',createdAt:new Date().toISOString()};
   try{await portalBackendSaveConfirmed('users',newUser.email,newUser);}catch(e){alert(e.message||e);return;}
   users.push(newUser);claimantIdentityCache=null;
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
@@ -4674,7 +4704,7 @@ function downloadCompleteRoPdf(id){
   setRoPdfButtonState(true);
 
   const sep=sync.apiUrl.includes('?')?'&':'?';
-  const url=sync.apiUrl+sep+'acao=pdf&modo=embed&ro='+encodeURIComponent(wanted);
+  const url=sync.apiUrl+sep+'acao=pdf&modo=embed&ro='+encodeURIComponent(wanted)+'&token='+encodeURIComponent(getSession()?.authToken||'');
 
   // O Apps Script abre somente dentro deste iframe invisível.
   // Quando terminar, ele devolve o PDF via postMessage e o sistema baixa o arquivo.
@@ -4687,7 +4717,7 @@ function downloadCompleteRoPdf(id){
     if(roPdfDownloadInProgress && requestToken===roPdfRequestToken){
       roPdfDownloadInProgress=false;
       setRoPdfButtonState(false);
-      const fallback=sync.apiUrl+sep+'acao=pdf&ro='+encodeURIComponent(wanted);
+      const fallback=sync.apiUrl+sep+'acao=pdf&ro='+encodeURIComponent(wanted)+'&token='+encodeURIComponent(getSession()?.authToken||'');
       const ok=confirm(
         'O PDF não retornou automaticamente para o sistema.\n\n'+
         'Deseja abrir a geração direta do PDF?'
@@ -7057,7 +7087,8 @@ function showTriage(){
 
 
 function activeOperationalUsers(){
-  return getOperationalUsers().filter(u=>
+  let contacts=[];try{contacts=JSON.parse(localStorage.getItem('nucleo-unit-contacts')||'[]');}catch(_){}
+  return [...new Map(getOperationalUsers().concat(contacts).map(u=>[u.email||u.name,u])).values()].filter(u=>
     u &&
     u.role!=='admin' &&
     u.approvalStatus!=='pending' &&
@@ -7069,7 +7100,7 @@ function activeOperationalUsers(){
 function usersBySector(sector){
   const wanted=normalizeAnswer(sector||'');
   return activeOperationalUsers()
-    .filter(u=>normalizeAnswer(u.sector||'')===wanted)
+    .filter(u=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo)===String(currentTriageRoId));const unit=ro?roUnit(ro):adminScopeUnit();return userHasUnitSector(u,unit,sector);})
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
 function getTriageAssignmentsFromUi(){
@@ -9954,13 +9985,7 @@ function roUnit(ro){
     ''
   );
 }
-function adminScopeUnit(){
-  const s=getSession()||{};
-  if(s.role!=='admin')return currentUserUnit();
-  const raw=normalizeAnswer(String(s.unit||''));
-  if(raw==='todas' || raw.includes('geral'))return 'todas';
-  return currentUserUnit();
-}
+function adminScopeUnit(){const s=getSession()||{};return s.role==='admin'?'todas':s.role==='quality'?'filial':currentUserUnit();}
 function isGeneralAdmin(){
   return isAdmin() && adminScopeUnit()==='todas';
 }
@@ -9975,6 +10000,7 @@ function isUnifiedSector(sector){
 }
 function sameUnitAsCurrentUser(ro){
   if(isGeneralAdmin())return true;
+  if(getSession()?.role==='quality')return roUnit(ro)==='filial';
   return currentUserUnit()===roUnit(ro);
 }
 
@@ -10083,6 +10109,8 @@ function canViewRO(ro){
 
   const tri=getRoTriageRecord(ro);
   if(!tri || tri.decision!=='directed')return false;
+  const linked=(getSession()?.sectorMemberships||[]).some(m=>normalizePortalUnit(m.unit)===roUnit(ro)&&normalizeAnswer(m.sector)===normalizeAnswer(tri.responsibleSector));
+  if(linked)return userMatchesDirectedPerson(tri);
 
   // Regra de unidade:
   // usuário comum vê a própria unidade; setor explicitamente unificado também
@@ -10108,7 +10136,7 @@ function isAdmin(){
   // Não inferir ADM pelo e-mail/cache local: isso fazia um usuário operacional
   // ganhar o menu completo quando usava um e-mail presente na antiga lista de ADMs.
   const session=getSession();
-  return !!(session && String(session.role||'').toLowerCase()==='admin');
+  return !!(session && ['admin','quality'].includes(String(session.role||'').toLowerCase()));
 }
 
 function showConfigSection(name){
@@ -11659,6 +11687,7 @@ function jsonpRequest(baseUrl, apiKey, extraParams, timeoutMs=90000){
 
     const params=new URLSearchParams();
     params.set('callback',callback);
+    if(getSession()?.authToken)params.set('token',getSession().authToken);
     if(apiKey)params.set('chave',apiKey);
     Object.entries(extraParams||{}).forEach(([k,v])=>{if(v!==undefined&&v!==null&&String(v)!=='')params.set(k,String(v))});
     params.set('_',Date.now());
@@ -15196,6 +15225,7 @@ function showAssignedRos(){
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
+  ensureUnitQualitySettings();
   ensureFixedEmailCopiesPanel();
   loadFixedEmailCopies();
   if(!isAdmin()){showList();return;}
@@ -16134,12 +16164,12 @@ function openPersonIdentityManager(){
 
 function loadFixedEmailCopies(){
   let records=[];try{records=JSON.parse(localStorage.getItem('nucleo-fixed-email-copies')||'[]');}catch(_){}
-  const scope=normalizePortalUnit(getSession()?.unit||'');
+  const scope=adminScopeUnit();
   ['matriz','filial'].forEach(unit=>{const emails=records.find(r=>r.id===unit)?.emails||[];[1,2].forEach(n=>{const el=document.getElementById('fixedCopy'+(unit==='matriz'?'Matriz':'Filial')+n);if(el){el.value=emails[n-1]||'';el.disabled=scope!=='todas'&&scope!==unit;}});});
 }
 async function saveFixedEmailCopies(){
   if(!isAdmin())return;
-  const data={},scope=normalizePortalUnit(getSession()?.unit||'');
+  const data={},scope=adminScopeUnit();
   for(const unit of ['matriz','filial']){if(scope!=='todas'&&scope!==unit)continue;const emails=[1,2].map(n=>document.getElementById('fixedCopy'+(unit==='matriz'?'Matriz':'Filial')+n).value.trim()).filter(Boolean);if(emails.some(e=>! /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(e))){alert('Confira os e-mails de '+unit+'. Informe um endereço por campo.');return;}data[unit]=emails;}
   const button=document.getElementById('fixedCopiesSave'),status=document.getElementById('fixedCopiesStatus');button.disabled=true;status.textContent='Salvando...';
   try{const result=await portalJsonp({acao:'portal_save_fixed_email_copies',data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'A base não confirmou.');const snapshot=await portalJsonp({acao:'portal_load'},60000);if(!snapshot?.sucesso)throw new Error('Salvo. Sincronize para atualizar os campos.');applyPortalBackendSnapshot(snapshot);status.textContent='Cópias salvas na base central.';}catch(e){status.textContent=e.message||String(e);}finally{button.disabled=false;}
@@ -16155,4 +16185,45 @@ function ensureFixedEmailCopiesPanel(){
   panel.style.display="block";
   let shortcut=document.getElementById("fixedCopiesShortcut");
   if(!shortcut){shortcut=document.createElement("button");shortcut.id="fixedCopiesShortcut";shortcut.type="button";shortcut.className="btn secondary";shortcut.textContent="Cópias de e-mail — Matriz e Filial";shortcut.onclick=()=>panel.scrollIntoView({behavior:"smooth",block:"start"});const nav=settings.querySelector(".config-nav");if(nav)nav.appendChild(shortcut);else panel.before(shortcut);}
+}
+
+function unitConfiguration(unit){
+  if(!unit||unit==='todas')return null;
+  try{const own=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]').find(c=>c.id===unit);if(own)return own;const sectors=JSON.parse(localStorage.getItem('nucleo-unit-public-sectors')||'{}');if(sectors[unit]!==undefined)return {sectorList:sectors[unit]};}catch(_){}
+  return null;
+}
+function ensureUnitQualitySettings(){
+  const settings=document.getElementById('settingsView');if(!settings)return;
+  let box=document.getElementById('unitQualitySettings');
+  if(!box){box=document.createElement('div');box.id='unitQualitySettings';box.className='settings-block';box.innerHTML='<h3>Configuração da unidade</h3><label>Unidade<select id="qualityConfigUnit"><option value="matriz">Matriz</option><option value="filial">Filial</option></select></label><label>Setores (um por linha)<textarea id="qualityConfigSectors" rows="6"></textarea></label><label>E-mail padrão da qualidade<input type="email" id="qualityConfigEmail"></label><label>E-mail da Diretoria para SAC<input type="email" id="qualityConfigDirector"></label><button class="btn primary" id="qualityConfigSave">Salvar configuração da unidade</button><p id="qualityConfigStatus" class="small"></p>';const users=document.getElementById('cfgUsers');if(users)users.before(box);else settings.prepend(box);document.getElementById('qualityConfigUnit').onchange=loadUnitQualitySettings;document.getElementById('qualityConfigSave').onclick=saveUnitQualitySettings;}
+  const isQuality=getSession()?.role==='quality';const select=document.getElementById('qualityConfigUnit');select.disabled=isQuality;if(isQuality)select.value='filial';
+  ['cfgUnits','cfgTriage','cfgBackend','cfgIntegration'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isQuality?'none':'';});
+  const addUnit=document.getElementById('newUserUnit');if(isQuality&&addUnit){addUnit.value='Unidade Linhares - Filial';addUnit.disabled=true;}
+  if(isQuality){const notifications=document.getElementById('cfgNotifications');notifications?.querySelectorAll('.settings-block').forEach(el=>{if(el.id!=='fixedEmailCopiesPanel'&&!el.querySelector('#emailHistoryRows'))el.style.display='none';});}
+  const roles=document.getElementById('newUserRole');if(roles&&!roles.querySelector('option[value=quality]')&&!isQuality){const option=document.createElement('option');option.value='quality';option.textContent='Qualidade — somente Filial';roles.appendChild(option);}
+  loadUnitQualitySettings();
+}
+function loadUnitQualitySettings(){
+  const unit=document.getElementById('qualityConfigUnit').value;const c=unitConfiguration(unit)||{};
+  document.getElementById('qualityConfigSectors').value=c.sectorList||'';document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';
+}
+async function saveUnitQualitySettings(){
+  const unit=document.getElementById('qualityConfigUnit').value,data={sectorList:document.getElementById('qualityConfigSectors').value,sgqNotificationEmail:document.getElementById('qualityConfigEmail').value,directorSacEmail:document.getElementById('qualityConfigDirector').value};
+  const status=document.getElementById('qualityConfigStatus');status.textContent='Salvando...';
+  try{const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();refreshSectorSelectors();status.textContent='Configuração salva na base central.';}catch(e){status.textContent=e.message||String(e);}
+}
+function openUnitUserAccess(encoded){
+  if(getSession()?.role!=='admin')return;
+  const id=decodeURIComponent(encoded),user=getOperationalUsers().find(u=>String(u.personId||u.email||u.name)===id);if(!user)return;
+  let overlay=document.getElementById('unitUserAccess');if(overlay)overlay.remove();overlay=document.createElement('div');overlay.id='unitUserAccess';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:650px;width:100%;max-height:90vh;overflow:auto"><h3>Perfil e vínculos — '+escapeHtml(user.name)+'</h3><label>Perfil<select id="unitAccessRole"><option value="operational">Usuário operacional</option><option value="manager">Gestor</option><option value="quality">Qualidade — somente Filial</option><option value="admin">SGQ — Matriz e Filial</option></select></label><p>Vínculos adicionais para setores unificados. Um por linha, no formato: matriz | PCP ou filial | PCP. O cadastro e o e-mail continuam únicos. Somente o SGQ pode alterar estes vínculos.</p><textarea id="unitAccessMemberships" rows="6"></textarea><p class="small">O perfil Qualidade sempre fica restrito à Filial. Após mudar o perfil ou os vínculos, o usuário deve entrar novamente.</p><div class="actions"><button class="btn primary" id="unitAccessSave">Salvar</button><button class="btn secondary" id="unitAccessClose">Fechar</button></div><p id="unitAccessStatus"></p></div>';
+  document.body.appendChild(overlay);document.getElementById('unitAccessRole').value=user.role||'operational';document.getElementById('unitAccessMemberships').value=(user.sectorMemberships||[]).map(m=>m.unit+' | '+m.sector).join('\n');document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
+  document.getElementById('unitAccessSave').onclick=async()=>{const status=document.getElementById('unitAccessStatus');try{const memberships=document.getElementById('unitAccessMemberships').value.split('\n').filter(x=>x.trim()).map(line=>{const parts=line.split('|');if(parts.length!==2||!['matriz','filial'].includes(parts[0].trim().toLowerCase())||!parts[1].trim())throw new Error('Use matriz | Setor ou filial | Setor em cada linha.');return {unit:parts[0].trim().toLowerCase(),sector:parts[1].trim()};});status.textContent='Salvando...';const result=await portalJsonp({acao:'portal_set_user_access',person:id,role:document.getElementById('unitAccessRole').value,memberships:JSON.stringify(memberships)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();renderOperationalUsers();status.textContent='Salvo. O usuário deve entrar novamente.';}catch(e){status.textContent=e.message||String(e);}};
+}
+
+function userHasUnitSector(user,unit,sector){
+  const key=normalizeAnswer(sector||'');
+  if(unit==='todas')return normalizeAnswer(user.sector||'')===key||(user.sectorMemberships||[]).some(m=>normalizeAnswer(m.sector)===key);
+  if((user.sectorMemberships||[]).some(m=>m.unit===unit&&normalizeAnswer(m.sector)===key))return true;
+  return normalizePortalUnit(user.unit)===unit&&[user.sector,...(user.managedSectors||[])].some(s=>normalizeAnswer(s||'')===key);
 }
