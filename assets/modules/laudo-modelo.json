@@ -1,0 +1,620 @@
+{
+  "name": "Certificado de qualidade",
+  "code": "FOR-SBS-QUAL-02",
+  "sourceRevision": "3",
+  "fields": [
+    {
+      "id": "A2",
+      "label": "Emissão",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C2",
+      "label": "Hora e data de recebimento",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "F2",
+      "label": "Recebedor",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D7",
+      "label": "NCQ",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D8",
+      "label": "Emitido por",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I7",
+      "label": "Data",
+      "type": "date",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B9",
+      "label": "Cliente",
+      "type": "text",
+      "default": "",
+      "source": "client",
+      "required": false
+    },
+    {
+      "id": "G9",
+      "label": "Pedido",
+      "type": "text",
+      "default": "",
+      "source": "order",
+      "required": false
+    },
+    {
+      "id": "B10",
+      "label": "Modelo",
+      "type": "text",
+      "default": "",
+      "source": "product",
+      "required": false
+    },
+    {
+      "id": "G10",
+      "label": "Nota fiscal",
+      "type": "text",
+      "default": "",
+      "source": "invoice",
+      "required": false
+    },
+    {
+      "id": "G11",
+      "label": "Quantidade",
+      "type": "number",
+      "default": "",
+      "source": "quantity",
+      "required": false
+    },
+    {
+      "id": "B12",
+      "label": "Código do produto",
+      "type": "text",
+      "default": "",
+      "source": "productCode",
+      "required": false
+    },
+    {
+      "id": "G12",
+      "label": "Ordem de compra",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I15",
+      "label": "Código da chapa",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I16",
+      "label": "Tipo de onda",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I17",
+      "label": "Gramatura",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I18",
+      "label": "Espessura (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I19",
+      "label": "Coluna (Kgf/cm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I20",
+      "label": "Comprimento da chapa (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I21",
+      "label": "Largura da chapa (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I23",
+      "label": "Data de produção",
+      "type": "date",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "I25",
+      "label": "Ordem de produção",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "H30",
+      "label": "Nº registro de não conformidade",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "G32",
+      "label": "Ações corretivas",
+      "type": "textarea",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "G34",
+      "label": "Detalhes das ações",
+      "type": "textarea",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "A38",
+      "label": "Observações",
+      "type": "textarea",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "J36",
+      "label": "Responsável pela inspeção",
+      "type": "text",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B15",
+      "label": "Comprimento especificado (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B16",
+      "label": "Comprimento teste 1 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B17",
+      "label": "Comprimento teste 2 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B18",
+      "label": "Comprimento teste 3 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B19",
+      "label": "Comprimento teste 4 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B20",
+      "label": "Comprimento teste 5 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C15",
+      "label": "Largura especificado (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C16",
+      "label": "Largura teste 1 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C17",
+      "label": "Largura teste 2 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C18",
+      "label": "Largura teste 3 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C19",
+      "label": "Largura teste 4 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "C20",
+      "label": "Largura teste 5 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D15",
+      "label": "Altura especificado (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D16",
+      "label": "Altura teste 1 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D17",
+      "label": "Altura teste 2 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D18",
+      "label": "Altura teste 3 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D19",
+      "label": "Altura teste 4 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "D20",
+      "label": "Altura teste 5 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E15",
+      "label": "Junta de fechamento especificado (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E16",
+      "label": "Junta de fechamento teste 1 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E17",
+      "label": "Junta de fechamento teste 2 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E18",
+      "label": "Junta de fechamento teste 3 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E19",
+      "label": "Junta de fechamento teste 4 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "E20",
+      "label": "Junta de fechamento teste 5 (mm)",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false
+    },
+    {
+      "id": "B21",
+      "label": "Valores mínimos comprimento",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "MAX(B16,B17,B18,B19,B20)"
+    },
+    {
+      "id": "C21",
+      "label": "Valores mínimos largura",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "MAX(C16,C17,C18,C19,C20)"
+    },
+    {
+      "id": "B23",
+      "label": "Valores máximos comprimento",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "MIN(B16,B17,B18,B19,B20)"
+    },
+    {
+      "id": "C23",
+      "label": "Valores máximos largura",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "MIN(C16,C17,C18,C19,C20)"
+    },
+    {
+      "id": "B25",
+      "label": "Valores médios comprimento",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "AVERAGE(B16,B17,B18,B19,B20)"
+    },
+    {
+      "id": "C25",
+      "label": "Valores médios largura",
+      "type": "number",
+      "default": "",
+      "source": "",
+      "required": false,
+      "formula": "AVERAGE(C16,C17,C18,C19,C20)"
+    },
+    {
+      "id": "impressao",
+      "label": "Impressão",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "SIM",
+        "NÃO"
+      ]
+    },
+    {
+      "id": "registroNC",
+      "label": "Registro de não conformidade",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "SIM",
+        "NÃO"
+      ]
+    },
+    {
+      "id": "inspecao29",
+      "label": "Impressão da caixa",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao30",
+      "label": "Tonalidade",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao31",
+      "label": "Vincos",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao32",
+      "label": "Cortes e furos",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao33",
+      "label": "Refile",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao34",
+      "label": "Nº OP impresso",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "inspecao35",
+      "label": "Formação da caixa",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não",
+        "N/A"
+      ]
+    },
+    {
+      "id": "disposicao",
+      "label": "Disposição do lote",
+      "type": "select",
+      "default": "Aguardando Avaliação",
+      "source": "",
+      "required": false,
+      "options": [
+        "Aprovado",
+        "Reprovado",
+        "Aguardando Avaliação"
+      ]
+    },
+    {
+      "id": "desvio",
+      "label": "Liberado sob desvio",
+      "type": "select",
+      "default": "Não informado",
+      "source": "",
+      "required": false,
+      "options": [
+        "Não informado",
+        "Sim",
+        "Não"
+      ]
+    }
+  ],
+  "layout": "<style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif}table{border-collapse:collapse;width:100%;table-layout:fixed}td{overflow-wrap:anywhere}tr{page-break-inside:avoid}</style><table><tr><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Emissão:</td><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Hora &amp; Data de Recebimento:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">         Assinatura do Recebedor:</td><td colspan=\"1\" rowspan=\"2\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">NCQ</td></tr><tr><td colspan=\"2\" rowspan=\"2\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{A2}}</td><td colspan=\"3\" rowspan=\"3\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{C2}}</td><td colspan=\"4\" rowspan=\"3\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{F2}}</td></tr><tr><td colspan=\"1\" rowspan=\"2\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td></tr><tr><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\"></td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td></tr><tr><td colspan=\"2\" rowspan=\"3\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\"></td><td colspan=\"5\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:13pt;font-weight:bold;text-align:center;\">CERTIFICADO DE QUALIDADE </td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Revisão:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">3</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:right;\">NCQ:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D7}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Data:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{I7}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:right;\">Emitido:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D8}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">ID:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">FOR-SBS-QUAL-02</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Cliente:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B9}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Pedido:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{G9}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Modelo:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{B10}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Nota Fiscal:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{G10}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Impressão:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Impressão: {{impressao}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">NÃO</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Quantidade:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{G11}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Código do Produto:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:left;\">{{B12}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Ordem de Compra:</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{G12}}</td></tr><tr><td colspan=\"10\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">TESTES FÍSICOS</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Comprimento\n(mm)</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Largura\n(mm)</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Altura\n(mm)</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Junta de Fechamento\n(mm)</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Matéria Prima</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Especificado</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B15}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C15}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D15}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E15}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Código da Chapa:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I15}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste 01</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B16}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C16}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D16}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E16}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Tipo de Onda:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I16}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste 02</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B17}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C17}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D17}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E17}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Gramatura:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I17}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste 03</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B18}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C18}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D18}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E18}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Espessura (mm):</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I18}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste 04</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B19}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C19}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D19}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E19}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Coluna (Kgf/cm) :</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I19}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Teste 05</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B20}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C20}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{D20}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{E20}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Comprimento (mm):</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I20}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Valores Minímos</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B21}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C21}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Largura (mm):</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{I21}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Valores Máximos</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B23}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C23}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Data de Produção:</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{I23}}</td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:left;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:left;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:left;\"></td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:left;\"></td></tr><tr><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Valores Médios</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{B25}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{C25}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">_____</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Ordem Produção (OP):</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{I25}}</td></tr><tr><td colspan=\"6\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\"></td><td colspan=\"4\" rowspan=\"3\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Validade de 2 anos, contados à partir da data de fabricação, segundo condições normais e adequadas de temperatura, ambiente, manuseio e agentes externos.</td></tr><tr><td colspan=\"6\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">INSPEÇÃO CAIXA</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Aspectos</td><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Conforme?</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Impressão da caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao29}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"2\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Registro de Não Conformidade:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{registroNC}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">NÃO</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Tonalidade caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao30}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">N° Registro: </td><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{H30}}</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Vincos da caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao31}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Ações Corretivas</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Cortes e furos da caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao32}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{G32}}</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Refile na caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao33}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\"></td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">N° O.P impresso:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao34}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{G34}}</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Formação da Caixa:</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{inspecao35}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">Não</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">N/A</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Liberado sob desvio: {{desvio}}</td></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">Disposição do Lote: </td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">{{disposicao}}</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Reprovado</td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Aguardando Avaliação</td><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">Responsável pela Inspeção e Conferência: </td><td colspan=\"1\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:left;\">{{J36}}</td></tr><tr><td colspan=\"10\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;font-weight:bold;text-align:center;\">OBSERVAÇÕES</td></tr><tr><td colspan=\"10\" rowspan=\"3\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">{{A38}}</td></tr><tr></tr><tr></tr><tr><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">\n\n\n\nElaborado por: Deiver Robson Saccani Vichelo\nAnalista de Qualidade &amp; Processos\n\n\n\n\nAprovado por: André R. P. Pestana\nGerente Operações\n\n\n\n</td><td colspan=\"3\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\">\nSETA EMBALAGENS LTDA – FILIAL\n\nCNPJ: 85.142.651/0001-79\n\nINSCRIÇÃO ESTADUAL: 252751841\n\nEndereço: Deputado Genesio Tureck – SC 418 – Dona Francisca – São Bento do Sul – SC\n           \n CEP: 89.284-600\n\nTelefone: (47) 3203-1900\n</td><td colspan=\"4\" rowspan=\"1\" style=\"border:1px solid #666;padding:3px;vertical-align:middle;white-space:pre-wrap;font-size:10.0pt;text-align:center;\"></td></tr></table>"
+}

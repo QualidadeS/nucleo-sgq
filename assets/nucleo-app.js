@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261001-teste1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261001-drive1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -723,7 +723,7 @@ function portalJsonp(params,timeoutMs=60000){
   });
 }
 function portalPostForm(params){
-  params={...(params||{})};if(getSession()?.role==='quality'&&params.acao==='portal_upload_standard_document'){const metadata=JSON.parse(params.metadata||'{}');if(!metadata.unit&&!metadata.unidade)metadata.unit='Filial';params.metadata=JSON.stringify(metadata);}
+  params={...(params||{})};if(params.acao==='portal_upload_standard_document'){const metadata=JSON.parse(params.metadata||'{}');if(!metadata.unit&&!metadata.unidade)metadata.unit=getSession()?.role==='quality'?'filial':document.getElementById('ndStandardUnit')?.value||document.getElementById('qualityConfigUnit')?.value||explicitPortalUnit(getSession()?.unit);params.metadata=JSON.stringify(metadata);}
   const authToken=getSession()?.authToken;if(authToken&&!params.token)params.token=authToken;
   const base=portalApiBase();
   if(!base)return false;
@@ -11926,6 +11926,7 @@ function findMatchingStandardDocument(request){
   const language=normalizeAnswer(request?.language||'');
   return getStandardDocuments()
     .filter(standardDocumentIsValid)
+    .filter(d=>!d.fillable&&explicitRecordUnit(request)&&explicitRecordUnit(d)===explicitRecordUnit(request))
     .filter(d=>normalizeAnswer(d.code||'')===code)
     .filter(d=>!String(d.productCode||'').trim() || (product && normalizeAnswer(d.productCode)===product))
     .filter(d=>!String(d.language||'').trim() || !language || normalizeAnswer(d.language)===language)
@@ -13948,7 +13949,7 @@ function assignedRoStatus(r){
   if(raw.includes('cancel')) return 'Cancelada';
   if(raw.includes('obsolet')) return 'Obsoleto';
   if(raw.includes('registro') || raw.includes('somente para registro')) return 'Registro';
-  if(tri.pdcaExternal===true) return 'PDCA externo';
+  if(tri.pdcaExternal===true&&!tri.pdcaFileId) return 'PDCA externo';
 
   // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
   // salvo/enviado na coleção pdca_sent para esta R.O. Não usa mais r.status/r.pdca
@@ -13956,7 +13957,7 @@ function assignedRoStatus(r){
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
     const presented = Boolean(sentPdca.apresentadoEm) ||
-      (typeof getPdcaPresentationMap==='function' && getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+      (!sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function' && getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
     return presented ? 'PDCA apresentado' : 'PDCA respondido';
   }
   return 'Pendente';
@@ -14380,7 +14381,8 @@ function wasRoSubmittedByCurrentUser(ro){
 function getPdcaReturnForRo(ro){
   const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
   if(!key)return null;
-  return getAllSentPdcas().find(p=>String(p.ro||p.roId||p.numeroRo||'').trim()===key)||null;
+  const sector=ro.__assignedSector||ro.__triageRecord?.responsibleSector||'';
+  return getAllSentPdcas().find(p=>String(p.ro||p.roId||p.numeroRo||'').trim()===key&&(!sector||normalizeAnswer(p.setor||'')===normalizeAnswer(sector)))||null;
 }
 
 function complainantActionState(p){
@@ -15814,7 +15816,7 @@ function enforceAdminVisibility(){
   }
 
   const adminIds=[
-    'navAdmin','navEquipment','navTraining','navNcCapa','navDocuments',
+    'navExternalPdcas','navAdmin','navEquipment','navTraining','navNcCapa','navDocuments',
     'navProcesses','navIndicators','navAnnouncements',
     'navPendingActions','navTriage','navContests','navExternalRoControl','navSacTracking'
   ];
@@ -15927,6 +15929,7 @@ function loadUnitQualitySettings(){
 }
 async function saveUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value,data={sectorList:document.getElementById('qualityConfigSectors').value,sgqNotificationEmail:document.getElementById('qualityConfigEmail').value,directorSacEmail:document.getElementById('qualityConfigDirector').value};
+  if(document.getElementById('nucleoDriveFolders'))data.driveFolders=Object.fromEntries(['ros','pdcas','standard','requested','templates'].map(k=>[k,document.getElementById('ndFolder_'+k).value]));
   const status=document.getElementById('qualityConfigStatus');status.textContent='Salvando...';
   try{const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();refreshSectorSelectors();status.textContent='Configuração salva na base central.';}catch(e){status.textContent=e.message||String(e);}
 }
@@ -15964,3 +15967,26 @@ function applySettingsUnitSelection(){
   const addUnit=document.getElementById('newUserUnit');if(addUnit){const option=[...addUnit.options].find(o=>explicitPortalUnit(o.value)===unit);if(option)addUnit.value=option.value;fillSectorSelect('newUserSector');}
   const panel=document.getElementById('fixedEmailCopiesPanel');if(panel){panel.querySelectorAll('input[id^="fixedCopy"]').forEach(input=>{const own=input.id.includes(unit==='filial'?'Filial':'Matriz');const label=input.closest('label');if(label)label.style.display=own?'':'none';});}
 }
+
+// Módulo de arquivos carregado sob demanda.
+let nucleoDriveModulePromise=null;
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261001-drive1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
+function nucleoDriveSettingsShortcut(){const box=document.getElementById('unitQualitySettings');if(box&&!document.getElementById('ndSetupButton')){const btn=document.createElement('button');btn.id='ndSetupButton';btn.className='btn secondary';btn.textContent='Configurar pastas do Drive';btn.onclick=async()=>{try{await nucleoDriveLoad();nucleoDriveInstallSettings();}catch(e){alert(e.message);}};box.querySelector('.unit-settings-footer')?.before(btn);}}
+const nucleoOriginalEnsureUnitSettings=ensureUnitQualitySettings;
+ensureUnitQualitySettings=function(...args){const result=nucleoOriginalEnsureUnitSettings(...args);nucleoDriveSettingsShortcut();return result;};
+const nucleoOriginalLoadUnitSettings=loadUnitQualitySettings;
+loadUnitQualitySettings=function(...args){const result=nucleoOriginalLoadUnitSettings(...args);const unit=document.getElementById('qualityConfigUnit')?.value,c=unitConfiguration(unit)||{};for(const kind of ['ros','pdcas','standard','requested','templates']){const field=document.getElementById('ndFolder_'+kind);if(field)field.value=c.driveFolders?.[kind]||'';const status=document.getElementById('ndFolderStatus_'+kind);if(status)status.textContent='';}return result;};
+const nucleoOriginalCollectAdminModuleForm=collectAdminModuleForm;
+collectAdminModuleForm=function(key,existing){const r=nucleoOriginalCollectAdminModuleForm(key,existing);if(key==='documents'){r.unit=existing?.unit||document.getElementById('ndRequestUnit')?.value||(getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit));}return r;};
+const nucleoOriginalOpenPdcaReport=openPdcaReport;
+openPdcaReport=function(id){const p=getAllSentPdcas().find(x=>String(x.id)===String(id));if(p?.externalPdf){if(!canViewPdca(p)){alert('PDCA fora do seu acesso.');return;}nucleoDriveOpenExternalPdf(p);return;}return nucleoOriginalOpenPdcaReport(id);};
+async function nucleoDriveOpenExternalPdf(p){try{const r=await portalJsonp({acao:'nucleo_drive_file',fileId:p.fileId},90000);if(!r?.sucesso)throw new Error(r?.erro||'Arquivo indisponível.');const bytes=Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));let overlay=document.getElementById('ndExternalPdf');if(overlay)overlay.remove();overlay=document.createElement('div');overlay.id='ndExternalPdf';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;padding:20px;display:flex;align-items:center;justify-content:center';overlay.innerHTML='<div style="background:white;padding:18px;border-radius:12px;width:95%;max-height:95vh;overflow:auto"><h3>'+escapeHtml(p.ro+' · '+p.setor+' · V'+(p.version||1))+'</h3><a class="btn secondary" download="'+escapeHtml(p.fileName||'PDCA.pdf')+'" href="'+url+'">Baixar original</a> <button class="btn secondary" id="ndPdfClose">Fechar</button>'+(isAdmin()?'<button class="btn primary" id="ndPdfPresent">Registrar apresentação</button>':'')+'<p id="ndExternalStatus" class="small"></p><iframe title="Resposta de PDCA" src="'+url+'" style="width:100%;height:70vh;border:1px solid #ddd"></iframe></div>';document.body.appendChild(overlay);document.getElementById('ndPdfClose').onclick=()=>{URL.revokeObjectURL(url);overlay.remove();};const btn=document.getElementById('ndPdfPresent');if(btn)btn.onclick=async()=>{btn.disabled=true;try{const updated={...p,status:'Apresentado',apresentadoEm:new Date().toISOString(),apresentadoPor:getSession()?.name,updatedAt:new Date().toISOString()};const confirmation=await portalJsonp({acao:'nucleo_drive_present_pdca',unit:explicitRecordUnit(p),id:p.id,fileId:p.fileId},60000);if(!confirmation?.sucesso)throw new Error(confirmation?.erro||'Apresentação não confirmada.');await syncPortalBackend(false);document.getElementById('ndExternalStatus').textContent='Apresentação confirmada na base central.';}catch(e){document.getElementById('ndExternalStatus').textContent=e.message;}finally{btn.disabled=false;}};}catch(e){alert(e.message);}}
+
+const ndOriginalStandardCreate=openStandardDocumentCreate;
+openStandardDocumentCreate=function(...args){const result=ndOriginalStandardCreate(...args);const input=document.getElementById('stdDocFile');if(input){const label=document.createElement('label');label.innerHTML='<span class="small">Unidade do documento</span><select id="ndStandardUnit" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz">SETA SC — Matriz</option><option value="filial">SETA ES — Unidade Linhares</option></select>';input.closest('label').before(label);document.getElementById('ndStandardUnit').value=getSession()?.role==='quality'?'filial':document.getElementById('qualityConfigUnit')?.value||explicitPortalUnit(getSession()?.unit)||'matriz';}return result;};
+
+const ndOriginalPdcaPresentation=openPdcaPresentation;
+openPdcaPresentation=function(p){if(p?.externalPdf)return nucleoDriveOpenExternalPdf(p);return ndOriginalPdcaPresentation(p);};
+
+saveStandardDocument=async function(){try{await nucleoDriveLoad();await nucleoDriveUploadStandard();}catch(e){alert(e.message);}};

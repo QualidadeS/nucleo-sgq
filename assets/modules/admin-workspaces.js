@@ -208,6 +208,7 @@ function showAdminOperationalModule(key){
   view('adminModuleView'); setNav(navMap[key]);
   const title=document.getElementById('adminModuleTitle'), sub=document.getElementById('adminModuleSubtitle'), list=document.getElementById('adminModuleContent'), eyebrow=document.getElementById('adminModuleEyebrow');
   if(title)title.textContent=m.title; if(sub)sub.textContent=m.desc; if(eyebrow)eyebrow.textContent=m.eyebrow; if(!list)return;
+  if(list&&key==='documents'){}
   const allModuleRecords=getAdminModuleRecords().filter(r=>r.module===key);
   const records=(key==='documents'&&!isAdmin())
     ? allModuleRecords.filter(r=>normalizeAnswer(r.createdBy||'')===normalizeAnswer(getSession()?.name||''))
@@ -322,7 +323,7 @@ function openAdminOperationalWorkspace(key,index){
 
 function renderProcessTemplatesWorkspace(){
   const list=document.getElementById('adminModuleContent');if(!list)return;const t=getRncProcessTemplate();
-  list.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button>${processDocumentLibraryHtml()}
+  list.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button><button class="btn primary" onclick="nucleoDriveOpen('templates')">Modelos de documentos solicitados</button>${processDocumentLibraryHtml()}
   <div class="card" style="margin-top:14px;padding:20px">
     <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">MODELO CONTROLADO</div><h3 style="margin:6px 0 4px">${escapeHtml(t.code)} · ${escapeHtml(t.name)}</h3><div class="small">A prévia mantém a estrutura do formulário padrão atual. Aqui você controla a identidade SETA e quais partes entram no documento, sem precisar editar o Excel.</div></div><span class="pill">${t.status==='obsolete'?'Obsoleto':'Vigente'}</span></div>
     <div id="rncTemplateEditorSplit" style="display:grid;grid-template-columns:minmax(430px,.95fr) minmax(520px,1.35fr);gap:18px;margin-top:18px;align-items:start;height:calc(100vh - 185px);min-height:560px;overflow:hidden">
@@ -402,3 +403,8 @@ function editAdminOperationalRecord(id){
     const link=document.getElementById('admModLink');if(link)link.disabled=true;
   }
 }
+
+const ndOriginalShowAdmin=showAdminOperationalModule;
+showAdminOperationalModule=function(key){const result=ndOriginalShowAdmin(key);const host=document.getElementById('adminModuleContent');if(host&&['documents','processes'].includes(key)){const btn=document.createElement('button');btn.className='btn primary';btn.style.margin='12px 0';btn.textContent=key==='processes'?'Modelos de documentos solicitados':'Preencher e gerar documento solicitado';btn.onclick=()=>nucleoDriveOpen(key==='processes'?'templates':'requests');host.prepend(btn);}return result;};
+const ndOriginalAdminFields=adminModuleFields;
+adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='documents'){const unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';html='<label>Unidade da solicitação<select id="ndRequestUnit" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz" '+(unit==='matriz'?'selected':'')+'>SETA SC — Matriz</option><option value="filial" '+(unit==='filial'?'selected':'')+'>SETA ES — Unidade Linhares</option></select></label>'+html;}return html;};
