@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261001-drive1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261001-drive2',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -6806,44 +6806,22 @@ function triageKeyOf(ro){
   return sector ? triageCompositeKey(base,sector) : base;
 }
 function baseTriageSituation(ro){
-  // Lê a FONTE ORIGINAL por todos os caminhos possíveis. Isso é importante porque
-  // registros restaurados do IndexedDB/localStorage podem não carregar os campos
-  // técnicos __setorResponsavel/__statusOperacional, embora ainda tenham Y/AD no raw.
   const raw=ro?.raw||{};
-  const sector=String(
-    ro?.setorResponsavelPlanilha ||
-    raw?.__setorResponsavel ||
-    raw?.['Setor (causa)'] ||
-    raw?.['Setor causa'] ||
-    raw?.['Setor Responsável'] ||
-    raw?.['Setor responsável'] ||
-    // `ro.setor` em R.O. importada é justamente Setor (causa); só entra como último fallback.
-    ro?.setor ||
-    ''
-  ).trim();
-  const sectorNorm=normalizeAnswer(sector);
-  const hasSector=!!sector && !['nao direcionado','nao informado','sem setor','-'].includes(sectorNorm);
-
-  // Status ORIGINAL da planilha. Não usar primeiro o rótulo visual de PDCA.
-  const rawStatus=String(
-    ro?.statusOperacional ||
-    raw?.__statusOperacional ||
-    raw?.['Status'] ||
-    raw?.['Status R.O.'] ||
-    raw?.['Status da R.O.'] ||
-    // Compatibilidade final com snapshots antigos.
-    ro?.status ||
-    ''
-  ).trim();
-  const status=normalizeAnswer(rawStatus);
-
-  // Regra única definida pelo SGQ:
-  // Registro/Cancelada/Obsoleto independem de setor; somente Setor + Enviado = Triada.
-  // Obsoleto é uma decisão terminal do SGQ: dispensa PDCA e NUNCA volta para a fila de triagem.
+  const clean=v=>String(v??'').replace(/[\u200B-\u200D\uFEFF]/g,'').replace(/\u00a0/g,' ').trim();
+  const key=v=>clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const read=names=>{for(const name of names){const entry=Object.entries(raw).find(([h,v])=>key(h)===key(name)&&clean(v));if(entry)return clean(entry[1]);}return '';};
+  const validSector=v=>{const k=key(v);return !!k&&!['naodirecionado','naoinformado','semsetor'].includes(k)&&!sectorStatusLike(v);};
+  const sector=[raw.__setorResponsavel,read(['Setor (causa)','Setor causa','Setor responsável pelo desvio','Setor responsável']),ro?.setorResponsavelPlanilha,ro?.setor].map(clean).find(validSector)||'';
+  const isOperational=v=>/^(enviad[oa]s?|naoenviad[oa]s?|cancelad[oa]s?|obsoleto|obsoleta|somentepararegistro|apenasregistro|registro|emanalise|aguardandotriagem|pendente)$/.test(key(v));
+  const sheetStatus=read(['Status R.O.','Status da R.O.','Status']);
+  const candidates=[raw.__statusOperacional,sheetStatus,ro?.statusOperacional,ro?.status].map(clean).filter(Boolean);
+  const rawStatus=candidates.find(isOperational)||candidates[0]||'';
+  const status=key(rawStatus),hasSector=!!sector;
   if(status.includes('obsolet'))return {code:'obsolete',decision:'obsolete',sector,hasSector,rawStatus};
   if(status.includes('cancel'))return {code:'cancelled',decision:'cancelled',sector,hasSector,rawStatus};
   if(status.includes('registro'))return {code:'record',decision:'record',sector,hasSector,rawStatus};
-  if(hasSector && status.includes('enviado'))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
+  // Não enviada nunca constitui uma triagem concluída.
+  if(hasSector && /^enviad[oa]s?$/.test(status))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
   return {code:'new',decision:'',sector,hasSector,rawStatus};
 }
 
@@ -15970,9 +15948,20 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261001-drive1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261001-drive2',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
-function nucleoDriveSettingsShortcut(){const box=document.getElementById('unitQualitySettings');if(box&&!document.getElementById('ndSetupButton')){const btn=document.createElement('button');btn.id='ndSetupButton';btn.className='btn secondary';btn.textContent='Configurar pastas do Drive';btn.onclick=async()=>{try{await nucleoDriveLoad();nucleoDriveInstallSettings();}catch(e){alert(e.message);}};box.querySelector('.unit-settings-footer')?.before(btn);}}
+function nucleoDriveSettingsShortcut(){
+ const box=document.getElementById('unitQualitySettings');if(!box)return;
+ box.style.display='block';
+ if(document.getElementById('nucleoDriveFolders'))return;
+ const section=document.createElement('section');section.id='nucleoDriveFolders';section.className='unit-settings-section';section.style.margin='16px 0';
+ const labels={ros:'R.O.s',pdcas:'Respostas de PDCA',standard:'Documentos padrão',requested:'Documentos solicitados',templates:'Modelos editáveis'};
+ section.innerHTML='<h4>Pastas do Drive desta unidade</h4><p class="small">Selecione a unidade acima e cole os links das pastas. Depois salve a configuração desta unidade.</p>'+Object.entries(labels).map(([k,label])=>'<label style="display:block;margin:10px 0"><span>'+label+'</span><div style="display:flex;gap:8px"><input id="ndFolder_'+k+'" type="url" style="flex:1;min-width:0" placeholder="https://drive.google.com/drive/folders/…"><button class="btn secondary" type="button" data-folder="'+k+'">Validar acesso</button></div><span id="ndFolderStatus_'+k+'" class="small" role="status"></span></label>').join('');
+ box.querySelector('.unit-settings-footer').before(section);
+ section.querySelectorAll('button[data-folder]').forEach(btn=>btn.onclick=async()=>{const kind=btn.dataset.folder,status=document.getElementById('ndFolderStatus_'+kind);btn.disabled=true;status.textContent='Validando…';try{const r=await portalJsonp({acao:'nucleo_drive_validate',unit:document.getElementById('qualityConfigUnit').value,kind,link:document.getElementById('ndFolder_'+kind).value},60000);if(!r?.sucesso)throw new Error(r?.erro||'Acesso não confirmado.');status.textContent='Acesso confirmado: '+r.name;}catch(e){status.textContent=e.message;}finally{btn.disabled=false;}});
+ const unit=document.getElementById('qualityConfigUnit').value,c=unitConfiguration(unit)||{};Object.keys(labels).forEach(k=>document.getElementById('ndFolder_'+k).value=c.driveFolders?.[k]||'');
+}
+
 const nucleoOriginalEnsureUnitSettings=ensureUnitQualitySettings;
 ensureUnitQualitySettings=function(...args){const result=nucleoOriginalEnsureUnitSettings(...args);nucleoDriveSettingsShortcut();return result;};
 const nucleoOriginalLoadUnitSettings=loadUnitQualitySettings;
