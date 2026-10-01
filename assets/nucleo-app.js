@@ -3411,6 +3411,15 @@ function openUserRegistrationEditor(key){
   const sectorSel=document.getElementById('userRegistrationEditSector');
   if(title)title.textContent='Editar cadastro · '+String(u.name||u.email||'Usuário');
   if(keyEl)keyEl.value=String(u.email||u.name||'');
+  let access=document.getElementById('userRegistrationAccessControl');
+  if(!access){access=document.createElement('div');access.id='userRegistrationAccessControl';access.style.cssText='padding:12px;margin-bottom:12px;border:1px solid #d5e2ef;border-radius:10px;background:#f1f7ff';keyEl?.before(access);}
+  const roleLabel={admin:'SGQ',quality:'Qualidade — somente Filial',manager:'Gestor',operational:'Usuário operacional'}[u.role]||'Usuário operacional';
+  access.innerHTML='<div class="label">Tipo de acesso atual</div><b>'+escapeHtml(roleLabel)+'</b>';
+  if(getSession()?.role==='admin'){
+    const button=document.createElement('button');button.type='button';button.className='btn secondary';button.style.marginLeft='12px';button.textContent='Alterar perfil de acesso';
+    button.onclick=()=>{closeUserRegistrationEditor();openUnitUserAccess(encodeURIComponent(u.personId||u.email||u.name));};access.appendChild(button);
+    const help=document.createElement('p');help.className='small';help.textContent='Para administrar a Filial, selecione Qualidade — somente Filial. O setor Qualidade não altera o perfil automaticamente.';access.appendChild(help);
+  }
   const parts=splitPersonNameDescription(u.name,u.description);
   document.getElementById('userRegistrationEditName').value=parts.name;
   document.getElementById('userRegistrationEditDescription').value=parts.description;
