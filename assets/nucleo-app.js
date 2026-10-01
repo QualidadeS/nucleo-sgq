@@ -912,6 +912,8 @@ function applyPortalBackendSnapshot(snapshot){
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
+  if(snapshot.session&&getSession()){setSession({...getSession(),...snapshot.session});}
+
   if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
   if(Array.isArray(data.unitConfigs))localStorage.setItem('nucleo-unit-configs',JSON.stringify(data.unitConfigs));
   if(Array.isArray(data.fixedEmailCopies)){localStorage.setItem('nucleo-fixed-email-copies',JSON.stringify(data.fixedEmailCopies));loadFixedEmailCopies();}
@@ -3268,7 +3270,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
-  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&u.role!=='admin'&&normalizePortalUnit(u.unit)==='filial');
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&u.role!=='admin'&&explicitPortalUnit(u.unit)==='filial');
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -3559,7 +3561,7 @@ function clearOperationalUsersFilters(){
 }
 function renderOperationalUsers(){
   const box=document.getElementById('operationalUsersList'); if(!box)return;
-  const allUsers=getOperationalUsers();
+  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||explicitPortalUnit(u.unit)==='filial');
   let controls=document.getElementById('operationalUsersFilters');
   if(!controls){
     controls=document.createElement('div');controls.id='operationalUsersFilters';
@@ -3577,13 +3579,13 @@ function renderOperationalUsers(){
   options('operationalUserUnit',allUsers.map(u=>portalUnitDisplay(u.unit)),'Todas as unidades');
   const query=normalizePersonName(document.getElementById('operationalUserSearch').value);
   const sector=document.getElementById('operationalUserSector').value;
-  const unit=document.getElementById('operationalUserUnit').value;
+  const unit=getSession()?.role==='quality'?'SETA ES - Filial':document.getElementById('operationalUserUnit').value;
   const status=document.getElementById('operationalUserStatus').value;
   const filtered=allUsers.filter(u=>{
     const state=u.approvalStatus||'approved';
     return (!query||normalizePersonName([u.name,u.description,u.email,...(u.aliases||[])].join(' ')).includes(query))&&
       (!sector||u.sector===sector||(u.managedSectors||[]).includes(sector))&&
-      (!unit||portalUnitDisplay(u.unit)===unit)&&
+      (!unit||explicitPortalUnit(u.unit)===explicitPortalUnit(unit))&&
       (!status||(status==='inactive'?['inactive','disabled'].includes(state):state===status));
   }).sort((a,b)=>Number(b.approvalStatus==='pending')-Number(a.approvalStatus==='pending')||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   const users=filtered.slice(0,operationalUsersLimit);
@@ -3640,6 +3642,7 @@ function renderOperationalUsers(){
     </div>`).join(''):'';
 
   box.innerHTML=filtered.length?pendingHtml+approvedHtml+(users.length<filtered.length?'<div class="actions"><button class="btn secondary" type="button" onclick="showMoreOperationalUsers()">Mostrar mais 5</button></div>':''):'<div class="small">Nenhum cadastro encontrado com estes filtros.</div>';
+  box.querySelectorAll('.admin-user-row').forEach(row=>{const button=row.querySelector("button[onclick^='openUnitUserAccess']"),actions=row.querySelector('.actions');if(button&&actions)actions.prepend(button);});
 }
 async function approvePortalUser(key){
   if(!isAdmin())return;
@@ -4713,6 +4716,7 @@ function downloadCompleteRoPdf(id){
   setRoPdfButtonState(true);
 
   const sep=sync.apiUrl.includes('?')?'&':'?';
+  const scopedRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo)===String(wanted));if(getSession()?.role==='quality'&&(!scopedRo||!qualityRecordAllowed(scopedRo))){alert('Esta R.O. não pertence à SETA ES / Unidade Linhares.');return;}
   const url=sync.apiUrl+sep+'acao=pdf&modo=embed&ro='+encodeURIComponent(wanted)+'&token='+encodeURIComponent(getSession()?.authToken||'');
 
   // O Apps Script abre somente dentro deste iframe invisível.
@@ -8498,7 +8502,7 @@ function showManagementDashboard(){
 }
 function getAllRoRecords(){
   const base=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
-  return base;
+  return getSession()?.role==='quality'?base.filter(qualityRecordAllowed):base;
 }
 
 function sgqIndicatorStatusCode(ro,triageMap){
@@ -10009,7 +10013,7 @@ function isUnifiedSector(sector){
 }
 function sameUnitAsCurrentUser(ro){
   if(isGeneralAdmin())return true;
-  if(getSession()?.role==='quality')return roUnit(ro)==='filial';
+  if(getSession()?.role==='quality')return qualityRecordAllowed(ro);
   return currentUserUnit()===roUnit(ro);
 }
 
@@ -10114,7 +10118,7 @@ function notifyManagersOfDirectedRo(roKey,sector,triageRo,responsibleUserName){
 
 function canViewRO(ro){
   // ADM Geral vê as duas unidades. ADM Matriz/Filial fica restrito à sua unidade.
-  if(isAdmin())return isGeneralAdmin() || sameUnitAsCurrentUser(ro);
+  if(isAdmin())return getSession()?.role==='quality'?qualityRecordAllowed(ro):isGeneralAdmin()||sameUnitAsCurrentUser(ro);
 
   const tri=getRoTriageRecord(ro);
   if(!tri || tri.decision!=='directed')return false;
@@ -11801,7 +11805,7 @@ function getAdminModuleRecordsRaw(){
 
 function getAdminModuleRecords(){
   const deleted=getRncDeletedTombstones();
-  return getAdminModuleRecordsRaw().filter(x=>!deleted[String(x?.id||'')]);
+  return getAdminModuleRecordsRaw().filter(x=>!deleted[String(x?.id||'')]&&qualityRecordAllowed(x));
 }
 function saveAdminModuleRecords(list){
   safeStorageSet(ADMIN_MODULES_KEY,JSON.stringify(Array.isArray(list)?list:[]));
@@ -16204,13 +16208,14 @@ function unitConfiguration(unit){
 function ensureUnitQualitySettings(){
   const settings=document.getElementById('settingsView');if(!settings)return;
   let box=document.getElementById('unitQualitySettings');
-  if(!box){box=document.createElement('div');box.id='unitQualitySettings';box.className='settings-block';box.innerHTML='<h3>Configuração da unidade</h3><label>Unidade<select id="qualityConfigUnit"><option value="matriz">Matriz</option><option value="filial">Filial</option></select></label><label>Setores (um por linha)<textarea id="qualityConfigSectors" rows="6"></textarea></label><label>E-mail padrão da qualidade<input type="email" id="qualityConfigEmail"></label><label>E-mail da Diretoria para SAC<input type="email" id="qualityConfigDirector"></label><button class="btn primary" id="qualityConfigSave">Salvar configuração da unidade</button><p id="qualityConfigStatus" class="small"></p>';const users=document.getElementById('cfgUsers');if(users)users.before(box);else settings.prepend(box);document.getElementById('qualityConfigUnit').onchange=loadUnitQualitySettings;document.getElementById('qualityConfigSave').onclick=saveUnitQualitySettings;}
+  if(!box){box=document.createElement('div');box.id='unitQualitySettings';box.className='settings-block unit-settings-card';box.innerHTML="<div class=\"unit-settings-heading\"><div><span class=\"unit-settings-eyebrow\">ADMINISTRAÇÃO</span><h3>Configurações por unidade</h3><p class=\"help\">Cadastros, setores e e-mails próprios de cada fábrica.</p></div><label class=\"unit-settings-picker\"><div class=\"label\">Unidade em edição</div><select id=\"qualityConfigUnit\"><option value=\"matriz\">SETA SC — Matriz</option><option value=\"filial\">SETA ES — Unidade Linhares</option></select></label></div><div class=\"unit-settings-grid\"><section class=\"unit-settings-section\"><h4>Setores desta unidade</h4><label><div class=\"label\">Um setor por linha</div><textarea id=\"qualityConfigSectors\" rows=\"7\" placeholder=\"Ex.: Qualidade&#10;PCP&#10;Produção\"></textarea></label></section><section class=\"unit-settings-section\"><h4>Destinatários padrão</h4><label><div class=\"label\">E-mail da qualidade</div><input type=\"email\" id=\"qualityConfigEmail\" placeholder=\"qualidade@empresa.com.br\"></label><label><div class=\"label\">E-mail da Diretoria para SAC</div><input type=\"email\" id=\"qualityConfigDirector\" placeholder=\"diretoria@empresa.com.br\"></label><p class=\"help\">As cópias fixas são configuradas no bloco abaixo.</p></section></div><div class=\"unit-settings-footer\"><button class=\"btn primary\" id=\"qualityConfigSave\">Salvar configuração desta unidade</button><span id=\"qualityConfigStatus\" class=\"small\" role=\"status\"></span></div>";const users=document.getElementById('cfgUsers');if(users)users.before(box);else settings.prepend(box);document.getElementById('qualityConfigUnit').onchange=()=>{loadUnitQualitySettings();applySettingsUnitSelection();};document.getElementById('qualityConfigSave').onclick=saveUnitQualitySettings;}
   const isQuality=getSession()?.role==='quality';const select=document.getElementById('qualityConfigUnit');select.disabled=isQuality;if(isQuality)select.value='filial';
   ['cfgUnits','cfgTriage','cfgBackend','cfgIntegration'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isQuality?'none':'';});
   const addUnit=document.getElementById('newUserUnit');if(isQuality&&addUnit){addUnit.value='Unidade Linhares - Filial';addUnit.disabled=true;}
   if(isQuality){const notifications=document.getElementById('cfgNotifications');notifications?.querySelectorAll('.settings-block').forEach(el=>{if(el.id!=='fixedEmailCopiesPanel'&&!el.querySelector('#emailHistoryRows'))el.style.display='none';});}
   const roles=document.getElementById('newUserRole');if(roles&&!roles.querySelector('option[value=quality]')&&!isQuality){const option=document.createElement('option');option.value='quality';option.textContent='Qualidade — somente Filial';roles.appendChild(option);}
   loadUnitQualitySettings();
+  renderOperationalUsers();applySettingsUnitSelection();
 }
 function loadUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value;const c=unitConfiguration(unit)||{};
@@ -16235,4 +16240,23 @@ function userHasUnitSector(user,unit,sector){
   if(unit==='todas')return normalizeAnswer(user.sector||'')===key||(user.sectorMemberships||[]).some(m=>normalizeAnswer(m.sector)===key);
   if((user.sectorMemberships||[]).some(m=>m.unit===unit&&normalizeAnswer(m.sector)===key))return true;
   return normalizePortalUnit(user.unit)===unit&&[user.sector,...(user.managedSectors||[])].some(s=>normalizeAnswer(s||'')===key);
+}
+
+function explicitPortalUnit(value){
+  const text=normalizePersonName(value).replace(/[._]/g,' ').replace(/\s+/g,' ');
+  const filial=/\bseta\s*es\b|\blinhares\b|\bfilial\b/.test(text);
+  const matriz=/\bseta\s*sc\b|\bsao bento\b|\bmatriz\b/.test(text);
+  if(filial&&matriz)return '';return filial?'filial':matriz?'matriz':'';
+}
+function explicitRecordUnit(record){
+  const values=[record?.unidade,record?.unit,record?.roUnit,record?.raw?.__unidade,record?.__unidade,record?.raw?.Unidade,record?.raw?.['Unidade produtiva'],record?.raw?.['Em qual unidade produtiva ocorreu o problema?']];
+  const units=[...new Set(values.map(explicitPortalUnit).filter(Boolean))];return units.length===1?units[0]:'';
+}
+function qualityRecordAllowed(record){return getSession()?.role!=='quality'||explicitRecordUnit(record)==='filial';}
+
+function applySettingsUnitSelection(){
+  const unit=document.getElementById('qualityConfigUnit')?.value||'matriz';
+  const field=document.getElementById('operationalUserUnit');if(field){const option=[...field.options].find(o=>explicitPortalUnit(o.value)===unit);field.value=option?.value||'';field.disabled=getSession()?.role==='quality';filterOperationalUsers();}
+  const addUnit=document.getElementById('newUserUnit');if(addUnit){const option=[...addUnit.options].find(o=>explicitPortalUnit(o.value)===unit);if(option)addUnit.value=option.value;fillSectorSelect('newUserSector');}
+  const panel=document.getElementById('fixedEmailCopiesPanel');if(panel){panel.querySelectorAll('input[id^="fixedCopy"]').forEach(input=>{const own=input.id.includes(unit==='filial'?'Filial':'Matriz');const label=input.closest('label');if(label)label.style.display=own?'':'none';});}
 }
