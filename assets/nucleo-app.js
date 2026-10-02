@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-pastas2',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-despacho1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -14570,6 +14570,7 @@ function renderMySubmittedRos(){
       <td><span class="status-badge ${state.code==='done'?'answered':state.code==='contest'?'pending':''}">${escapeHtml(state.label)}</span></td>
       <td>${escapeHtml(state.sector||'Aguardando definição')}</td>
       <td>
+        <button class="btn secondary" type="button" onclick="openMyRoResponses('${escapeHtml(ro.numero||'')}')">Respostas</button>
         ${state.returnState?.pdca
           ? `<button class="btn primary" type="button" onclick="openComplainantPdcaReturn('${escapeHtml(ro.numero||'')}')">Ver retorno</button>`
           : `<span class="status-badge pending">Aguardando retorno</span>`}
@@ -15970,7 +15971,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-pastas2',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-despacho1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16014,4 +16015,11 @@ function openUnitDriveSettings(){
   const field=document.getElementById('qualityConfigUnit');
   if(field&&!field.disabled)field.focus({preventScroll:true});
   box.style.outline='2px solid #1455ff';setTimeout(()=>box.style.outline='',1500);
+}
+
+async function openMyRoResponses(ro){
+ const modal=document.createElement('div');modal.style.cssText='position:fixed;inset:0;background:#0008;z-index:99990;display:flex;align-items:center;justify-content:center;padding:20px';
+ modal.innerHTML='<div style="background:white;border-radius:14px;padding:22px;max-width:850px;width:100%;max-height:90vh;overflow:auto"><h3>Respostas — '+escapeHtml(ro)+'</h3><button class="btn secondary" id="myResponsesClose">Fechar</button><div id="myResponsesItems" role="status">Consultando respostas disponibilizadas…</div></div>';document.body.appendChild(modal);modal.querySelector('#myResponsesClose').onclick=()=>modal.remove();
+ const host=modal.querySelector('#myResponsesItems');
+ try{const result=await portalJsonp({acao:'nucleo_drive_my_responses',ro},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível consultar as respostas.');const items=result.items||[];host.innerHTML=items.length?items.map((p,i)=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.fileName)+'</b><p>'+escapeHtml(p.sector)+' · V'+escapeHtml(p.version)+' · '+escapeHtml(new Date(p.createdAt).toLocaleString('pt-BR'))+'</p><button class="btn primary" data-response="'+i+'">Visualizar / baixar PDCA</button></div>').join(''):'Nenhuma resposta foi disponibilizada pelo SGQ ainda.';host.querySelectorAll('[data-response]').forEach(btn=>btn.onclick=()=>{const p=items[Number(btn.dataset.response)];nucleoDriveOpenExternalPdf({...p,setor:p.sector});});}catch(e){host.textContent=e.message;}
 }
