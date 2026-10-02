@@ -2941,7 +2941,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <h2 style="margin-top:0">PDCAs recebidos</h2>
   <p class="small">Histórico dos PDCAs já enviados. Administradores visualizam todos; usuários operacionais visualizam apenas os PDCAs permitidos para seu usuário.</p>
   <div class="toolbar">
-    <input id="sentSearch" placeholder="Buscar por R.O., cliente, responsável ou setor" oninput="renderSentPdcas()">
+    <input id="sentSearch" placeholder="Buscar por R.O., cliente, responsável, reclamante ou setor" oninput="renderSentPdcas()">
     <select id="sentStatusFilter" onchange="renderSentPdcas()">
       <option value="todos">Todos os status</option>
       <option value="Enviado">Enviado</option>
@@ -2951,7 +2951,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
     </select>
   </div>
   <table>
-    <thead><tr><th>PDCA</th><th>R.O.</th><th>Responsável</th><th>Unidade</th><th>Envio</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>PDCA</th><th>R.O.</th><th>Responsável pela resposta</th><th>Reclamante identificado</th><th>Unidade</th><th>Recebimento</th><th>Status</th><th></th></tr></thead>
     <tbody id="sentRows"></tbody>
   </table>
 </section>
@@ -4212,7 +4212,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261002-pdcaconfirm5"></script>
+<script src="assets/nucleo-app.js?v=20261002-pdcanomes6"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
