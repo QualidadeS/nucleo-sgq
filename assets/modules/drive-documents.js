@@ -124,10 +124,10 @@ function nucleoDriveFillRequest(){const request=nucleoDriveRequests().find(r=>r.
 async function nucleoDriveGenerateDocument(){const btn=document.getElementById('ndGenerate');btn.disabled=true;try{const values={};document.querySelectorAll('[data-nd-field]').forEach(el=>values[el.dataset.ndField]=el.value);nucleoDriveStatus('Gerando PDF na pasta de documentos solicitados…');await nucleoDriveMutation('nucleo_drive_generate',{requestId:document.getElementById('ndRequest').value,templateId:document.getElementById('ndRequestTemplate').value,values:JSON.stringify(values)});await syncPortalBackend(false);await nucleoDriveRefresh();nucleoDriveStatus('Documento armazenado. Confira o PDF antes de enviar.');}catch(e){nucleoDriveStatus(e.message);}finally{btn.disabled=false;}}
 async function nucleoDriveSendDocument(id){const d=nucleoDriveState.documents.find(x=>x.id===id),r=nucleoDriveRequests().find(x=>x.id===d?.requestId);const email=r?.recipientEmail||r?.requesterEmail||r?.createdByEmail;if(!email){nucleoDriveStatus('A solicitação precisa ter o e-mail confirmado do solicitante.');return;}if(!confirm('Enviar '+d.fileName+' para '+email+'?'))return;try{nucleoDriveStatus('Enviando documento…');await nucleoDriveMutation('nucleo_drive_send',{id});await syncPortalBackend(false);await nucleoDriveRefresh();nucleoDriveStatus('Envio confirmado e registrado no histórico.');}catch(e){nucleoDriveStatus(e.message);}}
 
-async function nucleoDriveSendPdca(id){
+async function nucleoDriveSendPdca(id,selectedRo){
  const record=nucleoDriveState.pdcaFiles.find(x=>x.id===id);if(!record)return;
  const ros=[...new Set(record.links.map(l=>l.ro))];
- const roKey=ros.length===1?ros[0]:prompt('Qual R.O. deseja disponibilizar? '+ros.join(', '),ros[0]);
+ const roKey=selectedRo|| (ros.length===1?ros[0]:prompt('Qual R.O. deseja disponibilizar? '+ros.join(', '),ros[0]));
  if(!ros.includes(roKey))return;
  const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===roKey);if(!ro){nucleoDriveStatus('Sincronize a R.O. antes de confirmar o reclamante.');return;}
  const users=claimantIdentityIndex().users.filter(u=>u.personId),suggested=resolveRoClaimant(ro),registrant=roRegistrantName(ro);

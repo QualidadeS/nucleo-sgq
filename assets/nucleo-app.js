@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-pdcaretorno8',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-pdcaclaimant9',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -9953,7 +9953,7 @@ function renderSentPdcas(){
   const date=new Date(p.sentAt||p.envio),when=Number.isNaN(date.getTime())?p.envio:date.toLocaleString('pt-BR');
   const claimant=user?personDisplayName(user):(ro?roRegistrantName(ro):'');
   const detail=user?'Cadastro identificado':claimant?'Nome na R.O. — cadastro a confirmar':'Reclamante não identificado';
-  return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div></td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(p.status||'')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
+  return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(isAdmin()&&p.externalPdf?'<button class="btn secondary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Confirmar reclamante</button>':'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(p.status||'')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
 
@@ -14484,6 +14484,9 @@ function getSubmittedRoTrackingState(ro){
   if(contest?.status==='accepted'){
     return {code:'done',label:'Encerrada após contestação',sector:tri?.responsibleSector||'',pdca:'Não se aplica',returnState:ret};
   }
+  if(tri?.decision==='obsolete'){
+    return {code:'done',label:'Obsoleta',sector:'',pdca:'Não se aplica',returnState:ret};
+  }
   if(tri?.decision==='cancelled'){
     return {code:'done',label:'Cancelada pelo SGQ',sector:'',pdca:'Não se aplica',returnState:ret};
   }
@@ -14521,6 +14524,10 @@ function showMySubmittedRos(){
   renderMySubmittedRos();
 }
 
+function submittedRoRowClass(ro){
+ const decision=getRoTriageRecord(ro)?.decision;
+ return decision==='cancelled'?'submitted-ro-cancelled':decision==='record'?'submitted-ro-record':decision==='obsolete'?'submitted-ro-obsolete':'';
+}
 function renderMySubmittedRos(){
   if(isAdmin())return;
 
@@ -14554,7 +14561,7 @@ function renderMySubmittedRos(){
   if(!body)return;
 
   body.innerHTML=rowsData.length?rowsData.map(({ro,state})=>`
-    <tr>
+    <tr class="${submittedRoRowClass(ro)}">
       <td><b>${escapeHtml(ro.numero||'-')}</b></td>
       <td>${escapeHtml(ro.data||'-')}</td>
       <td>${escapeHtml(ro.cliente||'-')}</td>
@@ -15964,7 +15971,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-pdcaretorno8',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-pdcaclaimant9',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16015,4 +16022,23 @@ async function openMyRoResponses(ro){
  modal.innerHTML='<div style="background:white;border-radius:14px;padding:22px;max-width:850px;width:100%;max-height:90vh;overflow:auto"><h3>Respostas — '+escapeHtml(ro)+'</h3><button class="btn secondary" id="myResponsesClose">Fechar</button><div id="myResponsesItems" role="status">Consultando respostas disponibilizadas…</div></div>';document.body.appendChild(modal);modal.querySelector('#myResponsesClose').onclick=()=>modal.remove();
  const host=modal.querySelector('#myResponsesItems');
  try{const result=await portalJsonp({acao:'nucleo_drive_my_responses',ro},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível consultar as respostas.');const items=result.items||[];host.innerHTML=items.length?items.map((p,i)=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.fileName)+'</b><p>'+escapeHtml(p.sector)+' · V'+escapeHtml(p.version)+' · '+escapeHtml(new Date(p.createdAt).toLocaleString('pt-BR'))+'</p><button class="btn primary" data-response="'+i+'">Visualizar / baixar PDCA</button></div>').join(''):'Nenhuma resposta foi disponibilizada para o seu cadastro ainda. O SGQ precisa confirmar o reclamante e disponibilizar o PDCA no Núcleo.';host.querySelectorAll('[data-response]').forEach(btn=>btn.onclick=()=>{const p=items[Number(btn.dataset.response)];nucleoDriveOpenExternalPdf({...p,setor:p.sector});});}catch(e){host.textContent=e.message;}
+}
+
+async function confirmReceivedPdcaClaimant(id){
+ if(!isAdmin())return;
+ const p=getAllSentPdcas().find(x=>String(x.id)===String(id));if(!p?.externalPdf)return;
+ try{
+  await nucleoDriveLoad();
+  const unit=explicitRecordUnit(p);if(!['matriz','filial'].includes(unit))throw new Error('Unidade da resposta não identificada.');
+  nucleoDriveState.unit=unit;
+  let host=document.getElementById('nucleoDriveOverlay');if(host)host.remove();
+  host=document.createElement('div');host.id='nucleoDriveOverlay';host.style.cssText='position:fixed;inset:0;background:#16324d88;z-index:99990;display:flex;padding:20px;align-items:center;justify-content:center';
+  host.innerHTML='<div style="background:white;border-radius:16px;padding:22px;width:min(900px,100%);max-height:94vh;overflow:auto"><button class="btn secondary" id="ndReceivedClose">Fechar</button><p id="ndStatus" role="status">Consultando resposta na base central…</p><div id="ndContent"></div></div>';
+  document.body.appendChild(host);document.getElementById('ndReceivedClose').onclick=()=>{if(!nucleoDriveState.busy)host.remove();};
+  const result=await nucleoDriveApi('nucleo_drive_overview');nucleoDriveState.pdcaFiles=result.pdcaFiles||[];
+  const record=nucleoDriveState.pdcaFiles.find(x=>x.id===p.pdcaFileId||x.fileId===p.fileId);
+  if(!record)throw new Error('Resposta não encontrada na base central. Sincronize e tente novamente.');
+  nucleoDriveStatus('Confirme o cadastro para liberar o PDF ao reclamante.');
+  await nucleoDriveSendPdca(record.id,p.ro);
+ }catch(e){const status=document.getElementById('ndStatus');if(status)status.textContent=e.message;else alert(e.message);}
 }
