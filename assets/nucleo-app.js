@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-externa1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-campos1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -4597,7 +4597,7 @@ function openRoReport(id){
   const extraLabels=[
     'Matrícula','Matricula',
     'Nome e Sobrenome (responsável pelo registro deste formulário):',
-    'Número do pedido:','Código do item:','Ordem de produção (código de barras):',
+    'Número do pedido:','Código do item:','Ordem de produção (código de barras):','Nota Fiscal','Pessoa',
     'Quantidade de peças com desvio:','Peso do material descartado e/ou reaproveitado:',
     'Liberado pelo setor de qualidade?','Registre o nome de quem liberou:',
     'Ação preventiva','Prazo conclusão ação','Data Envio',
@@ -10951,7 +10951,7 @@ function normalizeImportedRo(raw,index){
   const produto=String(firstValue(raw,['Código do item:','Código do item','Código do Produto','Código do produto','Produto','Item','Produto:','Código produto','Codigo produto'])||'').trim();
   const pedido=String(firstValue(raw,['Número do pedido:','Número do pedido','Pedido','Nº Pedido','Pedido:','N° Pedido'])||'').trim();
   const notaFiscal=String(firstValue(raw,['Nota Fiscal','NF','Nº NF','Número da nota','Nota Fiscal:','N° NF','Nº Nota Fiscal'])||'').trim();
-  const quantidade=String(firstValue(raw,['Quantidade','Qtd','Qtd.','Quantidade não conforme','Qtd. não conforme','Qtd Não Conforme'])||'').trim();
+  const quantidade=String(firstValue(raw,['Quantidade de peças com desvio:','Quantidade','Qtd','Qtd.','Quantidade não conforme','Qtd. não conforme','Qtd Não Conforme'])||'').trim();
   const representante=String(firstValue(raw,['Representante','REPRESENTANTE','Nome do representante'])||'').trim();
   const dataReclamacao=String(firstValue(raw,['Data da Reclamação','Data da reclamação','Data Reclamação'])||'').trim();
   const pessoaResponsavel=String(
@@ -15970,7 +15970,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-externa1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-campos1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
