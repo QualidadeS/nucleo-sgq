@@ -3929,7 +3929,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <p class="small" style="margin-top:5px">Usuários, setores, triagem, avisos, base central e integração.</p>
 
   <div class="admin-config-nav" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-    <button type="button" onclick="document.getElementById('unitQualitySettings')?.scrollIntoView({behavior:'smooth'})">🏭 Unidades e pastas do Drive</button>
+    <button type="button" onclick="openUnitDriveSettings()">🏭 Unidades e pastas do Drive</button>
     <button type="button" onclick="document.getElementById('cfgUsers')?.scrollIntoView({behavior:'smooth'})">👥 Usuários e acessos</button>
     <button type="button" onclick="document.getElementById('cfgUnits')?.scrollIntoView({behavior:'smooth'})">🏭 Setores</button>
     <button type="button" onclick="document.getElementById('cfgSectorAliases')?.scrollIntoView({behavior:'smooth'})">≋ Padronização de setores</button>
@@ -4212,7 +4212,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261002-campos1"></script>
+<script src="assets/nucleo-app.js?v=20261002-pastas2"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">

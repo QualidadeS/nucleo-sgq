@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-campos1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-pastas2',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -15970,7 +15970,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-campos1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-pastas2',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16001,3 +16001,17 @@ const ndOriginalPdcaPresentation=openPdcaPresentation;
 openPdcaPresentation=function(p){if(p?.externalPdf)return nucleoDriveOpenExternalPdf(p);return ndOriginalPdcaPresentation(p);};
 
 saveStandardDocument=async function(){try{await nucleoDriveLoad();await nucleoDriveUploadStandard();}catch(e){alert(e.message);}};
+
+function openUnitDriveSettings(){
+  if(!isAdmin())return;
+  ensureUnitQualitySettings();
+  nucleoDriveSettingsShortcut();
+  const box=document.getElementById('unitQualitySettings');
+  if(!box){alert('Não foi possível abrir as configurações por unidade.');return;}
+  box.classList.remove('hidden');box.hidden=false;box.style.display='block';
+  const settings=document.getElementById('settingsView');settings.classList.remove('hidden');
+  box.scrollIntoView({behavior:'smooth',block:'start'});
+  const field=document.getElementById('qualityConfigUnit');
+  if(field&&!field.disabled)field.focus({preventScroll:true});
+  box.style.outline='2px solid #1455ff';setTimeout(()=>box.style.outline='',1500);
+}
