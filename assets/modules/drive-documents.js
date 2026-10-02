@@ -101,7 +101,7 @@ async function nucleoDriveSavePdca(){
   stored=true;
   const existing=getSentPdcas(),byId=new Map(existing.map(x=>[x.id,x]));result.sentRecords.forEach(x=>byId.set(x.id,x));localStorage.setItem(SENT_PDCA_KEY,JSON.stringify([...byId.values()]));
   const files=nucleoDriveState.pdcaFiles.filter(x=>x.id!==result.record.id);files.push(result.record);nucleoDriveState.pdcaFiles=files;nucleoDriveState.previousId='';nucleoDriveState.selectedPdf=null;nucleoDriveState.links=[];nucleoDriveState.parsed=null;
-  nucleoDriveRenderPdca();nucleoDriveSavedNotice(savedRos,result.record.fileName);nucleoDriveStatus(result.alreadyLinked?'Este PDF já estava vinculado. Registro localizado em PDCAs recebidos.':'PDCA confirmado em PDCAs recebidos.');
+  nucleoDriveRenderPdca();nucleoDriveSavedNotice(savedRos,result.record.fileName,result.record.id);nucleoDriveStatus(result.alreadyLinked?'Este PDF já estava vinculado. Registro localizado em PDCAs recebidos.':'PDCA confirmado em PDCAs recebidos.');
  }catch(e){status.textContent='Não foi possível concluir: '+e.message;status.style.color='#b42318';status.scrollIntoView({behavior:'smooth',block:'center'});nucleoDriveStatus(e.message);}
  finally{if(!stored)btn.disabled=false;}
 }
@@ -199,9 +199,12 @@ nucleoDriveRenderLinks=function(){
  const edit=document.createElement('button');edit.className='btn secondary';edit.textContent='Alterar reclamante';edit.disabled=!ro;edit.onclick=()=>nucleoDriveEditClaimant(link.ro,info);info.appendChild(document.createElement('br'));info.appendChild(edit);
  row.appendChild(info);});
 };
-function nucleoDriveSavedNotice(ros,fileName){
+function nucleoDriveSavedNotice(ros,fileName,pdcaId){
  const card=document.createElement('div');card.className='card';card.style.cssText='padding:22px;background:#edf8f0;border:2px solid #98c9a5;margin:12px 0';card.setAttribute('role','status');
  card.innerHTML='<h3>Resposta armazenada com sucesso</h3><p>A base central confirmou o recebimento de <b>'+nucleoDriveEscape(fileName)+'</b>.</p><p>Vínculos: '+nucleoDriveEscape(ros.join(', '))+'</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" id="ndContinueImport">Continuar importando PDCAs</button><button class="btn secondary" id="ndGoReceived">Ver todos os PDCAs recebidos</button><button class="btn secondary" id="ndExitImport">Sair</button></div><p class="small">A confirmação registra o PDCA em PDCAs recebidos. A disponibilização ao reclamante é uma etapa separada.</p>';
+ const claimantActions=document.createElement('div');claimantActions.style.cssText='margin:14px 0;display:flex;gap:10px;flex-wrap:wrap';
+ [...new Set(ros)].forEach(roKey=>{const btn=document.createElement('button');btn.className='btn primary';btn.textContent='Confirmar reclamante'+(ros.length>1?' — '+roKey:'');btn.onclick=()=>nucleoDriveSendPdca(pdcaId,roKey);claimantActions.appendChild(btn);});
+ card.insertBefore(claimantActions,card.querySelector('div'));
  document.getElementById('ndContent').prepend(card);card.scrollIntoView({behavior:'smooth',block:'start'});
  card.querySelector('#ndContinueImport').onclick=()=>{nucleoDriveState.selectedPdf=null;nucleoDriveState.parsed=null;nucleoDriveState.links=[];nucleoDriveState.previousId='';nucleoDriveRenderPdca();nucleoDriveStatus('Selecione o próximo PDF para importar.');document.getElementById('ndPdf')?.scrollIntoView({behavior:'smooth',block:'center'});};
  card.querySelector('#ndGoReceived').onclick=()=>{document.getElementById('nucleoDriveOverlay')?.remove();const search=document.getElementById('sentSearch');if(search)search.value='';const filter=document.getElementById('sentStatusFilter');if(filter)filter.value='todos';showSentPdcas();};
