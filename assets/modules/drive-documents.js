@@ -134,8 +134,10 @@ nucleoDriveRenderLinks=function(){
  row.appendChild(info);});
 };
 function nucleoDriveSavedNotice(ros,fileName){
- const card=document.createElement('div');card.className='card';card.style.cssText='padding:18px;background:#edf8f0;border:1px solid #98c9a5;margin:12px 0';card.setAttribute('role','status');
- card.innerHTML='<h3>PDCA recebido e vinculado</h3><p>'+nucleoDriveEscape(fileName)+'<br>'+nucleoDriveEscape(ros.join(', '))+'</p><button class="btn primary" id="ndGoReceived">Ver em PDCAs recebidos</button><p class="small">Para liberar ao reclamante, use Disponibilizar no Núcleo na resposta armazenada abaixo.</p>';
+ const card=document.createElement('div');card.className='card';card.style.cssText='padding:22px;background:#edf8f0;border:2px solid #98c9a5;margin:12px 0';card.setAttribute('role','status');
+ card.innerHTML='<h3>Resposta armazenada com sucesso</h3><p>A base central confirmou o recebimento de <b>'+nucleoDriveEscape(fileName)+'</b>.</p><p>Vínculos: '+nucleoDriveEscape(ros.join(', '))+'</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" id="ndContinueImport">Continuar importando PDCAs</button><button class="btn secondary" id="ndGoReceived">Ver todos os PDCAs recebidos</button><button class="btn secondary" id="ndExitImport">Sair</button></div><p class="small">A confirmação registra o PDCA em PDCAs recebidos. A disponibilização ao reclamante é uma etapa separada.</p>';
  document.getElementById('ndContent').prepend(card);card.scrollIntoView({behavior:'smooth',block:'start'});
- card.querySelector('button').onclick=()=>{document.getElementById('nucleoDriveOverlay')?.remove();const search=document.getElementById('sentSearch');if(search)search.value=ros[0]||'';const filter=document.getElementById('sentStatusFilter');if(filter)filter.value='todos';showSentPdcas();};
+ card.querySelector('#ndContinueImport').onclick=()=>{nucleoDriveState.selectedPdf=null;nucleoDriveState.parsed=null;nucleoDriveState.links=[];nucleoDriveState.previousId='';nucleoDriveRenderPdca();nucleoDriveStatus('Selecione o próximo PDF para importar.');document.getElementById('ndPdf')?.scrollIntoView({behavior:'smooth',block:'center'});};
+ card.querySelector('#ndGoReceived').onclick=()=>{document.getElementById('nucleoDriveOverlay')?.remove();const search=document.getElementById('sentSearch');if(search)search.value='';const filter=document.getElementById('sentStatusFilter');if(filter)filter.value='todos';showSentPdcas();};
+ card.querySelector('#ndExitImport').onclick=()=>document.getElementById('nucleoDriveOverlay')?.remove();
 }
