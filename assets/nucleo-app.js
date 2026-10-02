@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-docdrive17',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-docsave18',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -11969,7 +11969,7 @@ function openStandardDocumentCreate(){
         <label style="grid-column:1/-1"><span class="small">Arquivo *</span><input id="stdDocFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"></label>
       </div>
       <div id="stdDocUploadStatus" class="small" style="margin-top:12px"></div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn primary" type="button" onclick="saveStandardDocument()">Armazenar documento padrão</button></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn primary" type="button" id="stdDocSave" onclick="saveStandardDocument()">Armazenar documento padrão</button></div>
     </div>
   </div>`;
 }
@@ -15992,7 +15992,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-docdrive17',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-docsave18',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;

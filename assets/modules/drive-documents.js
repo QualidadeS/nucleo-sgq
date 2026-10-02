@@ -183,7 +183,27 @@ async function nucleoDriveAssignLegacy(collection,id){if(getSession()?.role!=='a
 const ndRequestsWithLegacy=nucleoDriveRenderRequests;
 nucleoDriveRenderRequests=function(){ndRequestsWithLegacy();document.getElementById('ndContent').insertAdjacentHTML('beforeend',nucleoDriveLegacyHtml());};
 
-async function nucleoDriveUploadStandard(){if(!isAdmin())return;const status=document.getElementById('stdDocUploadStatus');try{const val=id=>String(document.getElementById(id)?.value||'').trim(),file=document.getElementById('stdDocFile')?.files[0],fileId=val('ndStandardDriveId');if((!file&&!fileId)||!val('stdDocName')||!val('stdDocCode'))throw new Error('Informe nome, tipo de documento e arquivo.');if(file&&!fileId&&file.size>8*1024*1024)throw new Error('Use um arquivo de até 8 MB.');const unit=val('ndStandardUnit')||nucleoDriveUnit(),id='STD-'+Date.now()+'-'+Math.random().toString(36).slice(2),at=new Date().toISOString(),metadata={id,unit,name:val('stdDocName'),code:val('stdDocCode'),version:val('stdDocVersion'),validUntil:val('stdDocValidUntil'),productCode:val('stdDocProduct'),language:val('stdDocLanguage'),reviewDays:Number(val('stdDocReviewDays')||30),fillable:!!document.getElementById('stdDocFillable')?.checked,description:val('stdDocDescription'),active:true,status:'active',createdAt:at,updatedAt:at};if(status)status.textContent='Armazenando e aguardando confirmação central…';await nucleoDriveMutation('nucleo_drive_standard_upload',{unit,id,metadata:JSON.stringify(metadata),...(fileId?{fileId}:{fileName:file.name,mimeType:file.type||'application/octet-stream',fileData:await fileToBase64(file)})});await syncPortalBackend(false);renderStandardDocumentsWorkspace();}catch(e){if(status)status.textContent=e.message;else alert(e.message);}}
+async function nucleoDriveUploadStandard(){
+ if(!isAdmin())return;const status=document.getElementById('stdDocUploadStatus'),btn=document.getElementById('stdDocSave');if(btn?.disabled)return;
+ const show=(text,error=false)=>{if(status){status.textContent=text;status.style.cssText='margin-top:12px;padding:12px;border-radius:8px;background:'+(error?'#fff0f0':'#edf8f0')+';color:'+(error?'#a12f2f':'#23633b');status.scrollIntoView({behavior:'smooth',block:'nearest'});}else alert(text);};
+ let saved=false;
+ try{
+  const val=id=>String(document.getElementById(id)?.value||'').trim(),file=document.getElementById('stdDocFile')?.files[0],fileId=val('ndStandardDriveId');
+  if((!file&&!fileId)||!val('stdDocName')||!val('stdDocCode'))throw new Error('Informe nome, tipo de documento e arquivo.');
+  if(file&&!fileId&&file.size>8*1024*1024)throw new Error('Use um arquivo de até 8 MB.');
+  const unit=val('ndStandardUnit')||nucleoDriveUnit(),id='STD-'+Date.now()+'-'+Math.random().toString(36).slice(2),at=new Date().toISOString(),metadata={id,unit,name:val('stdDocName'),code:val('stdDocCode'),version:val('stdDocVersion'),validUntil:val('stdDocValidUntil'),productCode:val('stdDocProduct'),language:val('stdDocLanguage'),reviewDays:Number(val('stdDocReviewDays')||30),fillable:!!document.getElementById('stdDocFillable')?.checked,description:val('stdDocDescription'),active:true,status:'active',createdAt:at,updatedAt:at};
+  if(btn){btn.disabled=true;btn.textContent='Armazenando…';}show('Armazenando na base central. Aguarde a confirmação…');
+  const result=await nucleoDriveMutation('nucleo_drive_standard_upload',{unit,id,metadata:JSON.stringify(metadata),...(fileId?{fileId}:{fileName:file.name,mimeType:file.type||'application/octet-stream',fileData:await fileToBase64(file)})});
+  if(!result?.sucesso||result.id!==id||!result.fileId)throw new Error('A base central não confirmou o cadastro do documento.');
+  saved=true;
+  const record=result.record||{...metadata,fileId:result.fileId,fileName:result.fileName,mimeType:file?.type||'application/octet-stream',uploadPending:false};
+  try{saveStandardDocumentsLocal([record,...getStandardDocuments().filter(d=>d.id!==id)]);}catch(e){console.warn('Documento salvo; atualização local pendente.',e);}
+  show('Documento armazenado com sucesso na base central: '+metadata.name+'.');
+  if(btn){btn.textContent='Documento armazenado';const next=document.createElement('button');next.type='button';next.className='btn secondary';next.textContent='Ver documentos cadastrados';next.onclick=()=>renderStandardDocumentsWorkspace();btn.after(next);}
+ }catch(e){show('Não foi possível concluir o cadastro: '+e.message,true);}
+ finally{if(btn&&!saved){btn.disabled=false;btn.textContent='Tentar armazenar novamente';}}
+}
+
 
 function nucleoDriveScrollToConfirmation(){
  const box=document.getElementById('ndPdcaConfirm');if(!box)return;
