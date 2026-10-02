@@ -124,20 +124,48 @@ function nucleoDriveFillRequest(){const request=nucleoDriveRequests().find(r=>r.
 async function nucleoDriveGenerateDocument(){const btn=document.getElementById('ndGenerate');btn.disabled=true;try{const values={};document.querySelectorAll('[data-nd-field]').forEach(el=>values[el.dataset.ndField]=el.value);nucleoDriveStatus('Gerando PDF na pasta de documentos solicitados…');await nucleoDriveMutation('nucleo_drive_generate',{requestId:document.getElementById('ndRequest').value,templateId:document.getElementById('ndRequestTemplate').value,values:JSON.stringify(values)});await syncPortalBackend(false);await nucleoDriveRefresh();nucleoDriveStatus('Documento armazenado. Confira o PDF antes de enviar.');}catch(e){nucleoDriveStatus(e.message);}finally{btn.disabled=false;}}
 async function nucleoDriveSendDocument(id){const d=nucleoDriveState.documents.find(x=>x.id===id),r=nucleoDriveRequests().find(x=>x.id===d?.requestId);const email=r?.recipientEmail||r?.requesterEmail||r?.createdByEmail;if(!email){nucleoDriveStatus('A solicitação precisa ter o e-mail confirmado do solicitante.');return;}if(!confirm('Enviar '+d.fileName+' para '+email+'?'))return;try{nucleoDriveStatus('Enviando documento…');await nucleoDriveMutation('nucleo_drive_send',{id});await syncPortalBackend(false);await nucleoDriveRefresh();nucleoDriveStatus('Envio confirmado e registrado no histórico.');}catch(e){nucleoDriveStatus(e.message);}}
 
+function nucleoDriveSuggestedClaimant(ro,users){
+ const exact=resolveRoClaimant(ro);if(exact?.personId&&users.some(u=>u.personId===exact.personId))return {user:exact,shortName:false};
+ const key=personNameKey(roRegistrantName(ro)),parts=key.split(' ').filter(Boolean);if(!parts.length||parts[0].length<3)return {user:null,shortName:false};
+ const unit=explicitRecordUnit(ro);
+ const candidates=users.filter(u=>{
+  const global=/^(todas|todos|geral)$/i.test(String(u.unit||'').trim());
+  const allowed=global||explicitRecordUnit({unit:u.unit})===unit||(u.sectorMemberships||[]).some(m=>m.unit===unit);
+  if(!unit||!allowed)return false;
+  return [u.name,...(u.aliases||[])].some(name=>{const other=personNameKey(name).split(' ').filter(Boolean);return other[0]===parts[0]&&(other.length===1||parts.length===1);});
+ });
+ const unique=[...new Map(candidates.map(u=>[u.personId,u])).values()];
+ return {user:unique.length===1?unique[0]:null,shortName:unique.length===1};
+}
 async function nucleoDriveSendPdca(id,selectedRo){
  const record=nucleoDriveState.pdcaFiles.find(x=>x.id===id);if(!record)return;
  const ros=[...new Set(record.links.map(l=>l.ro))];
  const roKey=selectedRo|| (ros.length===1?ros[0]:prompt('Qual R.O. deseja disponibilizar? '+ros.join(', '),ros[0]));
  if(!ros.includes(roKey))return;
  const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===roKey);if(!ro){nucleoDriveStatus('Sincronize a R.O. antes de confirmar o reclamante.');return;}
- const users=claimantIdentityIndex().users.filter(u=>u.personId),suggested=resolveRoClaimant(ro),registrant=roRegistrantName(ro);
+ claimantIdentityCache=null;
+ const users=claimantIdentityIndex().users.filter(u=>u.personId),suggestion=nucleoDriveSuggestedClaimant(ro,users),suggested=suggestion.user,registrant=roRegistrantName(ro);
  const area=document.createElement('div');area.id='ndDispatchConfirm';document.getElementById('ndDispatchConfirm')?.remove();
  area.className='card';area.style.padding='18px';
- area.innerHTML='<h3>Confirmar reclamante — '+nucleoDriveEscape(roKey)+'</h3><p>Nome na R.O.: <b>'+nucleoDriveEscape(registrant)+'</b></p><p>Cliente: '+nucleoDriveEscape(ro.cliente)+' · Unidade: '+nucleoDriveEscape(ro.unidade)+'</p><p>Setor que respondeu: '+nucleoDriveEscape(record.links.filter(l=>l.ro===roKey).map(l=>l.sector).join(', '))+'</p><button class="btn secondary" id="ndCheckRo">Ver R.O.</button><label style="display:block;margin:12px 0">Cadastro do reclamante<select id="ndClaimant"><option value="">Selecione a pessoa</option>'+users.map(u=>'<option value="'+nucleoDriveEscape(u.personId)+'" '+(u.personId===suggested?.personId?'selected':'')+'>'+nucleoDriveEscape(personDisplayName(u)+' · '+(u.sector||'')+' · '+(u.unit||''))+'</option>').join('')+'</select></label><p class="small">Confirmação obrigatória durante a validação inicial, inclusive após as primeiras 20 identificações. Nenhum e-mail será enviado.</p><p>Este PDF contém: '+nucleoDriveEscape(ros.join(', '))+'. O reclamante terá acesso ao arquivo completo.</p><label><input type="checkbox" id="ndClaimantChecked"> Conferi a R.O. e confirmo que esse cadastro é o reclamante correto.</label><p><button class="btn primary" id="ndDispatchNow">Confirmar e disponibilizar</button> <button class="btn secondary" id="ndDispatchCancel">Cancelar</button></p><p id="ndDispatchStatus" role="status"></p>';
+ area.innerHTML='<h3>Confirmar reclamante — '+nucleoDriveEscape(roKey)+'</h3><p>Nome na R.O.: <b>'+nucleoDriveEscape(registrant)+'</b></p><p>Cliente: '+nucleoDriveEscape(ro.cliente)+' · Unidade: '+nucleoDriveEscape(ro.unidade)+'</p><p>Setor que respondeu: '+nucleoDriveEscape(record.links.filter(l=>l.ro===roKey).map(l=>l.sector).join(', '))+'</p><button class="btn secondary" id="ndCheckRo">Ver R.O.</button><label style="display:block;margin:12px 0">Cadastro do reclamante<select id="ndClaimant"><option value="">Selecione a pessoa</option>'+users.map(u=>'<option value="'+nucleoDriveEscape(u.personId)+'" '+(u.personId===suggested?.personId?'selected':'')+'>'+nucleoDriveEscape(personDisplayName(u)+' · '+(u.sector||'')+' · '+(u.unit||''))+'</option>').join('')+'</select></label>'+(suggestion.shortName?'<p class="small" style="color:#805d14">Cadastro sugerido pelo primeiro nome. Confira o nome completo na R.O. antes de confirmar.</p>':'')+'<p class="small">Confirmação obrigatória durante a validação inicial, inclusive após as primeiras 20 identificações. Nenhum e-mail será enviado.</p><p>Este PDF contém: '+nucleoDriveEscape(ros.join(', '))+'. O reclamante terá acesso ao arquivo completo.</p><label style="display:flex;align-items:flex-start;gap:10px;margin:16px 0;cursor:pointer"><input type="checkbox" id="ndClaimantChecked" style="width:22px;height:22px;min-width:22px;flex:0 0 22px;margin:0;accent-color:#1766a5"><span style="line-height:22px">Conferi a R.O. e confirmo que esse cadastro é o reclamante correto.</span></label><p><button class="btn primary" id="ndDispatchNow">Confirmar e disponibilizar</button> <button class="btn secondary" id="ndDispatchCancel">Cancelar</button></p><p id="ndDispatchStatus" role="status"></p>';
  document.getElementById('ndContent').prepend(area);area.scrollIntoView({behavior:'smooth'});
  document.getElementById('ndCheckRo').onclick=()=>openRoReport(roKey);
  document.getElementById('ndDispatchCancel').onclick=()=>area.remove();
- document.getElementById('ndDispatchNow').onclick=async()=>{const btn=document.getElementById('ndDispatchNow'),status=document.getElementById('ndDispatchStatus');if(!document.getElementById('ndClaimantChecked').checked||!document.getElementById('ndClaimant').value){status.textContent='Selecione o cadastro e marque a confirmação.';return;}btn.disabled=true;try{const result=await nucleoDriveMutation('nucleo_drive_dispatch_pdca',{id,ro:roKey,personId:document.getElementById('ndClaimant').value,registrant,confirmed:'1'});await syncPortalBackend(false);status.textContent='Disponibilizado no Núcleo. Identificações validadas: '+(result.validatedClaimants||'já registrada')+'.';}catch(e){status.textContent=e.message;}finally{btn.disabled=false;}};
+ document.getElementById('ndDispatchNow').onclick=async()=>{
+  const btn=area.querySelector('#ndDispatchNow'),status=area.querySelector('#ndDispatchStatus'),cancel=area.querySelector('#ndDispatchCancel'),select=area.querySelector('#ndClaimant'),checked=area.querySelector('#ndClaimantChecked');
+  const show=(message,kind)=>{status.textContent=message;status.style.cssText='padding:12px;border-radius:8px;font-weight:600;background:'+(kind==='success'?'#eaf7ee':kind==='error'?'#fff0f0':'#edf4fc')+';color:'+(kind==='success'?'#23633b':kind==='error'?'#a12f2f':'#234c73');status.scrollIntoView({behavior:'smooth',block:'nearest'});};
+  if(!checked.checked||!select.value){show('Selecione o cadastro e marque a confirmação.','error');return;}
+  btn.disabled=true;cancel.disabled=true;select.disabled=true;checked.disabled=true;btn.textContent='Confirmando…';show('Confirmando a disponibilização na base central. Aguarde…','pending');let saved=false;
+  try{
+   const result=await nucleoDriveMutation('nucleo_drive_dispatch_pdca',{id,ro:roKey,personId:select.value,registrant,confirmed:'1'});
+   if(!result?.record||result.record.ro!==roKey||result.record.recipientPersonId!==select.value)throw new Error('A base central não confirmou o destinatário desta resposta. Confira antes de tentar novamente.');
+   saved=true;show((result.alreadyDispatched?'Esta resposta já estava disponibilizada':'Resposta disponibilizada com sucesso')+' para '+(result.record.recipientName||select.options[select.selectedIndex].text)+'. O reclamante pode abrir o PDF em Respostas. Nenhum e-mail foi enviado.','success');
+   btn.textContent='Disponibilização confirmada';cancel.textContent='Concluir';
+   Promise.resolve().then(()=>syncPortalBackend(false)).catch(e=>console.warn('A resposta foi disponibilizada; atualização da tela pendente.',e));
+  }catch(e){show('Não foi possível confirmar a disponibilização: '+e.message,'error');}
+  finally{cancel.disabled=false;if(!saved){btn.disabled=false;select.disabled=false;checked.disabled=false;btn.textContent='Tentar novamente';}}
+ };
+
 }
 
 

@@ -1053,6 +1053,10 @@ body.external-ro-denied #navNewExternalRo{
 #mySubmittedRows tr.submitted-ro-cancelled>td{background:#fff0f0;}
 #mySubmittedRows tr.submitted-ro-record>td{background:#fff9e5;}
 #mySubmittedRows tr.submitted-ro-obsolete>td{background:#f0f1f3;color:#666;}
+#mySubmittedRows .submitted-ro-terminal-badge{border:1px solid transparent;font-weight:600;}
+#mySubmittedRows .submitted-ro-cancelled .submitted-ro-terminal-badge{background:#ffe3e3;color:#963d3d;border-color:#f2cccc;}
+#mySubmittedRows .submitted-ro-record .submitted-ro-terminal-badge{background:#fff0ba;color:#795e19;border-color:#e9d99c;}
+#mySubmittedRows .submitted-ro-obsolete .submitted-ro-terminal-badge{background:#e2e4e8;color:#555d68;border-color:#d1d5dc;}
 </style>
 <style id="notificationUiStyles">
 .notification-bell{position:relative;border:1px solid #d7dfdc;background:#fff;border-radius:10px;min-width:42px;height:38px;cursor:pointer;font-size:18px;display:inline-flex;align-items:center;justify-content:center}
@@ -4216,7 +4220,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261002-pdcaclaimant9"></script>
+<script src="assets/nucleo-app.js?v=20261002-rodecisions12"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4319,6 +4323,12 @@ Cancelada</textarea></label>
           <div class="label">Unidade da R.O. *</div>
           <select id="triageRoUnit"></select>
           <div class="small" style="margin-top:5px">O SGQ/ADM pode corrigir a unidade quando ela foi informada incorretamente no cadastro.</div>
+        </div>
+
+        <div class="field full" id="triageDecisionSectorField" style="display:none">
+          <div class="label">Setor responsável pela ocorrência</div>
+          <select id="triageDecisionSector"><option value="">Sem setor atribuído</option></select>
+          <div class="small">Identifica o setor relacionado à decisão, sem exigir PDCA.</div>
         </div>
 
         <div class="field full" id="triageSectorField">
