@@ -196,6 +196,7 @@ nucleoDriveRenderLinks=function(){
  nucleoDriveState.links.forEach((link,i)=>{const row=host.children[i];if(!row)return;const ro=nucleoDriveCandidates().find(r=>String(r.numero||r.id)===link.ro),user=ro?resolveRoClaimant(ro):null;
  const info=document.createElement('div');info.style.cssText='flex-basis:100%;padding:10px;background:#f1f5f9;border-radius:8px';
  info.innerHTML='<b>Reclamante na R.O.:</b> '+nucleoDriveEscape(ro?roRegistrantName(ro)||'Não informado':'Selecione uma R.O.')+'<br><b>Cadastro identificado:</b> '+nucleoDriveEscape(user?personDisplayName(user)+' · '+(user.sector||''):'Não identificado com segurança — o SGQ deverá escolher o cadastro.')+'<br><span class="small">Esta é uma sugestão. A confirmação do reclamante será feita antes de disponibilizar no Núcleo.</span>';
+ const edit=document.createElement('button');edit.className='btn secondary';edit.textContent='Alterar reclamante';edit.disabled=!ro;edit.onclick=()=>nucleoDriveEditClaimant(link.ro,info);info.appendChild(document.createElement('br'));info.appendChild(edit);
  row.appendChild(info);});
 };
 function nucleoDriveSavedNotice(ros,fileName){
@@ -205,4 +206,26 @@ function nucleoDriveSavedNotice(ros,fileName){
  card.querySelector('#ndContinueImport').onclick=()=>{nucleoDriveState.selectedPdf=null;nucleoDriveState.parsed=null;nucleoDriveState.links=[];nucleoDriveState.previousId='';nucleoDriveRenderPdca();nucleoDriveStatus('Selecione o próximo PDF para importar.');document.getElementById('ndPdf')?.scrollIntoView({behavior:'smooth',block:'center'});};
  card.querySelector('#ndGoReceived').onclick=()=>{document.getElementById('nucleoDriveOverlay')?.remove();const search=document.getElementById('sentSearch');if(search)search.value='';const filter=document.getElementById('sentStatusFilter');if(filter)filter.value='todos';showSentPdcas();};
  card.querySelector('#ndExitImport').onclick=()=>document.getElementById('nucleoDriveOverlay')?.remove();
+}
+
+async function nucleoDriveEditClaimant(roKey,host){
+ const ro=nucleoDriveCandidates().find(r=>String(r.numero||r.id)===roKey);if(!ro)return;
+ host.querySelector('.ndClaimantEditor')?.remove();
+ const unit=explicitRecordUnit(ro),users=claimantIdentityIndex().users.filter(u=>u.personId&&String(u.approvalStatus||'approved')==='approved'&&(['todas','todos','geral'].includes(String(u.unit||'').toLowerCase())||explicitRecordUnit({unit:u.unit})===unit||(u.sectorMemberships||[]).some(m=>explicitRecordUnit({unit:m.unit})===unit)));
+ const editor=document.createElement('div');editor.className='ndClaimantEditor';editor.style.marginTop='12px';
+ editor.innerHTML='<label>Cadastro correto do reclamante<select><option value="">Selecione a pessoa</option>'+users.map(u=>'<option value="'+nucleoDriveEscape(u.personId)+'">'+nucleoDriveEscape(personDisplayName(u)+' · '+(u.sector||''))+'</option>').join('')+'</select></label><p class="small">Confirma o cadastro desta R.O. sem alterar o nome original da planilha ou disponibilizar respostas.</p><button class="btn primary">Salvar reclamante</button> <button class="btn secondary">Cancelar</button><p role="status"></p>';
+ host.appendChild(editor);const select=editor.querySelector('select'),buttons=editor.querySelectorAll('button'),status=editor.querySelector('[role="status"]');
+ const current=resolveRoClaimant(ro);if(current)select.value=current.personId;
+ buttons[1].onclick=()=>editor.remove();
+ buttons[0].onclick=async()=>{
+  if(!select.value){status.textContent='Selecione o cadastro correto.';return;}
+  const person=users.find(u=>u.personId===select.value);if(!confirm('Confirmar '+roKey+' para '+personDisplayName(person)+'?'))return;
+  buttons.forEach(b=>b.disabled=true);select.disabled=true;status.textContent='Salvando reclamante na base central…';
+  try{
+   const result=await portalJsonp({acao:'portal_claimant_confirm',person:select.value,ro:roKey,registrant:roRegistrantName(ro),alias:'0'},60000);
+   if(!result?.sucesso||result.binding?.id!==roKey||result.binding?.personId!==select.value)throw new Error(result?.erro||'A base central não confirmou o vínculo.');
+   const bindings=[...claimantIdentityIndex().bindings.values()].filter(b=>b.id!==roKey);bindings.push(result.binding);localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(bindings));claimantIdentityCache=null;
+   nucleoDriveRenderLinks();nucleoDriveStatus('Reclamante salvo na base central: '+personDisplayName(person)+'. Nenhum envio realizado.');
+  }catch(e){status.textContent='Não foi possível salvar: '+e.message;buttons.forEach(b=>b.disabled=false);select.disabled=false;}
+ };
 }
