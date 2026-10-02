@@ -7,7 +7,7 @@ function renderStandardDocumentsWorkspace(){
     <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px"><div><h3 style="margin:0">Documentos padrão</h3><div class="small" style="margin-top:4px">Arquivos vigentes podem ser enviados automaticamente quando uma solicitação compatível for criada.</div></div><button class="btn primary" type="button" onclick="openStandardDocumentCreate()">＋ Novo documento padrão</button></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:16px">
       ${docs.length?docs.map(d=>`<div class="card" style="padding:16px">
-        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>${escapeHtml(d.name||'Documento')}</b><div class="small" style="margin-top:3px">${escapeHtml(standardDocumentTypeLabel(d.code))}${d.productCode?' · '+escapeHtml(d.productCode):''}</div></div><span class="pill">${d.uploadPending&&!d.fileId?'Enviando':standardDocumentIsValid(d)?'Vigente':'Indisponível'}</span></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><b>${escapeHtml(d.name||'Documento')}</b><div class="small" style="margin-top:3px">${escapeHtml(standardDocumentTypeLabel(d.code,explicitRecordUnit(d)))}${d.productCode?' · '+escapeHtml(d.productCode):''}</div></div><span class="pill">${d.uploadPending&&!d.fileId?'Enviando':standardDocumentIsValid(d)?'Vigente':'Indisponível'}</span></div>
         <div class="small" style="margin-top:12px;line-height:1.6">Versão: <b>${escapeHtml(d.version||'—')}</b><br>Idioma: ${escapeHtml(d.language||'Qualquer')}<br>Validade: ${escapeHtml(adminModuleDate(d.validUntil))}<br>Arquivo: ${escapeHtml(d.fileName||'—')}</div>
         ${d.description?`<div class="small" style="margin-top:8px">${escapeHtml(d.description)}</div>`:''}
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn secondary" type="button" onclick="toggleStandardDocument('${escapeHtml(d.id)}')">${d.active===false?'Ativar':'Desativar'}</button><button class="btn secondary" type="button" onclick="deleteStandardDocument('${escapeHtml(d.id)}')">Excluir</button></div>
@@ -130,17 +130,7 @@ function adminModuleFields(key){
     documents:`
       <label><span class="small">Documento solicitado *</span>
         <select id="admModCode">
-          <option value="">Selecione...</option>
-          <option value="fispq">FISPQ / FDS</option>
-          <option value="technical_sheet">Ficha Técnica</option>
-          <option value="analysis_certificate">Certificado de Análise</option>
-          <option value="factory_report">Laudo para item em fabricação</option>
-          <option value="product_document">Documento para produto específico</option>
-          <option value="permit">Alvará</option>
-          <option value="environmental_license">Licença Ambiental</option>
-          <option value="avcb">AVCB</option>
-          <option value="declaration">Declaração / Certificado</option>
-          <option value="other">Outro documento</option>
+          ${documentTypeOptions(getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz')}
         </select>
       </label>
       <label><span class="small">Título / necessidade *</span><input id="admModTitle" placeholder="Ex.: FISPQ do produto 123"></label>
@@ -407,4 +397,4 @@ function editAdminOperationalRecord(id){
 const ndOriginalShowAdmin=showAdminOperationalModule;
 showAdminOperationalModule=function(key){const result=ndOriginalShowAdmin(key);const host=document.getElementById('adminModuleContent');if(host&&['documents','processes'].includes(key)){const btn=document.createElement('button');btn.className='btn primary';btn.style.margin='12px 0';btn.textContent=key==='processes'?'Modelos de documentos solicitados':'Preencher e gerar documento solicitado';btn.onclick=()=>nucleoDriveOpen(key==='processes'?'templates':'requests');host.prepend(btn);}return result;};
 const ndOriginalAdminFields=adminModuleFields;
-adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='documents'){const unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';html='<label>Unidade da solicitação<select id="ndRequestUnit" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz" '+(unit==='matriz'?'selected':'')+'>SETA SC — Matriz</option><option value="filial" '+(unit==='filial'?'selected':'')+'>SETA ES — Unidade Linhares</option></select></label>'+html;}return html;};
+adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='documents'){const unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';html='<label>Unidade da solicitação<select id="ndRequestUnit" onchange="document.getElementById(\'admModCode\').innerHTML=documentTypeOptions(this.value)" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz" '+(unit==='matriz'?'selected':'')+'>SETA SC — Matriz</option><option value="filial" '+(unit==='filial'?'selected':'')+'>SETA ES — Unidade Linhares</option></select></label>'+html;}return html;};
