@@ -187,6 +187,8 @@ function adminModuleFields(key){
 }
 
 function showAdminOperationalModule(key){
+  const permissionModule={nc_capa:'nc',nccapa:'nc',documents:'documents',equipment:'equipment',training:'training',processes:'processes'}[key]||key;if(getSession()?.permissions&&!nucleoPersonCan(permissionModule)){alert('Seu cadastro não tem acesso a esta área.');return;}
+
   const documentsUserAccess=key==='documents' && canRequestDocuments();
   const ncCapaAccess=key==='nccapa' && canOperateNcCapa();
   if(!isAdmin()&&!documentsUserAccess&&!ncCapaAccess){

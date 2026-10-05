@@ -2519,6 +2519,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 <style id="sidebarAccessVisibility">
 .side-nav .side-item.hidden,.side-nav .side-independent-module.hidden,#navDocumentRequests.hidden{display:none!important}
 </style>
+<style>body:not(.nucleo-sgq-session) .sgq-only{display:none!important}</style>
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -3944,11 +3945,11 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
     <button type="button" onclick="document.getElementById('cfgUsers')?.scrollIntoView({behavior:'smooth'})">👥 Usuários e acessos</button>
     <button type="button" onclick="document.getElementById('cfgUnits')?.scrollIntoView({behavior:'smooth'})">🏭 Setores</button>
     <button type="button" onclick="document.getElementById('cfgSectorAliases')?.scrollIntoView({behavior:'smooth'})">≋ Padronização de setores</button>
-    <button type="button" onclick="document.getElementById('cfgTriage')?.scrollIntoView({behavior:'smooth'})">↳ Triagem de R.O.</button>
+    <button class="sgq-only" type="button" onclick="document.getElementById('cfgTriage')?.scrollIntoView({behavior:'smooth'})">↳ Triagem de R.O.</button>
     <button type="button" onclick="document.getElementById('cfgNotifications')?.scrollIntoView({behavior:'smooth'})">🔔 Avisos e e-mails</button>
     <button type="button" onclick="document.getElementById('cfgBackend')?.scrollIntoView({behavior:'smooth'})">☁ Base central</button>
     <button type="button" onclick="document.getElementById('cfgTestCleanup')?.scrollIntoView({behavior:'smooth'})">⌫ Limpeza de testes</button>
-    <button type="button" onclick="document.getElementById('cfgIntegration')?.scrollIntoView({behavior:'smooth'})">↻ Integração</button>
+    <button class="sgq-only" type="button" onclick="document.getElementById('cfgIntegration')?.scrollIntoView({behavior:'smooth'})">↻ Integração</button>
   </div>
 
   <div id="configSavedState" class="statusline hidden" style="margin-bottom:12px"></div>
@@ -3959,7 +3960,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   </div>
 
   <div id="cfgUsers" class="config-section active"><h2 style="margin:0 0 12px">1. Usuários e acessos</h2><button class="btn secondary" type="button" onclick="openPersonIdentityManager()">Identidades e confirmação de reclamantes</button>
-    <div class="settings-block">
+    <div class="settings-block sgq-only" id="sgqAdminRegistration">
       <h3>Administradores / SGQ</h3>
       <p class="help">Usuários com acesso à triagem, indicadores, conferência de ações e configurações.</p>
       <div class="settings-grid">
@@ -4031,7 +4032,7 @@ Faturamento</textarea></label>
       <div id="sectorAliasSuggestions" class="small" style="margin-top:10px"></div>
       <div id="sectorAliasList" class="admin-users" style="margin-top:10px"></div>
     </div>
-<div id="cfgTriage" class="config-section"><h2 style="margin:0 0 12px">3. Recebimento e triagem das R.O.s</h2>
+<div id="cfgTriage" class="config-section sgq-only"><h2 style="margin:0 0 12px">3. Recebimento e triagem das R.O.s</h2>
     <div class="settings-block">
       <h3>Classificação de R.O.</h3>
       <div class="settings-grid">
@@ -4160,7 +4161,7 @@ Cancelada</textarea></label>
   </div>
 </div>
 
-<div id="cfgIntegration" class="config-section"><h2 style="margin:0 0 12px">6. Integração e sincronização</h2>
+<div id="cfgIntegration" class="config-section sgq-only"><h2 style="margin:0 0 12px">6. Integração e sincronização</h2>
     <div id="integrationLockPanel" class="settings-block">
       <h3>Área protegida</h3>
       <p class="help">As configurações de integração alteram a conexão do NÚCLEO com as planilhas. Informe a senha administrativa para visualizar ou modificar esta área.</p>
@@ -4223,7 +4224,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261005-autosync21"></script>
+<script src="assets/nucleo-app.js?v=20261005-access24"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">

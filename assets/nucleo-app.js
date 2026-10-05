@@ -1,3 +1,4 @@
+const NUCLEO_PERSON_MODULES={"ros": "R.O.s", "pdca": "PDCAs e ações", "sac": "SACs", "documents": "Documentos", "indicators": "Indicadores", "announcements": "Comunicados", "equipment": "Equipamentos", "training": "Treinamentos", "nc": "RNCs", "processes": "Gestão de processos", "users": "Usuários e acessos", "sectors": "Setores da unidade"};
 // Telas administrativas carregadas somente quando solicitadas.
 let nucleoAdminModulePromise=null;
 let nucleoLazyNavigation=0;
@@ -5,7 +6,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-autosync21',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-access24',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -405,7 +406,7 @@ function applySavedRoFilter(id){const f=getSavedRoFilters().find(x=>x.id===id);i
 function pendingRegistrationItems(){
   if(!isAdmin())return [];
   return getOperationalUsers()
-    .filter(u=>u.role!=='admin'&&u.approvalStatus==='pending')
+    .filter(u=>!nucleoPersonPermissions(u).sgq&&u.approvalStatus==='pending')
     .sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
 }
 
@@ -2270,8 +2271,8 @@ function announcementStatus(a){
 function eligibleAnnouncementUsers(a){
   return getOperationalUsers().filter(u=>{
     if(a.audience==='all')return true;
-    if(a.audience==='operational')return u.role!=='admin';
-    if(a.audience==='sector')return u.role!=='admin'&&normalizeSectorEmailKey(u.sector)===normalizeSectorEmailKey(a.sector);
+    if(a.audience==='operational')return !nucleoPersonPermissions(u).sgq;
+    if(a.audience==='sector')return !nucleoPersonPermissions(u).sgq&&normalizeSectorEmailKey(u.sector)===normalizeSectorEmailKey(a.sector);
     return false;
   });
 }
@@ -2824,6 +2825,7 @@ async function loginUser(){
     const u=remote.user||remote.usuario||{};
     const rawRole=String(u.role||u.perfil||u.tipoAcesso||'operational').toLowerCase();
     const session={
+      permissions:u.permissions||null,accessUnits:u.accessUnits||null,
       personId:u.personId||'',
       description:u.description||'',
       name:u.name||u.nome||name,
@@ -2835,7 +2837,8 @@ async function loginUser(){
       managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
       approvalStatus:u.approvalStatus||'approved',
       authToken:remote.authToken||remote.token||'',
-      sessionExpiresAt:Number(remote.sessionExpiresAt)||Date.now()+21600000
+      sessionExpiresAt:Date.now()+21600000,
+      sessionExpiryClockVersion:2
     };
     // ABRE O APP imediatamente após sucesso=true. Persistência local não pode bloquear acesso válido.
     document.body.classList.add('nucleo-authenticated');
@@ -2972,7 +2975,7 @@ function initLogin(){
     }
   }catch(e){}
   const existing=getSession();
-  if(existing?.sessionExpiresAt&&Number(existing.sessionExpiresAt)<=Date.now()){
+  if(existing?.sessionExpiryClockVersion===2&&existing?.sessionExpiresAt&&Number(existing.sessionExpiresAt)<=Date.now()){
     setSession(null);try{sessionStorage.setItem('nucleo-session-expired-notice','1')}catch(_){}
   }
   try{if(sessionStorage.getItem('nucleo-session-expired-notice')==='1'){sessionStorage.removeItem('nucleo-session-expired-notice');const message=document.getElementById('loginMessage');if(message)message.textContent='Sua sessão expirou. Entre novamente para continuar.';}}catch(_){}
@@ -3046,7 +3049,7 @@ function showProfile(){
     sector.value=s.sector||'';
   }
 
-  if(role)role.value=s.role==='admin'?'SGQ':s.role==='quality'?'Qualidade — Filial':s.role==='manager'?'Gestor':'Usuário operacional';
+  if(role)role.value=s.permissions?'Acesso personalizado':s.role==='admin'?'SGQ':s.role==='quality'?'Qualidade — Filial':s.role==='manager'?'Gestor':'Usuário operacional';
 
   view('profileView');
   setNav('profile');
@@ -3199,6 +3202,7 @@ const DOCUMENT_REQUEST_ALLOWED_SECTORS=[
 function canRequestDocuments(){
   const s=getSession();
   if(!s)return false;
+  if(s.permissions)return nucleoPersonCan('documents');
   const current=normalizeAnswer(String(s.sector||s.setor||''));
   if(!current)return false;
   return DOCUMENT_REQUEST_ALLOWED_SECTORS.some(sec=>normalizeAnswer(sec)===current);
@@ -3215,6 +3219,7 @@ const EXTERNAL_RO_ALLOWED_SECTORS=[
 function canRegisterExternalRo(){
   const s=getSession();
   if(!s)return false;
+  if(s.permissions)return nucleoPersonPermissions(s).registerExternal;
   if(s.role==='quality')return true;
   const current=normalizeAnswer(String(s.sector||s.setor||''));
   if(!current)return false;
@@ -3254,7 +3259,7 @@ function refreshRoRegistrationAccess(){
   applyExternalRoAccessClass();
   const normalBtn=document.getElementById('navNewRo');
   const externalBtn=document.getElementById('navNewExternalRo');
-  const admin=isAdmin()&&getSession()?.role!=='quality';
+  const admin=getSession()?.permissions?!nucleoPersonPermissions(getSession()).registerRo:isAdmin()&&getSession()?.role!=='quality';
 
   // Qualidade da filial também pode cadastrar ocorrências.
   if(normalBtn){
@@ -3373,7 +3378,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
-  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&u.role!=='admin'&&explicitPortalUnit(u.unit)==='filial');
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&explicitPortalUnit(u.unit)==='filial');
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -3437,8 +3442,8 @@ async function diagnoseUserRegistry(){
     const res=await portalJsonp({acao:'portal_pending_users'},25000);
     if(res?.sucesso===false)throw new Error(res.erro||'Falha na leitura.');
     const users=Array.isArray(res.users)?res.users:[];
-    const pending=users.filter(u=>u.role!=='admin'&&u.approvalStatus==='pending');
-    const approved=users.filter(u=>u.role!=='admin'&&u.approvalStatus==='approved');
+    const pending=users.filter(u=>!nucleoPersonPermissions(u).sgq&&u.approvalStatus==='pending');
+    const approved=users.filter(u=>!nucleoPersonPermissions(u).sgq&&u.approvalStatus==='approved');
     if(st)st.textContent='Base respondeu: '+users.length+' usuário(s), '+pending.length+' pendente(s), '+approved.length+' aprovado(s).';
     alert('Base de usuários respondeu corretamente.\n\nTotal: '+users.length+'\nPendentes: '+pending.length+'\nAprovados: '+approved.length);
   }catch(e){
@@ -3477,7 +3482,7 @@ async function refreshPendingRegistrations(showMessage=false){
     localStorage.setItem(USERS_KEY,JSON.stringify(merged));
     renderOperationalUsers();
 
-    const pending=merged.filter(u=>u.role!=='admin'&&u.approvalStatus==='pending').length;
+    const pending=merged.filter(u=>!nucleoPersonPermissions(u).sgq&&u.approvalStatus==='pending').length;
     if(status)status.textContent=pending?pending+' cadastro(s) aguardando aprovação.':'Nenhum cadastro pendente.';
     // Atualiza imediatamente os avisos do SGQ após sincronizar a base central.
     try{refreshNotificationBell()}catch(e){}
@@ -3508,7 +3513,7 @@ function openUserRegistrationEditor(key){
   if(!isAdmin())return;
   const users=getOperationalUsers();
   const u=users.find(x=>String(x.email||x.name)===String(key));
-  if(!u||u.role==='admin')return;
+  if(!u||nucleoPersonPermissions(u).sgq)return;
 
   const title=document.getElementById('userRegistrationEditTitle');
   const keyEl=document.getElementById('userRegistrationEditKey');
@@ -3520,8 +3525,8 @@ function openUserRegistrationEditor(key){
   if(!access){access=document.createElement('div');access.id='userRegistrationAccessControl';access.style.cssText='padding:12px;margin-bottom:12px;border:1px solid #d5e2ef;border-radius:10px;background:#f1f7ff';keyEl?.before(access);}
   const roleLabel={admin:'SGQ',quality:'Qualidade — somente Filial',manager:'Gestor',operational:'Usuário operacional'}[u.role]||'Usuário operacional';
   access.innerHTML='<div class="label">Tipo de acesso atual</div><b>'+escapeHtml(roleLabel)+'</b>';
-  if(getSession()?.role==='admin'){
-    const button=document.createElement('button');button.type='button';button.className='btn secondary';button.style.marginLeft='12px';button.textContent='Alterar perfil de acesso';
+  if(nucleoPersonCan('users',true)){
+    const button=document.createElement('button');button.type='button';button.className='btn secondary';button.style.marginLeft='12px';button.textContent='Editar acesso';
     button.onclick=()=>{closeUserRegistrationEditor();openUnitUserAccess(encodeURIComponent(u.personId||u.email||u.name));};access.appendChild(button);
     const help=document.createElement('p');help.className='small';help.textContent='Para administrar a Filial, selecione Qualidade — somente Filial. O setor Qualidade não altera o perfil automaticamente.';access.appendChild(help);
   }
@@ -3694,7 +3699,7 @@ function renderOperationalUsers(){
   const users=filtered.slice(0,operationalUsersLimit);
   document.getElementById('operationalUsersCount').textContent='Exibindo '+users.length+' de '+filtered.length+' cadastro(s)'+(filtered.length!==allUsers.length?' encontrados · '+allUsers.length+' no total':'')+'.';
 
-  const pending=users.filter(u=>u.role!=='admin'&&u.approvalStatus==='pending');
+  const pending=users.filter(u=>!nucleoPersonPermissions(u).sgq&&u.approvalStatus==='pending');
   const approved=users.filter(u=>u.role==='admin'||u.approvalStatus!=='pending');
 
   const pendingHtml=pending.length?`
@@ -3731,11 +3736,11 @@ function renderOperationalUsers(){
           <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
-          <span class="role-tag">${u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
+          <span class="role-tag">${u.permissions?'Acesso personalizado':u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
           ${u.role==='manager'?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
         </div>
       </div>
-      ${getSession()?.role==='admin'?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Perfil e vínculos por unidade</button>`:''}
+      ${nucleoPersonCan('users',true)?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Editar acesso</button>`:''}
       ${u.role==='admin'?`<div class="actions"><button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button></div>`:`<div class="actions">
         <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">${u.role==='manager'?'Editar gestão':'Tornar gestor'}</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
@@ -7209,7 +7214,7 @@ function activeOperationalUsers(){
   let contacts=[];try{contacts=JSON.parse(localStorage.getItem('nucleo-unit-contacts')||'[]');}catch(_){}
   return [...new Map(getOperationalUsers().concat(contacts).map(u=>[u.email||u.name,u])).values()].filter(u=>
     u &&
-    u.role!=='admin' &&
+    !nucleoPersonPermissions(u).sgq &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
     String(u.name||'').trim() &&
@@ -8614,7 +8619,7 @@ function showManagementDashboard(){
 }
 function getAllRoRecords(){
   const base=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
-  return getSession()?.role==='quality'?base.filter(qualityRecordAllowed):base;
+  return getSession()?.role==='quality'||getSession()?.accessUnits?base.filter(qualityRecordAllowed):base;
 }
 
 function sgqIndicatorStatusCode(ro,triageMap){
@@ -10117,6 +10122,7 @@ function isUnifiedSector(sector){
 }
 function sameUnitAsCurrentUser(ro){
   if(isGeneralAdmin())return true;
+  if(getSession()?.accessUnits&&!qualityRecordAllowed(ro))return false;
   if(getSession()?.role==='quality')return qualityRecordAllowed(ro);
   return currentUserUnit()===roUnit(ro);
 }
@@ -11919,7 +11925,7 @@ function adminModuleRecord(id){
 }
 
 function getStandardDocuments(){
-  try{const a=JSON.parse(localStorage.getItem(STANDARD_DOCUMENTS_KEY)||'[]');return Array.isArray(a)?a:[]}catch(e){return []}
+  try{const a=JSON.parse(localStorage.getItem(STANDARD_DOCUMENTS_KEY)||'[]');return Array.isArray(a)?a.filter(qualityRecordAllowed):[]}catch(e){return []}
 }
 function saveStandardDocumentsLocal(list){safeStorageSet(STANDARD_DOCUMENTS_KEY,JSON.stringify(Array.isArray(list)?list:[]))}
 function getDocumentDeliveries(){
@@ -13529,7 +13535,7 @@ function renderAdminUsers(){
   // precisa aparecer aqui, mesmo que a lista local access.admins esteja antiga.
   const emails=[];
   const addEmail=v=>{const e=String(v||'').trim().toLowerCase();if(e&&!emails.includes(e))emails.push(e)};
-  users.filter(u=>String(u.role||'').toLowerCase()==='admin').forEach(u=>addEmail(u.email));
+  users.filter(u=>nucleoPersonPermissions(u).sgq).forEach(u=>addEmail(u.email));
   (Array.isArray(st.admins)?st.admins:[]).forEach(addEmail);
 
   if(!emails.length){
@@ -13553,6 +13559,7 @@ function renderAdminUsers(){
         <div><div class="admin-email">${escapeHtml(displayName)}</div><div class="small">${escapeHtml(email)}</div><span class="role-tag">Administrador</span> <span class="status-badge ${active?'approved':'rejected'}">${active?'Ativo':'Desativado'}</span></div>
       </div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
+        ${u?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Editar acesso</button>`:''}
         <button class="btn secondary" type="button" onclick="editAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Editar</button>
         <button class="btn secondary" type="button" ${isSelf?'disabled title="Você não pode desativar a conta que está usando"':''} onclick="toggleAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">${active?'Desativar':'Ativar'}</button>
         <button class="remove-admin" type="button" ${cantDelete?'disabled title="Não é possível excluir esta conta"':''} onclick="deleteAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Excluir</button>
@@ -13657,7 +13664,7 @@ function deleteAdminAccount(index){
   renderOperationalUsers();
 }
 async function addAdmin(){
-  if(!isAdmin())return;
+  if(!nucleoPersonPermissions(getSession()||{}).sgq)return;
   const name=(document.getElementById('newAdminName')?.value||'').trim();
   const email=(document.getElementById('newAdminEmail')?.value||'').trim().toLowerCase();
   const password=document.getElementById('newAdminPassword')?.value||'';
@@ -15837,6 +15844,7 @@ function applyBodyRoleClass(){
 
 function enforceAdminVisibility(){
   applyBodyRoleClass();
+  document.body.classList.toggle('nucleo-sgq-session',nucleoPersonPermissions(getSession()||{}).sgq);
   const allowed=isAdmin();
 
   // Qualquer item marcado como administrativo fica invisível para operador,
@@ -15870,6 +15878,7 @@ function enforceAdminVisibility(){
 
   // Usuário representante recebe apenas "Meus SACs"; ADM mantém o controle completo.
   try{refreshRepresentativeSacMenu()}catch(e){}
+  nucleoApplyPersonAccess();
 }
 
 
@@ -15973,12 +15982,27 @@ async function saveUnitQualitySettings(){
   try{const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();refreshSectorSelectors();status.textContent='Configuração salva na base central.';}catch(e){status.textContent=e.message||String(e);}
 }
 function openUnitUserAccess(encoded){
-  if(getSession()?.role!=='admin')return;
-  const id=decodeURIComponent(encoded),user=getOperationalUsers().find(u=>String(u.personId||u.email||u.name)===id);if(!user)return;
-  let overlay=document.getElementById('unitUserAccess');if(overlay)overlay.remove();overlay=document.createElement('div');overlay.id='unitUserAccess';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
-  overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:650px;width:100%;max-height:90vh;overflow:auto"><h3>Perfil e vínculos — '+escapeHtml(user.name)+'</h3><label>Perfil<select id="unitAccessRole"><option value="operational">Usuário operacional</option><option value="manager">Gestor</option><option value="quality">Qualidade — somente Filial</option><option value="admin">SGQ — Matriz e Filial</option></select></label><p>Vínculos adicionais para setores unificados. Um por linha, no formato: matriz | PCP ou filial | PCP. O cadastro e o e-mail continuam únicos. Somente o SGQ pode alterar estes vínculos.</p><textarea id="unitAccessMemberships" rows="6"></textarea><p class="small">O perfil Qualidade sempre fica restrito à Filial. Após mudar o perfil ou os vínculos, o usuário deve entrar novamente.</p><div class="actions"><button class="btn primary" id="unitAccessSave">Salvar</button><button class="btn secondary" id="unitAccessClose">Fechar</button></div><p id="unitAccessStatus"></p></div>';
-  document.body.appendChild(overlay);document.getElementById('unitAccessRole').value=user.role||'operational';document.getElementById('unitAccessMemberships').value=(user.sectorMemberships||[]).map(m=>m.unit+' | '+m.sector).join('\n');document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
-  document.getElementById('unitAccessSave').onclick=async()=>{const status=document.getElementById('unitAccessStatus');try{const memberships=document.getElementById('unitAccessMemberships').value.split('\n').filter(x=>x.trim()).map(line=>{const parts=line.split('|');if(parts.length!==2||!['matriz','filial'].includes(parts[0].trim().toLowerCase())||!parts[1].trim())throw new Error('Use matriz | Setor ou filial | Setor em cada linha.');return {unit:parts[0].trim().toLowerCase(),sector:parts[1].trim()};});status.textContent='Salvando...';const result=await portalJsonp({acao:'portal_set_user_access',person:id,role:document.getElementById('unitAccessRole').value,memberships:JSON.stringify(memberships)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();renderOperationalUsers();status.textContent='Salvo. O usuário deve entrar novamente.';}catch(e){status.textContent=e.message||String(e);}};
+ if(!nucleoPersonCan('users',true))return;
+ const id=decodeURIComponent(encoded),user=getOperationalUsers().find(u=>String(u.personId||u.email||u.name)===id);if(!user)return;
+ const parent=nucleoPersonPermissions(getSession()),perms=nucleoPersonPermissions(user),units=nucleoPersonUnits(user),allowed=nucleoPersonUnits(getSession());
+ if(!parent.sgq&&(user.role==='admin'||units.some(u=>!allowed.includes(u)))){alert('Este cadastro é administrado pelo SGQ.');return;}
+ let overlay=document.getElementById('unitUserAccess');overlay?.remove();overlay=document.createElement('div');overlay.id='unitUserAccess';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+ overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto"><h3>Editar acesso — '+escapeHtml(user.name)+'</h3><p>Escolha as unidades e as áreas permitidas. Administrar inclui visualizar e realizar alterações nos dados autorizados.</p><div id="personAccessUnits">'+['matriz','filial'].map(u=>'<label style="display:inline-flex;gap:8px;margin:10px"><input type="checkbox" value="'+u+'" '+(units.includes(u)?'checked':'')+' '+(!allowed.includes(u)?'disabled':'')+' style="width:20px;height:20px">'+(u==='matriz'?'SETA SC — Matriz':'SETA ES — Linhares')+'</label>').join('')+'</div><table style="width:100%"><thead><tr><th>Área</th><th>Visualizar</th><th>Administrar</th></tr></thead><tbody>'+Object.entries(NUCLEO_PERSON_MODULES).map(([k,label])=>'<tr data-permission="'+k+'"><td>'+escapeHtml(label)+'</td>'+['view','manage'].map(mode=>'<td><input type="checkbox" data-mode="'+mode+'" '+(perms.modules[k]?.[mode]?'checked':'')+' '+(!parent.sgq&&!parent.modules[k]?.[mode]?'disabled':'')+' style="width:22px;height:22px" aria-label="'+escapeHtml(label+' '+(mode==='view'?'visualizar':'administrar'))+'"></td>').join('')+'</tr>').join('')+'</tbody></table><p><label><input id="personRegisterRo" type="checkbox" '+(perms.registerRo?'checked':'')+' '+(!parent.sgq&&!parent.registerRo?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. interna</label></p><p><label><input id="personRegisterExternal" type="checkbox" '+(perms.registerExternal?'checked':'')+' '+(!parent.sgq&&!parent.registerExternal?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. externa / SAC</label></p>'+(parent.sgq?'<p><label><input id="personSgq" type="checkbox" '+(perms.sgq?'checked':'')+' style="width:20px;height:20px"> Administração geral SGQ — todas as permissões, integração e configurações globais</label></p><details><summary>Setores unificados</summary><p class="small">Um vínculo por linha: matriz | PCP ou filial | PCP.</p><textarea id="unitAccessMemberships" rows="4"></textarea></details>':'')+'<p class="small">O cadastro e o e-mail continuam únicos. A alteração exige novo login da pessoa para atualizar seu acesso.</p><button class="btn primary" id="unitAccessSave">Salvar permissões</button> <button class="btn secondary" id="unitAccessClose">Fechar</button><p id="unitAccessStatus" role="status"></p></div>';
+ document.body.appendChild(overlay);if(parent.sgq)document.getElementById('unitAccessMemberships').value=(user.sectorMemberships||[]).map(m=>m.unit+' | '+m.sector).join('\n');document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
+ overlay.querySelectorAll('[data-mode="manage"]').forEach(input=>input.onchange=()=>{if(input.checked)input.closest('tr').querySelector('[data-mode="view"]').checked=true;});
+ document.getElementById('unitAccessSave').onclick=async()=>{
+  const btn=document.getElementById('unitAccessSave'),status=document.getElementById('unitAccessStatus');btn.disabled=true;status.textContent='Salvando permissões na base central…';
+  try{
+   const next={version:1,modules:{},registerRo:document.getElementById('personRegisterRo').checked,registerExternal:document.getElementById('personRegisterExternal').checked,sgq:!!document.getElementById('personSgq')?.checked};
+   overlay.querySelectorAll('[data-permission]').forEach(row=>{next.modules[row.dataset.permission]={view:row.querySelector('[data-mode="view"]').checked,manage:row.querySelector('[data-mode="manage"]').checked};});
+   const accessUnits=[...overlay.querySelectorAll('#personAccessUnits input:checked')].map(x=>x.value);if(!accessUnits.length)throw new Error('Selecione ao menos uma unidade.');
+   let memberships=user.sectorMemberships||[];
+   if(parent.sgq)memberships=document.getElementById('unitAccessMemberships').value.split('\n').filter(x=>x.trim()).map(line=>{const parts=line.split('|');if(parts.length!==2)throw new Error('Informe unidade | setor em cada vínculo.');return {unit:parts[0].trim().toLowerCase(),sector:parts[1].trim()};});
+   const result=await portalJsonp({acao:'portal_set_user_access',person:id,permissions:JSON.stringify(next),accessUnits:JSON.stringify(accessUnits),memberships:JSON.stringify(memberships)},60000);
+   if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a alteração.');
+   status.textContent='Permissões salvas na base central. A pessoa deve entrar novamente.';await syncPortalBackend(false);renderOperationalUsers();
+  }catch(e){status.textContent='Não foi possível salvar: '+e.message;}finally{btn.disabled=false;}
+ };
 }
 
 function userHasUnitSector(user,unit,sector){
@@ -15998,7 +16022,7 @@ function explicitRecordUnit(record){
   const values=[record?.unidade,record?.unit,record?.roUnit,record?.raw?.__unidade,record?.__unidade,record?.raw?.Unidade,record?.raw?.['Unidade produtiva'],record?.raw?.['Em qual unidade produtiva ocorreu o problema?']];
   const units=[...new Set(values.map(explicitPortalUnit).filter(Boolean))];return units.length===1?units[0]:'';
 }
-function qualityRecordAllowed(record){return getSession()?.role!=='quality'||explicitRecordUnit(record)==='filial';}
+function qualityRecordAllowed(record){const s=getSession()||{};if(Array.isArray(s.accessUnits))return s.accessUnits.includes(explicitRecordUnit(record));return s.role!=='quality'||explicitRecordUnit(record)==='filial';}
 
 function applySettingsUnitSelection(){
   const unit=document.getElementById('qualityConfigUnit')?.value||'matriz';
@@ -16009,7 +16033,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-autosync21',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-access24',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16092,7 +16116,7 @@ function nucleoEndExpiredSession(){
 }
 function nucleoCheckSessionExpiry(){
  const session=getSession();
- if(session?.authToken&&Number(session.sessionExpiresAt)>0&&Number(session.sessionExpiresAt)<=Date.now())nucleoEndExpiredSession();
+ if(session?.authToken&&session.sessionExpiryClockVersion===2&&Number(session.sessionExpiresAt)>0&&Number(session.sessionExpiresAt)<=Date.now())nucleoEndExpiredSession();
 }
 setInterval(nucleoCheckSessionExpiry,30000);
 window.addEventListener('focus',nucleoCheckSessionExpiry);
@@ -16104,7 +16128,22 @@ async function nucleoSyncAfterLogin(token){
  try{await syncPortalBackend(false);}catch(e){console.warn('Atualização central após login:',e);}
  if(getSession()?.authToken!==token)return;
  // Uma falha na atualização de cadastros não impede a tentativa de carregar as R.O.s.
- try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}
+ if(!getSession()?.permissions||nucleoPersonCan('ros')){try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}}
  if(getSession()?.authToken!==token)return;
  try{refreshSectorSelectors();populateTriageSectors();render();}catch(e){console.warn('Atualização da tela após login:',e);}
+}
+
+function nucleoPersonPermissions(user){
+ if(user.permissions?.version===1)return user.permissions;
+ const elevated=['admin','quality'].includes(user.role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
+ if(!elevated)modules.documents.view=['comercial interno','comercial externo','diretoria','sgq'].includes(normalizeAnswer(user.sector||''));
+ return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
+}
+function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
+function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
+function nucleoApplyPersonAccess(){
+ const user=getSession();if(!user?.permissions)return;
+ const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
+ Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
+ ['cfgUsers','unitQualitySettings','cfgNotifications','cfgUnits'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const module=id==='cfgUsers'?'users':'sectors';el.style.setProperty('display',nucleoPersonCan(module,true)?'':'none','important');});
 }
