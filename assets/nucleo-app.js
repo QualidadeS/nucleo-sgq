@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-quality20',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-autosync21',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -2862,16 +2862,8 @@ async function loginUser(){
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
-    // Fonte oficial compartilhada: após autenticar, sempre atualiza este navegador pela base central.
-    setTimeout(async()=>{
-      try{
-        await syncPortalBackend(false);
-        await refreshLegacyRoCacheFromApi(true);
-        refreshSectorSelectors();
-        try{populateTriageSectors()}catch(e){}
-        try{render()}catch(e){}
-      }catch(e){console.warn('Sincronização pós-login falhou:',e)}
-    },3000);
+    // Toda entrada inicia a atualização central sem depender do botão.
+    void nucleoSyncAfterLogin(session.authToken);
     // O SGQ recebe/sincroniza novos cadastros sem precisar abrir Configurações.
     if(['admin','quality'].includes(session.role)){
       setTimeout(()=>{try{refreshPendingRegistrations(false)}catch(e){}},300);
@@ -16017,7 +16009,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-quality20',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-autosync21',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16105,3 +16097,14 @@ function nucleoCheckSessionExpiry(){
 setInterval(nucleoCheckSessionExpiry,30000);
 window.addEventListener('focus',nucleoCheckSessionExpiry);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoCheckSessionExpiry();});
+
+async function nucleoSyncAfterLogin(token){
+ if(!token||getSession()?.authToken!==token)return;
+ const status=document.getElementById('syncMsg');if(status)status.textContent='Atualizando dados da base central após o login…';
+ try{await syncPortalBackend(false);}catch(e){console.warn('Atualização central após login:',e);}
+ if(getSession()?.authToken!==token)return;
+ // Uma falha na atualização de cadastros não impede a tentativa de carregar as R.O.s.
+ try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}
+ if(getSession()?.authToken!==token)return;
+ try{refreshSectorSelectors();populateTriageSectors();render();}catch(e){console.warn('Atualização da tela após login:',e);}
+}
