@@ -5,7 +5,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261002-docsave18',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-quality20',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -699,7 +699,11 @@ function portalJsonp(params,timeoutMs=60000){
       if(err)reject(err); else resolve(data);
     }
 
-    window[cb]=function(data){finish(null,data)};
+    window[cb]=function(data){
+      const current=getSession();
+      if(requestParams.token&&current?.authToken===requestParams.token&&nucleoSessionError(data))nucleoEndExpiredSession();
+      finish(null,data);
+    };
 
     const parts=[];
     const requestParams={...(params||{})};
@@ -2675,6 +2679,19 @@ async function saveSectorConfiguration(){
   }
 
   field.value=sectors.join('\n');
+  if(getSession()?.role==='quality'){
+    const st=document.getElementById('configSavedState');if(st){st.classList.remove('hidden');st.textContent='Salvando setores da filial…';}
+    try{
+      const result=await portalJsonp({acao:'portal_save_unit_config',unit:'filial',data:JSON.stringify({sectorList:field.value})},60000);
+      if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou os setores.');
+      const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id==='filial')||{};
+      localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!=='filial'),{...old,id:'filial',unit:'filial',sectorList:field.value}]));
+      const unitField=document.getElementById('qualityConfigSectors');if(unitField)unitField.value=field.value;
+      refreshSectorSelectors();try{populateTriageSectors()}catch(_){}try{renderOperationalUsers()}catch(_){}
+      if(st)st.textContent='Setores da filial salvos na base central.';
+    }catch(e){if(st)st.textContent='Não foi possível salvar: '+e.message;else alert(e.message);}
+    return;
+  }
   const cfg={...getAdminConfig(),sectorList:field.value,__savedAt:new Date().toISOString()};
 
   await showNucleoLoading('Salvando setores na base central...','Atualizando NÚCLEO');
@@ -2817,7 +2834,8 @@ async function loginUser(){
       sectorMemberships:Array.isArray(u.sectorMemberships)?u.sectorMemberships:[],
       managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
       approvalStatus:u.approvalStatus||'approved',
-      authToken:remote.authToken||remote.token||''
+      authToken:remote.authToken||remote.token||'',
+      sessionExpiresAt:Number(remote.sessionExpiresAt)||Date.now()+21600000
     };
     // ABRE O APP imediatamente após sucesso=true. Persistência local não pode bloquear acesso válido.
     document.body.classList.add('nucleo-authenticated');
@@ -2961,6 +2979,11 @@ function initLogin(){
       sessionStorage.removeItem('nucleo-force-login');
     }
   }catch(e){}
+  const existing=getSession();
+  if(existing?.sessionExpiresAt&&Number(existing.sessionExpiresAt)<=Date.now()){
+    setSession(null);try{sessionStorage.setItem('nucleo-session-expired-notice','1')}catch(_){}
+  }
+  try{if(sessionStorage.getItem('nucleo-session-expired-notice')==='1'){sessionStorage.removeItem('nucleo-session-expired-notice');const message=document.getElementById('loginMessage');if(message)message.textContent='Sua sessão expirou. Entre novamente para continuar.';}}catch(_){}
   refreshSectorSelectors();
   setTimeout(enableMobileLoginKeyboard,0);
   if(SKIP_LOGIN_PREVIEW){
@@ -3200,6 +3223,7 @@ const EXTERNAL_RO_ALLOWED_SECTORS=[
 function canRegisterExternalRo(){
   const s=getSession();
   if(!s)return false;
+  if(s.role==='quality')return true;
   const current=normalizeAnswer(String(s.sector||s.setor||''));
   if(!current)return false;
   return EXTERNAL_RO_ALLOWED_SECTORS.some(sec=>normalizeAnswer(sec)===current);
@@ -3238,9 +3262,9 @@ function refreshRoRegistrationAccess(){
   applyExternalRoAccessClass();
   const normalBtn=document.getElementById('navNewRo');
   const externalBtn=document.getElementById('navNewExternalRo');
-  const admin=isAdmin();
+  const admin=isAdmin()&&getSession()?.role!=='quality';
 
-  // Cadastro normal de R.O. continua exclusivo do usuário operacional.
+  // Qualidade da filial também pode cadastrar ocorrências.
   if(normalBtn){
     normalBtn.classList.toggle('hidden',admin);
     normalBtn.style.display=admin?'none':'';
@@ -15946,6 +15970,7 @@ function ensureUnitQualitySettings(){
 }
 function loadUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value;const c=unitConfiguration(unit)||{};
+  if(getSession()?.role==='quality'){const legacyField=document.getElementById('sectorList');if(legacyField)legacyField.value=c.sectorList||'';}
   document.getElementById('qualityConfigSectors').value=c.sectorList||'';document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';renderDocumentTypeSettings(unit);
 }
 async function saveUnitQualitySettings(){
@@ -15992,7 +16017,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261002-docsave18',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-quality20',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16063,3 +16088,20 @@ async function confirmReceivedPdcaClaimant(id){
   await nucleoDriveSendPdca(record.id,p.ro);
  }catch(e){const status=document.getElementById('ndStatus');if(status)status.textContent=e.message;else alert(e.message);}
 }
+
+// A expiração central encerra o acesso local sem apagar cadastros ou rascunhos.
+let nucleoEndingExpiredSession=false;
+function nucleoSessionError(data){return data?.sucesso===false&&/sess[aã]o (?:inv[aá]lida ou )?expirada/i.test(String(data.erro||data.error||''));}
+function nucleoEndExpiredSession(){
+ if(nucleoEndingExpiredSession||!getSession()?.authToken)return;
+ nucleoEndingExpiredSession=true;
+ try{sessionStorage.setItem('nucleo-session-expired-notice','1')}catch(_){}
+ logoutUser();
+}
+function nucleoCheckSessionExpiry(){
+ const session=getSession();
+ if(session?.authToken&&Number(session.sessionExpiresAt)>0&&Number(session.sessionExpiresAt)<=Date.now())nucleoEndExpiredSession();
+}
+setInterval(nucleoCheckSessionExpiry,30000);
+window.addEventListener('focus',nucleoCheckSessionExpiry);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nucleoCheckSessionExpiry();});
