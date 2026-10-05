@@ -1,5 +1,6 @@
+const NUCLEO_DEFAULT_DECISIONS=[{"id":"directed","label":"Direcionar para tratativa","behavior":"directed","active":true,"requireSector":true,"requireReason":true,"pdcaRequired":true,"deadlineDays":null,"color":"#eef4ff"},{"id":"record","label":"Somente para registro","behavior":"record","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"},{"id":"cancelled","label":"Cancelar R.O.","behavior":"cancelled","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff0f0"},{"id":"obsolete","label":"Obsoleta","behavior":"obsolete","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#f0f1f3"},{"id":"falta_caixa","label":"Falta de caixa","behavior":"record","active":true,"requireSector":true,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"}];
 const NUCLEO_FEATURE_BUTTONS={"showList":["ros","consult"],"showAssignedRos":["ros","assigned"],"showMySubmittedRos":["ros","submitted"],"showTriage":["ros","triage"],"openTriageRecord":["ros","triage"],"saveTriageRecord":["ros","triage"],"showContestations":["ros","reviewContests"],"reviewContestation":["ros","reviewContests"],"submitContest":["ros","contest"],"openContest":["ros","contest"],"startPdcaFromList":["pdca","respond"],"openPDCA":["pdca","respond"],"finishPDCA":["pdca","respond"],"showSentPdcas":["pdca","received"],"showActionsDashboard":["pdca","actions"],"showPendingActions":["pdca","reviewActions"],"confirmActionCompletion":["pdca","reviewActions"],"markActionCompleted":["pdca","reviewActions"],"registerActionEvidence":["pdca","completeAction"],"presentPdca":["pdca","present"],"presentCurrentPdca":["pdca","present"],"savePdcaPresentationRecord":["pdca","present"],"finalizeAndSendSac":["sac","finalize"],"saveSacEditForm":["sac","edit"],"saveExternalRoControl":["sac","edit"],"saveSacDecisionLocally":["sac","edit"],"publishAnnouncement":["announcements","publish"],"openStandardDocumentCreate":["documents","standards"],"saveStandardDocument":["documents","standards"],"toggleStandardDocument":["documents","standards"],"deleteStandardDocument":["documents","standards"],"addOperationalUser":["users","create"],"approvePortalUser":["users","approve"],"rejectPortalUser":["users","approve"],"openUserRegistrationEditor":["users","edit"],"saveUserRegistrationEditor":["users","edit"],"removeOperationalUserByKey":["users","delete"],"saveSectorConfiguration":["sectors","edit"],"saveFixedEmailCopies":["sectors","emails"],"saveRncProcessTemplateFromForm":["processes","templates"],"deleteAssignedDirection":["ros","triage"],"openAssignedSectorEdit":["ros","triage"],"endAnnouncement":["announcements","publish"],"openUnitUserAccess":["users","permissions"],"showAnnouncementsAdmin":["announcements","publish"],"openAdminResetPassword":["users","edit"]};
-const NUCLEO_PERSON_FEATURES={"ros":{"consult":["Consultar R.O.s disponíveis",false,"view"],"submitted":["R.O.s cadastradas por mim",false,"view"],"assigned":["R.O.s atribuídas",false,"view"],"triage":["Triar, classificar e direcionar",true,"manage"],"contest":["Criar contestações",true,"view"],"reviewContests":["Analisar contestações",true,"manage"],"claimant":["Alterar e confirmar reclamante",true,"manage"]},"pdca":{"received":["Consultar PDCAs recebidos",false,"view"],"respond":["Responder e continuar PDCA",true,"view"],"actions":["Consultar ações",false,"view"],"completeAction":["Registrar conclusão e evidências",true,"view"],"reviewActions":["Conferir e aprovar ações",true,"manage"],"import":["Importar e vincular respostas",true,"manage"],"present":["Registrar apresentação",true,"manage"],"dispatch":["Despachar resposta ao reclamante",true,"manage"]},"sac":{"consult":["Consultar SACs",false,"view"],"edit":["Classificar e editar SACs",true,"manage"],"finalize":["Finalizar e enviar SAC",true,"manage"]},"documents":{"consult":["Consultar documentos e solicitações",false,"view"],"request":["Criar solicitação de documento",true,"view"],"standards":["Cadastrar e alterar documentos padrão",true,"manage"],"prepare":["Preencher e armazenar documento solicitado",true,"manage"],"deliver":["Enviar e entregar documentos",true,"manage"],"history":["Consultar histórico de entregas",false,"manage"]},"indicators":{"consult":["Consultar indicadores",false,"view"]},"announcements":{"consult":["Consultar comunicados",false,"view"],"publish":["Emitir, alterar e encerrar comunicados",true,"manage"]},"equipment":{"consult":["Consultar equipamentos",false,"view"],"pending":["Consultar calibrações pendentes",false,"view"],"history":["Consultar histórico metrológico",false,"view"],"edit":["Cadastrar e alterar equipamentos",true,"manage"],"delete":["Excluir equipamentos",true,"manage"]},"training":{"consult":["Consultar treinamentos",false,"view"],"pending":["Consultar reciclagens pendentes",false,"view"],"history":["Consultar histórico de competências",false,"view"],"edit":["Cadastrar e alterar treinamentos",true,"manage"],"delete":["Excluir treinamentos",true,"manage"]},"nc":{"consult":["Consultar RNCs e tratamento",false,"view"],"edit":["Cadastrar e alterar RNCs",true,"manage"],"send":["Enviar RNC e anexar fotos",true,"manage"],"delete":["Excluir RNCs",true,"manage"]},"processes":{"consult":["Consultar documentos vigentes",false,"view"],"review":["Consultar documentos em revisão",false,"view"],"history":["Consultar histórico documental",false,"view"],"edit":["Cadastrar e alterar documentos internos",true,"manage"],"templates":["Alterar modelos e estrutura dos formulários",true,"manage"],"delete":["Excluir documentos internos",true,"manage"]},"users":{"consult":["Consultar cadastros",false,"manage"],"create":["Cadastrar pessoas",true,"manage"],"edit":["Editar nomes, dados e setores",true,"manage"],"approve":["Aprovar e bloquear cadastros",true,"manage"],"permissions":["Definir permissões de outras pessoas",true,"manage"],"delete":["Excluir usuários",true,"manage"]},"sectors":{"consult":["Consultar configurações da unidade",false,"manage"],"edit":["Cadastrar e alterar setores",true,"manage"],"emails":["Alterar destinatários e cópias padrão",true,"manage"],"folders":["Alterar e validar pastas do Drive",true,"manage"],"documentTypes":["Editar tipos de documentos",true,"manage"]}};
+const NUCLEO_PERSON_FEATURES={"ros":{"consult":["Consultar R.O.s disponíveis",false,"view"],"submitted":["R.O.s cadastradas por mim",false,"view"],"assigned":["R.O.s atribuídas",false,"view"],"triage":["Triar, classificar e direcionar",true,"manage"],"contest":["Criar contestações",true,"view"],"reviewContests":["Analisar contestações",true,"manage"],"claimant":["Alterar e confirmar reclamante",true,"manage"]},"pdca":{"received":["Consultar PDCAs recebidos",false,"view"],"respond":["Responder e continuar PDCA",true,"view"],"actions":["Consultar ações",false,"view"],"completeAction":["Registrar conclusão e evidências",true,"view"],"reviewActions":["Conferir e aprovar ações",true,"manage"],"import":["Importar e vincular respostas",true,"manage"],"present":["Registrar apresentação",true,"manage"],"dispatch":["Despachar resposta ao reclamante",true,"manage"]},"sac":{"consult":["Consultar SACs",false,"view"],"edit":["Classificar e editar SACs",true,"manage"],"finalize":["Finalizar e enviar SAC",true,"manage"]},"documents":{"consult":["Consultar documentos e solicitações",false,"view"],"request":["Criar solicitação de documento",true,"view"],"standards":["Cadastrar e alterar documentos padrão",true,"manage"],"prepare":["Preencher e armazenar documento solicitado",true,"manage"],"deliver":["Enviar e entregar documentos",true,"manage"],"history":["Consultar histórico de entregas",false,"manage"]},"indicators":{"consult":["Consultar indicadores",false,"view"]},"announcements":{"consult":["Consultar comunicados",false,"view"],"publish":["Emitir, alterar e encerrar comunicados",true,"manage"]},"equipment":{"consult":["Consultar equipamentos",false,"view"],"pending":["Consultar calibrações pendentes",false,"view"],"history":["Consultar histórico metrológico",false,"view"],"edit":["Cadastrar e alterar equipamentos",true,"manage"],"delete":["Excluir equipamentos",true,"manage"]},"training":{"consult":["Consultar treinamentos",false,"view"],"pending":["Consultar reciclagens pendentes",false,"view"],"history":["Consultar histórico de competências",false,"view"],"edit":["Cadastrar e alterar treinamentos",true,"manage"],"delete":["Excluir treinamentos",true,"manage"]},"nc":{"consult":["Consultar RNCs e tratamento",false,"view"],"edit":["Cadastrar e alterar RNCs",true,"manage"],"send":["Enviar RNC e anexar fotos",true,"manage"],"delete":["Excluir RNCs",true,"manage"]},"processes":{"consult":["Consultar documentos vigentes",false,"view"],"review":["Consultar documentos em revisão",false,"view"],"history":["Consultar histórico documental",false,"view"],"edit":["Cadastrar e alterar documentos internos",true,"manage"],"templates":["Alterar modelos e estrutura dos formulários",true,"manage"],"delete":["Excluir documentos internos",true,"manage"]},"users":{"consult":["Consultar cadastros",false,"manage"],"create":["Cadastrar pessoas",true,"manage"],"edit":["Editar nomes, dados e setores",true,"manage"],"approve":["Aprovar e bloquear cadastros",true,"manage"],"permissions":["Definir permissões de outras pessoas",true,"manage"],"delete":["Excluir usuários",true,"manage"]},"sectors":{"decisions":["Editar decisões e regras de R.O.",true,"manage"],"consult":["Consultar configurações da unidade",false,"manage"],"edit":["Cadastrar e alterar setores",true,"manage"],"emails":["Alterar destinatários e cópias padrão",true,"manage"],"folders":["Alterar e validar pastas do Drive",true,"manage"],"documentTypes":["Editar tipos de documentos",true,"manage"]}};
 const NUCLEO_PERSON_MODULES={"ros": "R.O.s", "pdca": "PDCAs e ações", "sac": "SACs", "documents": "Documentos", "indicators": "Indicadores", "announcements": "Comunicados", "equipment": "Equipamentos", "training": "Treinamentos", "nc": "RNCs", "processes": "Gestão de processos", "users": "Usuários e acessos", "sectors": "Setores da unidade"};
 // Telas administrativas carregadas somente quando solicitadas.
 let nucleoAdminModulePromise=null;
@@ -8,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-functions26',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-decisions28',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -7065,7 +7066,7 @@ function getTriageRecords(){
       triagem:tri,
       classificacaoSGQ:tri.classification||'',
       setorDirecionado:tri.responsibleSector||'',
-      pdcaObrigatorio:decision==='directed',
+      pdcaObrigatorio:decision==='directed'&&tri.pdcaRequired!==false,
       prazoPdca:tri.pdcaDeadline||'',
       triagemStatus
     };
@@ -7175,7 +7176,7 @@ function renderTriage(){
           ? '<span class="status-badge answered">Dispensado</span>'
           : '<span class="status-badge">Não se aplica</span>';
 
-    const decision=triageDecisionLabel(r.triagemStatus);
+    const decision=nucleoDecisionForRecord(r,r.triagem)?.label||triageDecisionLabel(r.triagemStatus);
 
     return `<tr>
       <td><b>${escapeHtml(triageDisplayRoNumber(key)||'-')}</b></td>
@@ -7184,7 +7185,7 @@ function renderTriage(){
       <td>${escapeHtml(decision)}</td>
       <td>${escapeHtml(r.triagem?.responsibleUserName ? (r.setorDirecionado+' · '+r.triagem.responsibleUserName) : (r.setorDirecionado||'-'))}</td>
       <td>${pdca}</td>
-      <td><span class="status-badge ${triageStatusClass(r.triagemStatus)}">${escapeHtml(triageStatusLabel(r.triagemStatus))}</span></td>
+      <td><span style="background:${escapeHtml(nucleoDecisionForRecord(r,r.triagem)?.color||'#eef4ff')}" class="status-badge ${triageStatusClass(r.triagemStatus)}">${escapeHtml(triageStatusLabel(r.triagemStatus))}</span></td>
       <td>
         <div class="triage-actions">
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(key)}')">Ver R.O.</button>
@@ -7256,7 +7257,7 @@ function addTriageAssignment(sector='',selectedEmail='',reason='',originalSector
   row.dataset.sector=chosen;
   row.dataset.originalSector=String(originalSector||chosen).trim();
   row.style.cssText='display:grid;grid-template-columns:minmax(140px,.7fr) minmax(200px,1fr) minmax(260px,1.35fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef';
-  const sectorList=(typeof getConfiguredSectors==='function'?getConfiguredSectors():[])
+  const sectorList=(typeof getConfiguredSectors==='function'?getConfiguredSectors(explicitRecordUnit(ro)||explicitPortalUnit(document.getElementById('triageRoUnit')?.value)):[])
     .slice()
     .sort((a,b)=>String(a).localeCompare(String(b),'pt-BR'));
   const sectorOptions=sectorList.map(sec=>`<option value="${escapeHtml(sec)}" ${normalizeAnswer(sec)===normalizeAnswer(chosen)?'selected':''}>${escapeHtml(sec)}</option>`).join('');
@@ -7429,10 +7430,10 @@ function openTriageRecord(id,originHint=''){
     }
 
     const decisionEl=document.getElementById('triageDecision');
-    if(decisionEl)decisionEl.value=tri.decision||'directed';
+    if(decisionEl)nucleoPopulateDecisions(ro,tri);
 
     const classificationEl=document.getElementById('triageClassification');
-    if(classificationEl)classificationEl.value=tri.classification||'';
+    if(classificationEl){classificationEl.value=tri.classification||ro.classificacaoSGQ||'';nucleoRefreshClassificationOptions();}
 
     populateTriageRoUnit(value(ro.unidade,raw.__unidade,''));
 
@@ -7446,7 +7447,7 @@ function openTriageRecord(id,originHint=''){
     }
 
     const decisionSector=document.getElementById('triageDecisionSector');
-    if(decisionSector){const chosen=tri.decisionSector||(['record','cancelled','obsolete'].includes(tri.decision)?tri.responsibleSector:'')||'';const options=[...new Set(sectors.concat(chosen?[chosen]:[]))];decisionSector.innerHTML='<option value="">Sem setor atribuído</option>'+options.map(sec=>'<option value="'+escapeHtml(sec)+'">'+escapeHtml(sec)+'</option>').join('');decisionSector.value=chosen;}
+    if(decisionSector){const chosen=tri.decisionSector||tri.responsibleSector||ro.setorResponsavelPlanilha||ro.setor||'';const options=[...new Set(sectors.concat(chosen?[chosen]:[]))];decisionSector.innerHTML='<option value="">Sem setor atribuído</option>'+options.map(sec=>'<option value="'+escapeHtml(sec)+'">'+escapeHtml(sec)+'</option>').join('');decisionSector.value=chosen;}
 
     const assignmentsBox=document.getElementById('triageAssignments');
     if(assignmentsBox)assignmentsBox.innerHTML='';
@@ -7488,7 +7489,7 @@ function openTriageRecord(id,originHint=''){
 }
 
 function updateTriageDecisionUi(){
-  const decision=document.getElementById('triageDecision')?.value||'directed';
+  const rule=nucleoSelectedDecision();const decision=rule.behavior;
   const sectorField=document.getElementById('triageSectorField');
   const title=document.getElementById('triagePdcaRuleTitle');
   const text=document.getElementById('triagePdcaRuleText');
@@ -7497,17 +7498,17 @@ function updateTriageDecisionUi(){
 
   const directed=decision==='directed';
   const unitCorrection=decision==='unit_correction';
-  const motiveRequired=['record','cancelled','obsolete'].includes(decision);
+  const motiveRequired=rule.requireReason===true;
   if(noteLabel)noteLabel.textContent=unitCorrection?'Observação da correção':(motiveRequired?'Motivo *':'Observação da triagem');
   if(note)note.placeholder=unitCorrection?'Opcional: informe por que a unidade foi corrigida.':(motiveRequired?'Informe obrigatoriamente o motivo desta decisão.':'Informações do SGQ sobre a classificação, direcionamento ou decisão tomada.');
   sectorField.style.display=directed?'block':'none';
-  const decisionSectorField=document.getElementById('triageDecisionSectorField');if(decisionSectorField)decisionSectorField.style.display=motiveRequired?'block':'none';
+  const decisionSectorField=document.getElementById('triageDecisionSectorField');if(decisionSectorField)decisionSectorField.style.display=['record','cancelled','obsolete'].includes(decision)?'block':'none';
 
   if(unitCorrection){
     title.textContent='Somente correção cadastral';
     text.textContent='Será alterada apenas a Unidade da R.O. na planilha de origem. A decisão, o setor, o Status e o PDCA permanecerão inalterados.';
   }else if(directed){
-    title.textContent='PDCA obrigatório';
+    title.textContent=rule.pdcaRequired?'PDCA obrigatório':'PDCA dispensado';
     text.textContent='Escolha o setor e, se necessário, uma pessoa específica. Sem pessoa selecionada, todos os usuários cadastrados no setor recebem a R.O.';
   }else if(decision==='record'){
     title.textContent='PDCA dispensado';
@@ -7602,13 +7603,13 @@ async function saveTriageRecord(){
 
   try{
 
-  const decision=document.getElementById('triageDecision').value;
+  const decisionRule=nucleoSelectedDecision();const decision=decisionRule.behavior;
   const classification=document.getElementById('triageClassification').value.trim();
   const roUnitValue=canonicalUnitName(document.getElementById('triageRoUnit')?.value||'');
   const assignments=getTriageAssignmentsFromUi();
   const responsibleSectors=assignments.map(x=>x.sector);
   const responsibleSector=responsibleSectors[0]||'';
-  const pdcaDeadline=decision==='directed'?nextTuesdayIsoDate():'';
+  const pdcaDeadline=decisionRule.pdcaRequired?nucleoDecisionDeadline(decisionRule):'';
   const criticality='Média';
   const note=document.getElementById('triageNote').value.trim();
   const decisionSector=['record','cancelled','obsolete'].includes(decision)?String(document.getElementById('triageDecisionSector')?.value||'').trim():'';
@@ -7621,12 +7622,13 @@ async function saveTriageRecord(){
     alert('Selecione pelo menos um setor responsável pela tratativa.');
     return;
   }
-  if(decision==='directed'&&assignments.some(x=>!String(x.reason||'').trim())){
+  if(decision==='directed'&&decisionRule.requireReason&&assignments.some(x=>!String(x.reason||'').trim())){
     alert('Informe o motivo do direcionamento para cada setor adicionado.');
     document.querySelector('.triage-assignment-reason:placeholder-shown')?.focus();
     return;
   }
-  if(['record','cancelled','obsolete'].includes(decision) && !note){
+  if(decisionRule.requireSector&&decision!=='directed'&&!decisionSector){alert('Selecione o setor responsável pela ocorrência.');return;}
+  if(decisionRule.requireReason&&decision!=='directed'&&!note){
     alert('Informe o motivo desta decisão.');
     document.getElementById('triageNote')?.focus();
     return;
@@ -7678,14 +7680,14 @@ async function saveTriageRecord(){
     const record={
       roKey:recordKey,roNumber,
       unidade:roUnitValue,unit:roUnitValue,roUnit:roUnitValue,
-      decision,classification,
+      decision,decisionId:decisionRule.id,decisionLabel:decisionRule.label,decisionRule:{...decisionRule},classification,
       responsibleSector:decision==='directed'?sec:decisionSector,
       decisionSector,
       responsibleUserEmail:decision==='directed'?assignmentEmail:'',
       responsibleUserName:decision==='directed'?(assignmentUser?.name||''):'',
       assignmentReason:decision==='directed'?String(assignment.reason||'').trim():'',
       previousResponsibleSector:decision==='directed'?String(assignment.originalSector||sec).trim():'',
-      pdcaRequired:decision==='directed',pdcaDeadline:decision==='directed'?pdcaDeadline:'',criticality,note,
+      pdcaRequired:decisionRule.pdcaRequired,pdcaDeadline:decisionRule.pdcaRequired?pdcaDeadline:'',criticality,note,
       triagedAt:new Date().toISOString(),triagedBy:getSession()?.name||'SGQ'
     };
     map.set(recordKey,record);savedRecords.push(record);
@@ -7713,7 +7715,7 @@ async function saveTriageRecord(){
         await Promise.race([
           portalUpdateRoSheetConfirmed(roNumber,{
             unidade:roUnitValue,
-            setor:decision==='directed'?record.responsibleSector:'',
+            setor:record.responsibleSector||'',
             setorAnterior:record.previousResponsibleSector||record.responsibleSector||'',
             pessoa:decision==='directed'?(record.responsibleUserName||'Todo o setor'):'',
             status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
@@ -7728,7 +7730,7 @@ async function saveTriageRecord(){
         );
       }
 
-      portalBackendSave('triage',record.roKey,record);
+      try{await portalBackendSaveConfirmed('triage',record.roKey,record);}catch(error){syncWarnings.push('A base central não confirmou a classificação e o setor: '+error.message);}
 
       const deletedKeys=getDeletedTriageKeys();
       if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
@@ -8676,6 +8678,8 @@ function sgqIndicatorFilterState(){
     origin:document.getElementById('sgqIndicatorOrigin')?.value||'all',
     period:document.getElementById('sgqIndicatorPeriod')?.value||'all',
     status:document.getElementById('sgqIndicatorStatus')?.value||'all',
+    classification:document.getElementById('sgqIndicatorClassification')?.value||'all',
+    decisionId:document.getElementById('sgqIndicatorDecision')?.value||'all',
     from:document.getElementById('sgqIndicatorDateFrom')?.value||'',
     to:document.getElementById('sgqIndicatorDateTo')?.value||''
   };
@@ -8685,6 +8689,8 @@ function sgqIndicatorMatchesFilters(ro,triageMap,filters){
   if(filters.unit!=='all' && !sameCanonicalUnit(ro?.unidade||'',filters.unit))return false;
   if(filters.origin!=='all' && String(ro?.origemBase||ro?.raw?.__origemBase||'').trim()!==filters.origin)return false;
 
+  if(filters.decisionId&&filters.decisionId!=='all'){const tri=resolvedTriageForRo(ro,triageMap)||{};if((tri.decisionId||tri.decision)!==filters.decisionId)return false;}
+  if(filters.classification&&filters.classification!=='all'&&normalizeAnswer(nucleoRoClassification(ro,triageMap))!==normalizeAnswer(filters.classification))return false;
   const statusCode=sgqIndicatorStatusCode(ro,triageMap);
   if(filters.status!=='all' && statusCode!==filters.status)return false;
 
@@ -8735,7 +8741,7 @@ function refreshSgqIndicatorPeriodFields(){
 }
 
 function clearSgqIndicatorFilters(){
-  ['sgqIndicatorUnit','sgqIndicatorOrigin','sgqIndicatorPeriod','sgqIndicatorStatus'].forEach(id=>{
+  ['sgqIndicatorUnit','sgqIndicatorOrigin','sgqIndicatorPeriod','sgqIndicatorStatus','sgqIndicatorClassification','sgqIndicatorDecision'].forEach(id=>{
     const el=document.getElementById(id);
     if(el)el.value='all';
   });
@@ -8772,20 +8778,18 @@ function sgqIndicatorData(){
 
   rosAll.forEach(baseRo=>{
     const roKey=String(baseRo.numero||baseRo.id||baseRo.codigo||'').trim();
-    const tri=triageMap.get(roKey)||{};
+    const tri=resolvedTriageForRo(baseRo,triageMap)||{};
     const ro=syncContestStateToRo({...baseRo});
     const decision=String(tri.decision||'').trim();
 
-    // Os KPIs de PDCA continuam específicos das R.O.s direcionadas.
-    const required=decision==='directed' && tri.pdcaRequired!==false;
-    if(!required)return;
-
-    totalRO++;
-
-    const sector=canonicalSectorName(tri.responsibleSector) || effectiveRoSector(baseRo,triageMap) || 'Sem setor';
+    const sector=canonicalSectorName(tri.decisionSector||tri.responsibleSector) || effectiveRoSector(baseRo,triageMap) || 'Sem setor';
     const sectorKey=sectorCompareKey(sector)||'semsetor';
     if(!sectorMap[sectorKey])sectorMap[sectorKey]={name:sector,total:0,pending:0,overdue:0};
     sectorMap[sectorKey].total++;
+    // Registro, cancelamento e obsolescência contam como ocorrências, sem cobrança de PDCA.
+    const required=decision==='directed' && tri.pdcaRequired!==false;
+    if(!required)return;
+    totalRO++;
 
     const p=byRo.get(roKey);
     if(!p){
@@ -8944,7 +8948,10 @@ function renderSgqCharts(d){
 
 function renderSgqIndicators(){
   if(!isAdmin()){showList();return}
+  nucleoRefreshIndicatorDecisions();
+  nucleoRefreshIndicatorClassificationOptions();
   const d=sgqIndicatorData();
+  nucleoRenderClassificationIndicators(d);
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v};
   set('kpiFilteredRO',d.filteredRO);
   set('kpiStatusAnalysis',d.statusCounts.analysis||0);
@@ -8982,6 +8989,7 @@ function renderSgqIndicators(){
   const summary=document.getElementById('sgqIndicatorFilterSummary');
   if(summary){
     const parts=[];
+    if(d.filters.classification!=='all')parts.push('Classificação: '+d.filters.classification);
     if(d.filters.unit!=='all')parts.push('Unidade: '+d.filters.unit);
     if(d.filters.origin!=='all')parts.push('Entrada: '+(d.filters.origin==='Externa'?'Externa/SAC':d.filters.origin));
     if(d.filters.status!=='all'){
@@ -8994,6 +9002,7 @@ function renderSgqIndicators(){
     summary.textContent=(parts.length?parts.join(' · ')+' · ':'')+d.filteredRO+' R.O.(s) consideradas';
   }
 
+  nucleoRenderSectorDecisionIndicators(d);
   renderSgqCharts(d);
 }
 async function showSgqIndicators(){
@@ -14607,7 +14616,7 @@ function renderMySubmittedRos(){
   if(!body)return;
 
   body.innerHTML=rowsData.length?rowsData.map(({ro,state})=>`
-    <tr class="${submittedRoRowClass(ro)}">
+    <tr style="background:${escapeHtml(nucleoDecisionForRecord(ro,getRoTriageRecord(ro))?.color||'')}" class="${submittedRoRowClass(ro)}">
       <td><b>${escapeHtml(ro.numero||'-')}</b></td>
       <td>${escapeHtml(ro.data||'-')}</td>
       <td>${escapeHtml(ro.cliente||'-')}</td>
@@ -15990,7 +15999,7 @@ function ensureUnitQualitySettings(){
 function loadUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value;const c=unitConfiguration(unit)||{};
   const sectors=c.sectorList??(unit==='matriz'?getConfiguredSectors('matriz').join('\n'):'');const legacyField=document.getElementById('sectorList');if(legacyField)legacyField.value=sectors;
-  document.getElementById('qualityConfigSectors').value=sectors;document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';renderDocumentTypeSettings(unit);
+  document.getElementById('qualityConfigSectors').value=sectors;document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';renderDocumentTypeSettings(unit);nucleoRenderDecisionSettings(unit);
 }
 async function saveUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value,data={sectorList:document.getElementById('qualityConfigSectors').value,sgqNotificationEmail:document.getElementById('qualityConfigEmail').value,directorSacEmail:document.getElementById('qualityConfigDirector').value};
@@ -15999,6 +16008,7 @@ async function saveUnitQualitySettings(){
   if(!nucleoPersonFeatureCan('sectors','edit'))delete data.sectorList;
   if(!nucleoPersonFeatureCan('sectors','emails')){delete data.sgqNotificationEmail;delete data.directorSacEmail;}
   if(!nucleoPersonFeatureCan('sectors','documentTypes'))delete data.documentTypes;
+  if(document.getElementById('decisionRuleRows')&&nucleoPersonFeatureCan('sectors','decisions'))data.decisionRules=nucleoCollectDecisionRules();
   if(!Object.keys(data).length){alert('Seu acesso não inclui alterar estas configurações.');return;}
   const status=document.getElementById('qualityConfigStatus');status.textContent='Salvando...';
   try{const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não confirmado.');await syncPortalBackend();refreshSectorSelectors();status.textContent='Configuração salva na base central.';}catch(e){status.textContent=e.message||String(e);}
@@ -16056,7 +16066,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-functions26',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-decisions28',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16227,3 +16237,87 @@ function nucleoApplyFeatureButtons(){
 }
 let nucleoFeatureButtonRefresh=false;
 new MutationObserver(()=>{if(nucleoFeatureButtonRefresh)return;nucleoFeatureButtonRefresh=true;queueMicrotask(()=>{nucleoFeatureButtonRefresh=false;nucleoApplyFeatureButtons();});}).observe(document.body,{childList:true,subtree:true});
+
+function nucleoRoClassification(ro,map){
+ return String((resolvedTriageForRo(ro,map)||{}).classification||ro.classificacaoSGQ||'').trim();
+}
+function nucleoClassificationOptions(){
+ const map=getSavedTriageMap(),names=new Map();
+ ['Falta de caixa',...getAllRoRecords().map(ro=>nucleoRoClassification(ro,map))].filter(Boolean).forEach(name=>{const key=normalizeAnswer(name);if(!names.has(key))names.set(key,name);});
+ return [...names.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+function nucleoRefreshClassificationOptions(){
+ const list=document.getElementById('triageClassificationOptions');if(list)list.innerHTML=nucleoClassificationOptions().map(name=>'<option value="'+escapeHtml(name)+'"></option>').join('');
+}
+function nucleoRefreshIndicatorClassificationOptions(){
+ const select=document.getElementById('sgqIndicatorClassification');if(!select)return;const value=select.value;
+ select.innerHTML='<option value="all">Todas as classificações</option>'+nucleoClassificationOptions().map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');
+ if([...select.options].some(o=>o.value===value))select.value=value;
+}
+function nucleoRenderClassificationIndicators(data){
+ const host=document.getElementById('sgqByClassification');if(!host)return;
+ const map=getSavedTriageMap(),rows=new Map();
+ getAllRoRecords().filter(ro=>sgqIndicatorMatchesFilters(ro,map,data.filters)).forEach(ro=>{
+  const name=nucleoRoClassification(ro,map)||'Sem classificação',key=normalizeAnswer(name);
+  if(!rows.has(key))rows.set(key,{name,total:0,record:0,cancelled:0,obsolete:0,directed:0});
+  const row=rows.get(key);row.total++;const status=sgqIndicatorStatusCode(ro,map);if(status in row)row[status]++;
+ });
+ host.innerHTML=rows.size?'<div style="overflow:auto"><table style="width:100%"><thead><tr><th>Classificação</th><th>Total</th><th>Registro</th><th>Canceladas</th><th>Obsoletas</th><th>Direcionadas</th></tr></thead><tbody>'+[...rows.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,'pt-BR')).map(row=>'<tr><td>'+escapeHtml(row.name)+'</td><td>'+row.total+'</td><td>'+row.record+'</td><td>'+row.cancelled+'</td><td>'+row.obsolete+'</td><td>'+row.directed+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small">Nenhuma ocorrência para os filtros escolhidos.</p>';
+}
+
+function nucleoDecisionRules(unit){const config=unitConfiguration(unit)||{};return Array.isArray(config.decisionRules)?config.decisionRules:NUCLEO_DEFAULT_DECISIONS;}
+function nucleoDecisionForRecord(ro,tri){const unit=explicitRecordUnit(ro)||explicitPortalUnit(tri?.unit)||'matriz';return nucleoDecisionRules(unit).find(rule=>rule.id===(tri?.decisionId||tri?.decision))||tri?.decisionRule||NUCLEO_DEFAULT_DECISIONS.find(rule=>rule.id===tri?.decision);}
+function nucleoPopulateDecisions(ro,tri){
+ const select=document.getElementById('triageDecision'),unit=explicitRecordUnit(ro)||'matriz',rules=nucleoDecisionRules(unit),current=nucleoDecisionForRecord(ro,tri);
+ const options=rules.filter(rule=>rule.active!==false);if(current&&!options.some(rule=>rule.id===current.id))options.push(current);
+ select.innerHTML=options.map(rule=>'<option value="'+escapeHtml(rule.id)+'">'+escapeHtml(rule.label)+(rule.active===false?' (desativada)':'')+'</option>').join('')+'<option value="unit_correction">Correção de unidade</option>';
+ select.value=current?.id||options[0]?.id||'unit_correction';select._decisionRules=rules.concat(current?[current]:[]);
+}
+function nucleoSelectedDecision(){const select=document.getElementById('triageDecision');if(select?.value==='unit_correction')return {id:'unit_correction',behavior:'unit_correction',requireReason:false,pdcaRequired:false};return select?._decisionRules?.find(rule=>rule.id===select.value)||NUCLEO_DEFAULT_DECISIONS[0];}
+function nucleoDecisionDeadline(rule){if(rule.deadlineDays===null||rule.deadlineDays===undefined)return nextTuesdayIsoDate();const date=new Date();date.setDate(date.getDate()+Number(rule.deadlineDays));return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');}
+function nucleoRenderDecisionSettings(unit){
+ let box=document.getElementById('decisionRuleSettings');if(!box){box=document.createElement('section');box.id='decisionRuleSettings';box.className='unit-settings-section';document.getElementById('unitQualitySettings').appendChild(box);}
+ box.innerHTML='<h3>Decisões de R.O.</h3><p class="small">Altere nomes e regras desta unidade. Desative uma opção para retirá-la das novas triagens; o histórico será preservado. Mudanças de regra serão aplicadas ao salvar uma nova triagem.</p><div id="decisionRuleRows"></div><button class="btn secondary" id="addDecisionRule">Adicionar decisão</button> <button class="btn primary" onclick="nucleoSaveDecisionRules()">Salvar decisões desta unidade</button><p id="decisionRuleStatus" role="status"></p>';
+ nucleoDecisionRules(unit).forEach(nucleoAddDecisionRow);document.getElementById('addDecisionRule').onclick=()=>nucleoAddDecisionRow({id:'decision_'+Date.now().toString(36),label:'',behavior:'record',active:true,requireSector:false,requireReason:true,pdcaRequired:false,deadlineDays:null,color:'#fff9e5'});
+ if(!nucleoPersonFeatureCan('sectors','decisions'))box.querySelectorAll('input,select,button').forEach(el=>el.disabled=true);
+}
+function nucleoAddDecisionRow(rule){
+ const row=document.createElement('div');row.dataset.decisionId=rule.id;row.style.cssText='border:1px solid #dde4ed;padding:14px;border-radius:10px;margin:10px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px';
+ row.innerHTML='<label>Nome<input data-rule="label" value="'+escapeHtml(rule.label)+'"></label><label>Comportamento<select data-rule="behavior">'+[['directed','Direcionamento'],['record','Somente registro'],['cancelled','Cancelamento'],['obsolete','Obsolescência']].map(([id,label])=>'<option value="'+id+'">'+label+'</option>').join('')+'</select></label><label>Cor<input data-rule="color" type="color" value="'+escapeHtml(rule.color||'#fff9e5')+'"></label><label>Prazo de PDCA (dias)<input data-rule="deadlineDays" type="number" min="0" max="365" placeholder="Vazio: próxima terça-feira" value="'+(rule.deadlineDays??'')+'"></label>'+[['active','Disponível para novas triagens'],['requireSector','Exigir setor'],['requireReason','Exigir motivo'],['pdcaRequired','Exigir PDCA']].map(([key,label])=>'<label style="display:flex;gap:8px;align-items:center"><input style="width:20px;height:20px" type="checkbox" data-rule="'+key+'" '+(rule[key]?'checked':'')+'>'+label+'</label>').join('');
+ document.getElementById('decisionRuleRows').appendChild(row);row.querySelector('[data-rule="behavior"]').value=rule.behavior;
+ const refresh=()=>{const directed=row.querySelector('[data-rule="behavior"]').value==='directed';const sector=row.querySelector('[data-rule="requireSector"]');sector.disabled=directed;if(directed)sector.checked=true;const pdca=row.querySelector('[data-rule="pdcaRequired"]');pdca.disabled=!directed;if(!directed)pdca.checked=false;row.querySelector('[data-rule="deadlineDays"]').disabled=!directed;};row.querySelector('[data-rule="behavior"]').onchange=refresh;refresh();
+}
+function nucleoCollectDecisionRules(){return [...document.getElementById('decisionRuleRows').children].map(row=>{const rule={id:row.dataset.decisionId};row.querySelectorAll('[data-rule]').forEach(input=>rule[input.dataset.rule]=input.type==='checkbox'?input.checked:input.dataset.rule==='deadlineDays'?(input.value===''?null:Number(input.value)):input.value.trim());return rule;});}
+function nucleoSectorDecisionIndicators(data){
+ const map=getSavedTriageMap(),rows=new Map(),sent=getAllSentPdcas();
+ getAllRoRecords().filter(ro=>sgqIndicatorMatchesFilters(ro,map,data.filters)).forEach(ro=>{
+  const resolved=resolvedTriageForRo(ro,map)||{};const assignments=resolved.decision==='directed'&&typeof getTriageRecordsForRoNumber==='function'?getTriageRecordsForRoNumber(String(ro.numero||ro.id),map).filter(t=>t.decision==='directed'):[];const unique=new Map();(assignments.length?assignments:[resolved]).forEach(t=>unique.set(sectorCompareKey(t.responsibleSector||t.decisionSector||''),t));
+  for(const tri of unique.values()){const sector=tri.decisionSector||tri.responsibleSector||effectiveRoSector(ro,map)||'Sem setor',key=sectorCompareKey(sector);
+  if(!rows.has(key))rows.set(key,{name:sector,total:0,cancelled:0,record:0,obsolete:0,pending:0,responded:0,presented:0,done:0,triage:0,decisions:new Map()});const row=rows.get(key);row.total++;
+  const status=tri.decision||sgqIndicatorStatusCode(ro,map),rule=nucleoDecisionForRecord(ro,tri),label=rule?.label||tri.decisionLabel||triageDecisionLabel(tri.decision);
+  row.decisions.set(label,(row.decisions.get(label)||0)+1);
+  if(['cancelled','record','obsolete'].includes(status)){row[status]++;continue;}
+  if(status!=='directed'){row[status==='done'?'done':'triage']++;continue;}
+  if(tri.pdcaRequired===false){row.done++;continue;}
+  const p=sent.filter(p=>String(p.ro||p.roId)===String(ro.numero||ro.id)&&(!p.setor&&!p.sector||sectorCompareKey(p.setor||p.sector)===sectorCompareKey(sector))&&(!explicitRecordUnit(p)||explicitRecordUnit(p)===explicitRecordUnit(ro))).sort((a,b)=>String(b.createdAt||b.dataHora||'').localeCompare(String(a.createdAt||a.dataHora||'')))[0];
+  const ps=pdcaStatusLabel(p);row[ps==='Apresentado'?'presented':ps==='Respondido'?'responded':ps==='Concluído'?'done':'pending']++;
+ }
+ });return [...rows.values()].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+}
+function nucleoRenderSectorDecisionIndicators(data){
+ const host=document.getElementById('sgqBySector');if(!host)return;const rows=nucleoSectorDecisionIndicators(data);
+ host.innerHTML=rows.length?'<div style="overflow:auto"><table style="width:100%;min-width:850px"><thead><tr><th>Setor</th><th>Total</th><th>Canceladas</th><th>Registro</th><th>Obsoletas</th><th>Pendentes</th><th>Respondidas</th><th>Apresentadas</th><th>Concluídas</th><th>A triar</th><th>Decisões</th></tr></thead><tbody>'+rows.map(row=>'<tr><td>'+escapeHtml(row.name)+'</td>'+['total','cancelled','record','obsolete','pending','responded','presented','done','triage'].map(key=>'<td>'+row[key]+'</td>').join('')+'<td>'+[...row.decisions].map(([label,count])=>escapeHtml(label)+': '+count).join('<br>')+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small">Nenhuma ocorrência para os filtros.</p>';
+}
+
+function nucleoRefreshIndicatorDecisions(){
+ const select=document.getElementById('sgqIndicatorDecision');if(!select)return;const current=select.value,map=new Map();
+ for(const unit of nucleoPersonUnits(getSession()))for(const rule of nucleoDecisionRules(unit))map.set(rule.id,rule.label);
+ for(const ro of getAllRoRecords()){const tri=getRoTriageRecord(ro)||{},rule=nucleoDecisionForRecord(ro,tri);if(rule)map.set(rule.id,rule.label);}
+ select.innerHTML='<option value="all">Todas as decisões</option>'+[...map].map(([id,label])=>'<option value="'+escapeHtml(id)+'">'+escapeHtml(label)+'</option>').join('');if([...select.options].some(o=>o.value===current))select.value=current;
+}
+
+async function nucleoSaveDecisionRules(){
+ if(!nucleoFeatureRequire('sectors','decisions'))return;
+ const status=document.getElementById('decisionRuleStatus'),unit=document.getElementById('qualityConfigUnit').value;status.textContent='Salvando decisões na base central…';
+ try{const rules=nucleoCollectDecisionRules(),result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({decisionRules:rules})},60000);if(!result?.sucesso)throw new Error(result?.erro||'Salvamento não confirmado.');const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!==unit),{...old,id:unit,unit,decisionRules:rules}]));status.textContent='Decisões salvas na base central. Novas triagens usarão estas regras.';}catch(error){status.textContent='Não foi possível salvar: '+error.message;}
+}
