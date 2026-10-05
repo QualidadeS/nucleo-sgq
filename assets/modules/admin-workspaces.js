@@ -207,7 +207,7 @@ function showAdminOperationalModule(key){
     : allModuleRecords;
   const pending=records.filter(r=>isAdminModulePending(r,key)).length;
   const done=records.filter(r=>['done','published'].includes(r.status)).length;
-  const visibleCards=(key==='documents'&&!isAdmin())?m.cards.slice(0,2):m.cards;
+  const visibleCards=((key==='documents'&&!isAdmin())?m.cards.slice(0,2):m.cards).filter(c=>nucleoWorkspaceAllowed(key,c[2]||'history'));
   list.innerHTML=`<div style="grid-column:1/-1">
     <div style="font-size:11px;letter-spacing:.18em;color:#1455ff;font-weight:700;margin-bottom:10px">${escapeHtml(m.eyebrow)}</div>
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px">
@@ -216,7 +216,7 @@ function showAdminOperationalModule(key){
       <div class="card" style="padding:16px"><span class="small">CONCLUÍDOS</span><div style="font-size:28px;font-weight:700;margin-top:5px">${done}</div></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:20px">
-      ${visibleCards.map((c,i)=>`<button type="button" class="card" onclick="openAdminOperationalWorkspace('${key}',${i})" style="text-align:left;cursor:pointer;min-height:165px;padding:18px;background:#fff">
+      ${visibleCards.map((c,i)=>`<button type="button" class="card" onclick="openAdminOperationalWorkspace('${key}',${m.cards.indexOf(c)})" style="text-align:left;cursor:pointer;min-height:165px;padding:18px;background:#fff">
         <div style="width:38px;height:38px;border-radius:12px;background:#eef4ff;display:grid;place-items:center;color:#1455ff;font-size:20px;margin-bottom:16px">${i===0?'＋':i===1?'◷':i===2?'▣':'↶'}</div>
         <b style="display:block;font-size:15px;margin-bottom:8px">${escapeHtml(c[0])}</b>
         <span class="small" style="display:block;line-height:1.45">${escapeHtml(c[1])}</span>
@@ -227,7 +227,7 @@ function showAdminOperationalModule(key){
       ? `<div id="ncModuleInlineOverview"></div>`
       : `<div class="card" style="padding:20px;display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap">
           <div><b>Espaço de trabalho</b><p class="muted" style="margin:8px 0 0">Escolha um subtópico acima ou abra um novo registro agora.</p></div>
-          <button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>
+          ${nucleoWorkspaceAllowed(key,m.cards[0][2])?`<button class="btn primary" type="button" onclick="openAdminOperationalWorkspace('${key}',0)">＋ Novo registro</button>`:''}
         </div>`}
   </div>`;
 
@@ -243,6 +243,7 @@ function openAdminOperationalWorkspace(key,index){
   const m=ADMIN_OPERATIONAL_MODULES[key], c=m?.cards?.[index]; if(!c)return;
   if(!isAdmin()&&key==='documents'&&index>1)return;
   const mode=c[2]||'history';
+  if(!nucleoWorkspaceAllowed(key,mode)){const [module,feature]=nucleoWorkspaceFeature(key,mode);nucleoFeatureRequire(module,feature);return;}
   const title=document.getElementById('adminModuleTitle'), sub=document.getElementById('adminModuleSubtitle'), list=document.getElementById('adminModuleContent'), eyebrow=document.getElementById('adminModuleEyebrow');
   if(title)title.textContent=c[0];
   if(sub)sub.textContent=c[1];

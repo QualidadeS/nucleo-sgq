@@ -3847,6 +3847,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
         <textarea id="announcementMessage" rows="6" placeholder="Escreva o comunicado..."></textarea>
       </label>
 
+      <label><div class="label">Unidades destinatárias</div><select id="announcementUnit" onchange="refreshAnnouncementSectorSelect()"><option value="todas">Matriz e filial</option><option value="matriz">SETA SC — Matriz</option><option value="filial">SETA ES — Linhares</option></select></label>
       <label>
         <div class="label">Público</div>
         <select id="announcementAudience" onchange="updateAnnouncementAudienceUi()">
@@ -4224,7 +4225,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261005-access24"></script>
+<script src="assets/nucleo-app.js?v=20261005-functions26"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
