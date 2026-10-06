@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261005-box31',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-6m34',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -7435,7 +7435,7 @@ function openTriageRecord(id,originHint=''){
     if(decisionEl)nucleoPopulateDecisions(ro,tri);
 
     const classificationEl=document.getElementById('triageClassification');
-    if(classificationEl){classificationEl.value=tri.classification||ro.classificacaoSGQ||'';nucleoRefreshClassificationOptions();}
+    if(classificationEl)nucleoLoadClassification(tri,ro);
 
     populateTriageRoUnit(value(ro.unidade,raw.__unidade,''));
 
@@ -7606,7 +7606,9 @@ async function saveTriageRecord(){
   try{
 
   const decisionRule=nucleoSelectedDecision();const decision=decisionRule.behavior;
-  const classification=document.getElementById('triageClassification').value.trim();
+  const classificationData=nucleoReadClassification();
+  if(!classificationData)return;
+  const classification=classificationData.labels.join(' / ');
   const roUnitValue=canonicalUnitName(document.getElementById('triageRoUnit')?.value||'');
   const assignments=getTriageAssignmentsFromUi();
   const responsibleSectors=assignments.map(x=>x.sector);
@@ -7682,7 +7684,7 @@ async function saveTriageRecord(){
     const record={
       roKey:recordKey,roNumber,
       unidade:roUnitValue,unit:roUnitValue,roUnit:roUnitValue,
-      decision,decisionId:decisionRule.id,decisionLabel:decisionRule.label,decisionRule:{...decisionRule},classification,
+      decision,decisionId:decisionRule.id,decisionLabel:decisionRule.label,decisionRule:{...decisionRule},classification,classificationMs:classificationData.ms,classificationOther:classificationData.other,
       responsibleSector:decision==='directed'?sec:decisionSector,
       decisionSector,
       responsibleUserEmail:decision==='directed'?assignmentEmail:'',
@@ -8692,7 +8694,7 @@ function sgqIndicatorMatchesFilters(ro,triageMap,filters){
   if(filters.origin!=='all' && String(ro?.origemBase||ro?.raw?.__origemBase||'').trim()!==filters.origin)return false;
 
   if(filters.decisionId&&filters.decisionId!=='all'){const tri=resolvedTriageForRo(ro,triageMap)||{};if((tri.decisionId||tri.decision)!==filters.decisionId)return false;}
-  if(filters.classification&&filters.classification!=='all'&&normalizeAnswer(nucleoRoClassification(ro,triageMap))!==normalizeAnswer(filters.classification))return false;
+  if(filters.classification&&filters.classification!=='all'&&!nucleoRoClassifications(ro,triageMap).some(name=>normalizeAnswer(name)===normalizeAnswer(filters.classification)))return false;
   const statusCode=sgqIndicatorStatusCode(ro,triageMap);
   if(filters.status!=='all' && statusCode!==filters.status)return false;
 
@@ -16068,7 +16070,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261005-box31',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-6m34',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16245,7 +16247,7 @@ function nucleoRoClassification(ro,map){
 }
 function nucleoClassificationOptions(){
  const map=getSavedTriageMap(),names=new Map();
- ['Falta de caixa',...getAllRoRecords().map(ro=>nucleoRoClassification(ro,map))].filter(Boolean).forEach(name=>{const key=normalizeAnswer(name);if(!names.has(key))names.set(key,name);});
+ ['Falta de caixa',...NUCLEO_CLASSIFICATION_MS,...getAllRoRecords().flatMap(ro=>nucleoRoClassifications(ro,map))].filter(Boolean).forEach(name=>{const key=normalizeAnswer(name);if(!names.has(key))names.set(key,name);});
  return [...names.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));
 }
 function nucleoRefreshClassificationOptions(){
@@ -16260,11 +16262,12 @@ function nucleoRenderClassificationIndicators(data){
  const host=document.getElementById('sgqByClassification');if(!host)return;
  const map=getSavedTriageMap(),rows=new Map();
  getAllRoRecords().filter(ro=>sgqIndicatorMatchesFilters(ro,map,data.filters)).forEach(ro=>{
-  const name=nucleoRoClassification(ro,map)||'Sem classificação',key=normalizeAnswer(name);
+  const names=nucleoRoClassifications(ro,map);
+  (names.length?names:['Sem classificação']).forEach(name=>{const key=normalizeAnswer(name);
   if(!rows.has(key))rows.set(key,{name,total:0,record:0,cancelled:0,obsolete:0,directed:0});
-  const row=rows.get(key);row.total++;const status=sgqIndicatorStatusCode(ro,map);if(status in row)row[status]++;
+  const row=rows.get(key);row.total++;const status=sgqIndicatorStatusCode(ro,map);if(status in row)row[status]++;});
  });
- host.innerHTML=rows.size?'<div style="overflow:auto"><table style="width:100%"><thead><tr><th>Classificação</th><th>Total</th><th>Registro</th><th>Canceladas</th><th>Obsoletas</th><th>Direcionadas</th></tr></thead><tbody>'+[...rows.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,'pt-BR')).map(row=>'<tr><td>'+escapeHtml(row.name)+'</td><td>'+row.total+'</td><td>'+row.record+'</td><td>'+row.cancelled+'</td><td>'+row.obsolete+'</td><td>'+row.directed+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small">Nenhuma ocorrência para os filtros escolhidos.</p>';
+ host.innerHTML=rows.size?'<p class="small">Uma R.O. com várias classificações é contada em cada uma delas.</p><div style="overflow:auto"><table style="width:100%"><thead><tr><th>Classificação</th><th>Total</th><th>Registro</th><th>Canceladas</th><th>Obsoletas</th><th>Direcionadas</th></tr></thead><tbody>'+[...rows.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,'pt-BR')).map(row=>'<tr><td>'+escapeHtml(row.name)+'</td><td>'+row.total+'</td><td>'+row.record+'</td><td>'+row.cancelled+'</td><td>'+row.obsolete+'</td><td>'+row.directed+'</td></tr>').join('')+'</tbody></table></div>':'<p class="small">Nenhuma ocorrência para os filtros escolhidos.</p>';
 }
 
 function nucleoDecisionRules(unit){const config=unitConfiguration(unit)||{};return Array.isArray(config.decisionRules)?config.decisionRules:NUCLEO_DEFAULT_DECISIONS;}
@@ -16322,4 +16325,39 @@ async function nucleoSaveDecisionRules(){
  if(!nucleoFeatureRequire('sectors','decisions'))return;
  const status=document.getElementById('decisionRuleStatus'),unit=document.getElementById('qualityConfigUnit').value;status.textContent='Salvando decisões na base central…';
  try{const rules=nucleoCollectDecisionRules(),result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({decisionRules:rules})},60000);if(!result?.sucesso)throw new Error(result?.erro||'Salvamento não confirmado.');const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!==unit),{...old,id:unit,unit,decisionRules:rules}]));status.textContent='Decisões salvas na base central. Novas triagens usarão estas regras.';}catch(error){status.textContent='Não foi possível salvar: '+error.message;}
+}
+
+const NUCLEO_CLASSIFICATION_MS=['Método','Máquina','Mão de obra','Material','Medição','Meio ambiente'];
+function nucleoRoClassifications(ro,map){
+ const tri=resolvedTriageForRo(ro,map)||{};
+ if(Array.isArray(tri.classificationMs))return [...tri.classificationMs,...(tri.classificationOther?[tri.classificationOther]:[])];
+ const legacy=nucleoRoClassification(ro,map);return legacy?[legacy]:[];
+}
+function nucleoToggleClassificationOther(){
+ const checked=document.getElementById('triageClassificationOther').checked;
+ document.getElementById('triageClassificationOtherWrap').hidden=!checked;
+ document.getElementById('triageClassification').required=checked;
+}
+function nucleoLoadClassification(tri,ro){
+ const input=document.getElementById('triageClassification');
+ if(!document.getElementById('triageClassificationChoices')&&input){
+  const host=document.createElement('div');host.id='triageClassificationChoices';host.style.cssText='display:flex;flex-wrap:wrap;gap:12px';input.before(host);
+  const wrap=document.createElement('div');wrap.id='triageClassificationOtherWrap';input.before(wrap);wrap.appendChild(input);
+  const label=host.parentElement.querySelector('.label');if(label)label.textContent='Classificação da R.O. — 6Ms *';
+ }
+ const legacy=String(tri.classification||ro.classificacaoSGQ||'').trim();
+ const structured=Array.isArray(tri.classificationMs);
+ const ms=structured?tri.classificationMs:NUCLEO_CLASSIFICATION_MS.filter(name=>normalizeAnswer(name)===normalizeAnswer(legacy));
+ const other=structured?String(tri.classificationOther||''):(ms.length?'':legacy);
+ document.getElementById('triageClassificationChoices').innerHTML=[...NUCLEO_CLASSIFICATION_MS,'Outra classificação'].map((name,i)=>'<label style="display:flex;align-items:center;gap:7px"><input type="checkbox" '+(i===6?'id="triageClassificationOther" onchange="nucleoToggleClassificationOther()"':'class="triage-classification-m" value="'+escapeHtml(name)+'"')+' style="width:20px;height:20px" '+((i===6?!!other:ms.includes(name))?'checked':'')+'>'+escapeHtml(name)+'</label>').join('');
+ document.getElementById('triageClassification').value=other;nucleoRefreshClassificationOptions();nucleoToggleClassificationOther();
+}
+function nucleoReadClassification(){
+ const ms=[...document.querySelectorAll('.triage-classification-m:checked')].map(el=>el.value);
+ const otherChecked=document.getElementById('triageClassificationOther').checked;
+ let other=otherChecked?document.getElementById('triageClassification').value.trim().replace(/\s+/g,' '):'';
+ if(other)other=nucleoClassificationOptions().find(name=>normalizeAnswer(name)===normalizeAnswer(other))||other;
+ if(otherChecked&&!other){alert('Preencha a outra classificação.');document.getElementById('triageClassification').focus();return null;}
+ if(!ms.length&&!other){alert('Selecione pelo menos uma classificação dos 6Ms ou informe outra classificação.');return null;}
+ return {ms,other,labels:[...ms,...(other?[other]:[])]};
 }

@@ -3589,7 +3589,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
           <option value="custom">Período personalizado</option>
         </select>
       </label>
-      <label><div class="label">Decisão da R.O.</div><select id="sgqIndicatorDecision" onchange="renderSgqIndicators()"><option value="all">Todas as decisões</option></select></label><label><div class="label">Classificação da R.O.</div><select id="sgqIndicatorClassification" onchange="renderSgqIndicators()"><option value="all">Todas as classificações</option></select></label>
+      <label><div class="label">Decisão da R.O.</div><select id="sgqIndicatorDecision" onchange="renderSgqIndicators()"><option value="all">Todas as decisões</option></select></label><label><div class="label">Classificação da R.O. — 6Ms *</div><select id="sgqIndicatorClassification" onchange="renderSgqIndicators()"><option value="all">Todas as classificações</option></select></label>
 <label>
         <div class="label">Status</div>
         <select id="sgqIndicatorStatus" onchange="renderSgqIndicators()">
@@ -4228,7 +4228,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261005-box31"></script>
+<script src="assets/nucleo-app.js?v=20261006-6m34"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4323,8 +4323,10 @@ Cancelada</textarea></label>
         </div>
 
         <div class="field">
-          <div class="label">Classificação da R.O.</div>
-          <input id="triageClassification" list="triageClassificationOptions" placeholder="Ex.: Falta de caixa"><datalist id="triageClassificationOptions"></datalist><div class="small">Tipo de problema usado nos indicadores. Pode ser editado em qualquer decisão, sem mudar a exigência de PDCA.</div>
+          <div class="label">Classificação da R.O. — 6Ms *</div>
+          <div id="triageClassificationChoices" style="display:flex;flex-wrap:wrap;gap:12px"><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Método" style="width:20px;height:20px">Método</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Máquina" style="width:20px;height:20px">Máquina</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Mão de obra" style="width:20px;height:20px">Mão de obra</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Material" style="width:20px;height:20px">Material</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Medição" style="width:20px;height:20px">Medição</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" class="triage-classification-m" value="Meio ambiente" style="width:20px;height:20px">Meio ambiente</label><label style="display:flex;align-items:center;gap:7px"><input type="checkbox" id="triageClassificationOther" onchange="nucleoToggleClassificationOther()" style="width:20px;height:20px">Outra classificação</label></div>
+          <div id="triageClassificationOtherWrap" hidden><label for="triageClassification">Outra classificação</label><input id="triageClassification" list="triageClassificationOptions" placeholder="Escolha uma classificação cadastrada ou escreva uma nova"><datalist id="triageClassificationOptions"></datalist></div>
+          <div class="small">Obrigatório: selecione um ou mais dos 6Ms ou informe outra classificação. Esta seleção não altera a decisão nem a exigência de PDCA.</div>
         </div>
 
         <div class="field">
