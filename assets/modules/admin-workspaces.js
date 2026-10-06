@@ -201,7 +201,8 @@ function showAdminOperationalModule(key){
   const title=document.getElementById('adminModuleTitle'), sub=document.getElementById('adminModuleSubtitle'), list=document.getElementById('adminModuleContent'), eyebrow=document.getElementById('adminModuleEyebrow');
   if(title)title.textContent=m.title; if(sub)sub.textContent=m.desc; if(eyebrow)eyebrow.textContent=m.eyebrow; if(!list)return;
   if(list&&key==='documents'){}
-  const allModuleRecords=getAdminModuleRecords().filter(r=>r.module===key);
+  window.nucleoManagerModuleKey=key;
+  const allModuleRecords=getAdminModuleRecords().filter(r=>r.module===key&&nucleoManagerScopeAllows(r));
   const records=(key==='documents'&&!isAdmin())
     ? allModuleRecords.filter(r=>normalizeAnswer(r.createdBy||'')===normalizeAnswer(getSession()?.name||''))
     : allModuleRecords;

@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix45',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix47',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -9761,6 +9761,7 @@ function closePdcaQuickView(){
 }
 
 function canViewPdca(p){
+  if(!nucleoManagerScopeAllows(p))return false;
   if(isAdmin() || sameSector(p.setor))return true;
 
   const roKey=String(p?.ro||p?.roId||p?.numeroRo||'').trim();
@@ -10259,6 +10260,7 @@ function notifyManagersOfDirectedRo(roKey,sector,triageRo,responsibleUserName){
 }
 
 function canViewRO(ro){
+  if(!nucleoManagerScopeAllows(ro))return false;
   // ADM Geral vê as duas unidades. ADM Matriz/Filial fica restrito à sua unidade.
   if(isAdmin())return getSession()?.role==='quality'?qualityRecordAllowed(ro):isGeneralAdmin()||sameUnitAsCurrentUser(ro);
 
@@ -14093,7 +14095,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     });
     return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
   }) : ros;
-  const list=assignedSource
+  const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
       const tri=getRoTriageRecord(r);
@@ -14998,11 +15000,10 @@ function populateAssignedRoFilters(){
   const unitEl=document.getElementById('assignedUnitFilter');
   if(sectorEl){
     const current=sectorEl.value||'all';
-    const sectors=[...new Set(getTriageRecords()
-      .filter(r=>r.triagemStatus!=='new')
-      .map(r=>String(r.setorDirecionado||'').trim()).filter(Boolean))]
-      .sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    sectorEl.innerHTML='<option value="all">Todos os setores</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+    const sectors=nucleoVisibleManagerSectors(isManager(),managedSectorsForCurrentUser(),getTriageRecords().filter(r=>r.triagemStatus!=='new').map(r=>r.setorDirecionado));
+    sectorEl.setAttribute('aria-label',isManager()?'Setor sob minha gestão':'Setor responsável');
+    sectorEl.title=isManager()?'Escolha o setor que deseja acompanhar':'Filtrar por setor';
+    sectorEl.innerHTML='<option value="all">'+(isManager()?'Todos os meus setores':'Todos os setores')+'</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
   }
   if(unitEl){
@@ -16087,7 +16088,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix45',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix47',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16409,8 +16410,46 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 45';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 47';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
 
 function nucleoAssignedDecisionLabel(ro,tri,status){const saved=resolvedTriageForRo(ro,getSavedTriageMap());const decision=saved?.decision&&!saved.importedFromSheet?saved:tri;const raw=normalizeAnswer(ro?.statusPlanilha||ro?.status||ro?.raw?.__statusOperacional||'');if(decision?.decisionId==='falta_caixa'||raw==='falta de caixa'||raw==='falta de caixas')return decision?.decisionLabel||'Falta de caixa';return decision?.decision&&decision.decision!=='directed'?(decision.decisionLabel||nucleoDecisionForRecord(ro,decision)?.label||status):status;}
+
+function nucleoVisibleManagerSectors(manager,managed,available){return [...new Set((manager?managed:available).map(x=>String(x||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));}
+
+// Escopo de consulta do gestor. Não altera sessão, permissões ou dados salvos.
+let nucleoManagerScope={owner:'',sector:'all',unit:'all'};
+let nucleoManagerRendering=false;
+function nucleoManagerScopeState(){const owner=String(getSession()?.email||getSession()?.name||'');if(nucleoManagerScope.owner!==owner)nucleoManagerScope={owner,sector:'all',unit:'all'};return nucleoManagerScope;}
+function nucleoManagerRecordMatches(record,scope,sectors,roRecords,triages){
+ if(!record)return false;
+ if(scope.unit!=='all'&&explicitRecordUnit(record)&&explicitRecordUnit(record)!==scope.unit)return false;
+ if(scope.sector==='all')return true;
+ const own=[record.responsibleSector,record.decisionSector,record.setor,record.sector,record.__assignedSector,...(Array.isArray(record.responsibleSectors)?record.responsibleSectors:[])].filter(Boolean);
+ const ro=String(record.roNumber||record.ro||record.roKey||record.numero||record.roId||'').split('::')[0];
+ if(ro){triages.filter(t=>String(t.roNumber||t.roKey||'').split('::')[0]===ro).forEach(t=>own.push(t.responsibleSector||t.decisionSector));const base=roRecords.find(r=>String(r.numero||r.id)===ro);if(base)own.push(base.setorResponsavelPlanilha||base.setor||'');}
+ const selected=normalizeAnswer(scope.sector);return own.length?own.some(s=>normalizeAnswer(s)===selected):true;
+}
+const nucleoManagerRawRos=getAllRoRecords;
+function nucleoManagerScopeAllows(record){if(!isManager())return true;let triages=[];try{triages=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');}catch(_){}return nucleoManagerRecordMatches(record,nucleoManagerScopeState(),managedSectorsForCurrentUser(),nucleoManagerRawRos(),triages);}
+function nucleoManagerFilterRows(rows){return nucleoManagerRendering&&isManager()&&Array.isArray(rows)?rows.filter(nucleoManagerScopeAllows):rows;}
+function nucleoManagerInstallReadScopes(){['getAllRoRecords','getAllSentPdcas','getSentPdcas','getAdminModuleRecords','getStandardDocuments','getDocumentDeliveries','getAnnouncements'].forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerReadScope)return;const wrapped=function(...args){return nucleoManagerFilterRows(original.apply(this,args));};wrapped._managerReadScope=true;window[name]=wrapped;});}
+function nucleoManagerInstallRenderScopes(){Object.keys(window).filter(name=>/^render/.test(name)).forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerRenderScope)return;const wrapped=function(...args){const previous=nucleoManagerRendering;nucleoManagerRendering=true;try{return original.apply(this,args);}finally{nucleoManagerRendering=previous;}};wrapped._managerRenderScope=true;window[name]=wrapped;});}
+function nucleoManagerScopeControl(){
+ let host=document.getElementById('managerGlobalScope');if(!host){host=document.createElement('div');host.id='managerGlobalScope';host.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;margin:10px 0;background:#eef4ff;border:1px solid #d9e5f5;border-radius:12px';const top=document.getElementById('globalSearchInput')?.closest('header')||document.getElementById('listView')?.parentElement;if(!top)return;if(top.tagName==='HEADER')top.after(host);else top.prepend(host);}
+ host.hidden=!isManager();host.style.display=isManager()?'flex':'none';if(!isManager())return;
+ const state=nucleoManagerScopeState(),sectors=nucleoVisibleManagerSectors(true,managedSectorsForCurrentUser(),[]),units=nucleoPersonUnits(getSession());if(!sectors.includes(state.sector))state.sector='all';if(!units.includes(state.unit))state.unit='all';
+ host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span>';
+ document.getElementById('managerGlobalSector').value=state.sector;document.getElementById('managerGlobalUnit').value=state.unit;
+ ['managerGlobalSector','managerGlobalUnit'].forEach(id=>document.getElementById(id).onchange=nucleoManagerChangeScope);
+ nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();
+}
+function nucleoManagerChangeScope(){const state=nucleoManagerScopeState();state.sector=document.getElementById('managerGlobalSector').value;state.unit=document.getElementById('managerGlobalUnit').value;
+ ['assignedSectorFilter','assignedUnitFilter'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
+ const previous=nucleoManagerRendering;nucleoManagerRendering=true;
+ try{[render,renderCurrentOverview,renderSentPdcas,renderActionsDashboard].forEach(fn=>{try{fn();}catch(e){console.warn('[Filtro do gestor]',e);}});if(!document.getElementById('sgqIndicatorsView')?.classList.contains('hidden'))renderSgqIndicators();if(!document.getElementById('adminModuleView')?.classList.contains('hidden')&&window.nucleoManagerModuleKey)showAdminOperationalModule(window.nucleoManagerModuleKey);if(typeof nucleoDriveRenderRequests==='function')nucleoDriveRenderRequests();}finally{nucleoManagerRendering=previous;}
+}
+const nucleoManagerOriginalView=view;
+view=function(id){nucleoManagerOriginalView(id);nucleoManagerScopeControl();};
+document.addEventListener('DOMContentLoaded',()=>{nucleoManagerScopeControl();nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();});

@@ -2742,7 +2742,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
   <div class="assigned-filter-row">
     <input id="search" placeholder="Buscar por número ou cliente" oninput="nucleoScheduleRoSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();nucleoRunRoSearch()}">
-    <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
+    <select id="assignedSectorFilter" aria-label="Setor responsável" onchange="render()"><option value="all">Todos os setores</option></select>
     <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
     <select id="filter" onchange="render()"><option value="todas">Todos os status</option><option value="pendente">Pendente</option><option value="pdca_externo">PDCA externo</option><option value="pdca_respondido">PDCA respondido</option><option value="pdca_apresentado">PDCA apresentado</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
@@ -4229,7 +4229,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261006-fix45"></script>
+<script src="assets/nucleo-app.js?v=20261006-fix47"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
