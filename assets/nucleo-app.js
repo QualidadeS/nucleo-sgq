@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix47',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix48',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -16088,7 +16088,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix47',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix48',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16410,7 +16410,7 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 47';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 48';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
 
@@ -16432,13 +16432,13 @@ function nucleoManagerRecordMatches(record,scope,sectors,roRecords,triages){
  const selected=normalizeAnswer(scope.sector);return own.length?own.some(s=>normalizeAnswer(s)===selected):true;
 }
 const nucleoManagerRawRos=getAllRoRecords;
-function nucleoManagerScopeAllows(record){if(!isManager())return true;let triages=[];try{triages=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');}catch(_){}return nucleoManagerRecordMatches(record,nucleoManagerScopeState(),managedSectorsForCurrentUser(),nucleoManagerRawRos(),triages);}
-function nucleoManagerFilterRows(rows){return nucleoManagerRendering&&isManager()&&Array.isArray(rows)?rows.filter(nucleoManagerScopeAllows):rows;}
+function nucleoManagerScopeAllows(record){if(!nucleoHasManagedScope())return true;let triages=[];try{triages=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');}catch(_){}return nucleoManagerRecordMatches(record,nucleoManagerScopeState(),managedSectorsForCurrentUser(),nucleoManagerRawRos(),triages);}
+function nucleoManagerFilterRows(rows){return nucleoManagerRendering&&nucleoHasManagedScope()&&Array.isArray(rows)?rows.filter(nucleoManagerScopeAllows):rows;}
 function nucleoManagerInstallReadScopes(){['getAllRoRecords','getAllSentPdcas','getSentPdcas','getAdminModuleRecords','getStandardDocuments','getDocumentDeliveries','getAnnouncements'].forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerReadScope)return;const wrapped=function(...args){return nucleoManagerFilterRows(original.apply(this,args));};wrapped._managerReadScope=true;window[name]=wrapped;});}
 function nucleoManagerInstallRenderScopes(){Object.keys(window).filter(name=>/^render/.test(name)).forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerRenderScope)return;const wrapped=function(...args){const previous=nucleoManagerRendering;nucleoManagerRendering=true;try{return original.apply(this,args);}finally{nucleoManagerRendering=previous;}};wrapped._managerRenderScope=true;window[name]=wrapped;});}
 function nucleoManagerScopeControl(){
  let host=document.getElementById('managerGlobalScope');if(!host){host=document.createElement('div');host.id='managerGlobalScope';host.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;margin:10px 0;background:#eef4ff;border:1px solid #d9e5f5;border-radius:12px';const top=document.getElementById('globalSearchInput')?.closest('header')||document.getElementById('listView')?.parentElement;if(!top)return;if(top.tagName==='HEADER')top.after(host);else top.prepend(host);}
- host.hidden=!isManager();host.style.display=isManager()?'flex':'none';if(!isManager())return;
+ host.hidden=!nucleoHasManagedScope();host.style.display=nucleoHasManagedScope()?'flex':'none';if(!nucleoHasManagedScope())return;
  const state=nucleoManagerScopeState(),sectors=nucleoVisibleManagerSectors(true,managedSectorsForCurrentUser(),[]),units=nucleoPersonUnits(getSession());if(!sectors.includes(state.sector))state.sector='all';if(!units.includes(state.unit))state.unit='all';
  host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span>';
  document.getElementById('managerGlobalSector').value=state.sector;document.getElementById('managerGlobalUnit').value=state.unit;
@@ -16453,3 +16453,5 @@ function nucleoManagerChangeScope(){const state=nucleoManagerScopeState();state.
 const nucleoManagerOriginalView=view;
 view=function(id){nucleoManagerOriginalView(id);nucleoManagerScopeControl();};
 document.addEventListener('DOMContentLoaded',()=>{nucleoManagerScopeControl();nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();});
+
+function nucleoHasManagedScope(){return isManager()||managedSectorsForCurrentUser().length>0;}
