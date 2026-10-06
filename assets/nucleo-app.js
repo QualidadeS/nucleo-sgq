@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-6m34',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-triage37',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -1013,6 +1013,7 @@ function applyPortalBackendSnapshot(snapshot){
   if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
   if(Array.isArray(data.unitConfigs))localStorage.setItem('nucleo-unit-configs',JSON.stringify(data.unitConfigs));
   if(Array.isArray(data.fixedEmailCopies)){localStorage.setItem('nucleo-fixed-email-copies',JSON.stringify(data.fixedEmailCopies));loadFixedEmailCopies();}
+  if(Array.isArray(data.pdcaDispatches))localStorage.setItem('nucleo-pdca-dispatches-v1',JSON.stringify(data.pdcaDispatches));
   if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
   nucleoApplySharedState(data.sharedState);
@@ -7595,7 +7596,9 @@ function applyTriageDecisionLocal(roNumber,decision,savedRecords,roUnitValue){
   }
 }
 
+let nucleoTriageSaving=false;
 async function saveTriageRecord(){
+  if(nucleoTriageSaving)return;
   if(!nucleoFeatureRequire('ros','triage'))return;
   const key=currentTriageRoId;
   if(!key){
@@ -7603,6 +7606,7 @@ async function saveTriageRecord(){
     return;
   }
 
+  nucleoTriageSaving=true;
   try{
 
   const decisionRule=nucleoSelectedDecision();const decision=decisionRule.behavior;
@@ -7670,7 +7674,7 @@ async function saveTriageRecord(){
   // Pelo lápis, altera somente o direcionamento clicado. Nunca apaga os outros
   // setores da mesma R.O. Na triagem completa, a seleção atual continua sendo
   // a fonte de verdade para todos os direcionamentos.
-  const previousRecords=currentEditingTriageKey
+  const previousRecords=currentEditingTriageKey&&decision==='directed'
     ? allPreviousRecords.filter(x=>String(x.roKey||'')===String(currentEditingTriageKey))
     : allPreviousRecords;
   previousRecords.forEach(old=>map.delete(String(old.roKey||'')));
@@ -7706,7 +7710,7 @@ async function saveTriageRecord(){
   try{refreshRoSummary()}catch(e){}
   try{refreshMenuNotificationBadges()}catch(e){}
 
-  const syncWarnings=[];
+  const syncWarnings=[];let centralTriageSaved=true;
 
   // Depois sincroniza com a planilha/base central.
   // Se a planilha estiver lenta/indisponível, a decisão local continua válida
@@ -7734,7 +7738,7 @@ async function saveTriageRecord(){
         );
       }
 
-      try{await portalBackendSaveConfirmed('triage',record.roKey,record);}catch(error){syncWarnings.push('A base central não confirmou a classificação e o setor: '+error.message);}
+      try{await portalBackendSaveConfirmed('triage',record.roKey,record);}catch(error){centralTriageSaved=false;syncWarnings.push('A base central não confirmou a classificação e o setor: '+error.message);}
 
       const deletedKeys=getDeletedTriageKeys();
       if(deletedKeys.delete(String(record.roKey||'')))saveDeletedTriageKeys(deletedKeys);
@@ -7751,10 +7755,9 @@ async function saveTriageRecord(){
   for(const oldKey of obsoleteKeys){
     if(portalBackendEnabled()){
       updateNucleoLoading('Removendo o direcionamento anterior da base central...','Processando');
-      portalBackendDelete('triage',oldKey);
-      const deletedKeys=getDeletedTriageKeys();
-      deletedKeys.add(String(oldKey));
-      saveDeletedTriageKeys(deletedKeys);
+      if(!centralTriageSaved)continue;
+      try{await portalBackendDeleteConfirmed('triage',oldKey);const deletedKeys=getDeletedTriageKeys();deletedKeys.add(String(oldKey));saveDeletedTriageKeys(deletedKeys);}
+      catch(error){syncWarnings.push('A base central não confirmou a remoção do direcionamento anterior: '+error.message);}
     }
   }
 
@@ -7863,6 +7866,7 @@ async function saveTriageRecord(){
     try{refreshRoSummary()}catch(e){}
     try{refreshMenuNotificationBadges()}catch(e){}
   } finally {
+    nucleoTriageSaving=false;
     hideNucleoLoading(true);
   }
 }
@@ -9984,6 +9988,7 @@ function showSentPdcas(){
   // A abertura da tela não pode depender de nenhum indicador lateral.
   view('sentView');
   setNav('sent');
+  const lifecycle=document.getElementById('sentLifecycleFilter');if(lifecycle){lifecycle.value=isAdmin()?'active':'all';lifecycle.style.display=isAdmin()?'':'none';}
   renderSentPdcas();
   refreshPdcaSidebarBadge();
 }
@@ -9993,11 +9998,14 @@ function renderSentPdcas(){
  let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
  const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):p.id};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
  const body=document.getElementById('sentRows');if(!body)return;
- body.innerHTML=rows.length?rows.map(({p,ro,user,name})=>{
+ const lifecycle=isAdmin()?(document.getElementById('sentLifecycleFilter')?.value||'active'):'all';
+ const visibleRows=rows.filter(({p})=>lifecycle==='all'||(lifecycle==='history')===!!nucleoPdcaDelivery(p));
+ body.innerHTML=visibleRows.length?visibleRows.map(({p,ro,user,name})=>{
   const date=new Date(p.sentAt||p.envio),when=Number.isNaN(date.getTime())?p.envio:date.toLocaleString('pt-BR');
   const claimant=user?personDisplayName(user):(ro?roRegistrantName(ro):'');
-  const detail=user?'Cadastro identificado':claimant?'Nome na R.O. — cadastro a confirmar':'Reclamante não identificado';
-  return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(isAdmin()&&p.externalPdf?'<button class="btn secondary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Confirmar reclamante</button>':'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(p.status||'')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
+  const delivery=nucleoPdcaDelivery(p),confirmed=!!delivery||!!(ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro))?.confirmedAt);
+  const detail=confirmed?'Reclamante confirmado':user?'Cadastro identificado — confirmar':'Reclamante a confirmar';
+  return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>':'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(delivery?'Finalizada — entregue ao reclamante':p.status||'')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
 
@@ -14026,7 +14034,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const filterEl=document.getElementById('filter');
   const rowsEl=document.getElementById('rows');
   if(!searchEl||!filterEl||!rowsEl)return;
-  const q=searchEl.value.toLowerCase(),f=filterEl.value;
+  const q=searchEl.value.trim().toLowerCase(),f=filterEl.value;
   const admin=isAdmin();
   const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
@@ -14104,7 +14112,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
       }
-      const text=(r.numero+" "+r.cliente+" "+(r.origemBase||'')).toLowerCase().includes(q);
+      const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r);
       const statusKey={'Pendente':'pendente','PDCA externo':'pdca_externo','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'pendente';
       const filt=f==='todas'||f===statusKey;
@@ -16070,7 +16078,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-6m34',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-triage37',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16361,3 +16369,17 @@ function nucleoReadClassification(){
  if(!ms.length&&!other){alert('Selecione pelo menos uma classificação dos 6Ms ou informe outra classificação.');return null;}
  return {ms,other,labels:[...ms,...(other?[other]:[])]};
 }
+
+let nucleoRoSearchTimer;
+function nucleoScheduleRoSearch(){clearTimeout(nucleoRoSearchTimer);nucleoRoSearchTimer=setTimeout(nucleoRunRoSearch,180);}
+function nucleoRunRoSearch(){clearTimeout(nucleoRoSearchTimer);render();}
+function nucleoRoSearchMatches(ro,query){
+ const q=String(query||'').trim().toLowerCase();if(!q)return true;
+ const number=String(ro.numero||ro.id||ro.codigo||'');
+ if(/^\d+$/.test(q)){const digits=number.match(/\d+/g);return !!digits&&digits.some(part=>Number(part)===Number(q));}
+ return normalizeAnswer([number,ro.cliente||'',ro.origemBase||''].join(' ')).includes(normalizeAnswer(q));
+}
+
+function nucleoPdcaDelivery(p){let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}return deliveries.find(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));}
+
+function nucleoConsultPdcaClaimant(id){const p=getAllSentPdcas().find(p=>p.id===id);if(!p)return;const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===p.ro&&explicitRecordUnit(r)===explicitRecordUnit(p));const binding=ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro));const user=ro&&resolveRoClaimant(ro);alert('Reclamante confirmado: '+(user?personDisplayName(user):'Cadastro indisponível')+(binding?.confirmedBy?'\nConfirmado por: '+binding.confirmedBy:'')+(binding?.confirmedAt?'\nData: '+new Date(binding.confirmedAt).toLocaleString('pt-BR'):''));}

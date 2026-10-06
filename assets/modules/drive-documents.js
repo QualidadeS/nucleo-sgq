@@ -159,7 +159,8 @@ async function nucleoDriveSendPdca(id,selectedRo){if(!nucleoFeatureRequire('pdca
   try{
    const result=await nucleoDriveMutation('nucleo_drive_dispatch_pdca',{id,ro:roKey,personId:select.value,registrant,confirmed:'1'});
    if(!result?.record||result.record.ro!==roKey||result.record.recipientPersonId!==select.value)throw new Error('A base central não confirmou o destinatário desta resposta. Confira antes de tentar novamente.');
-   saved=true;show((result.alreadyDispatched?'Esta resposta já estava disponibilizada':'Resposta disponibilizada com sucesso')+' para '+(result.record.recipientName||select.options[select.selectedIndex].text)+'. O reclamante pode abrir o PDF em Respostas. Nenhum e-mail foi enviado.','success');
+   let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}deliveries=deliveries.filter(d=>d.id!==result.record.id);deliveries.push(result.record);localStorage.setItem('nucleo-pdca-dispatches-v1',JSON.stringify(deliveries));
+   saved=true;renderSentPdcas();show((result.alreadyDispatched?'Esta resposta já estava disponibilizada':'Resposta disponibilizada com sucesso')+' para '+(result.record.recipientName||select.options[select.selectedIndex].text)+'. O reclamante pode abrir o PDF em Respostas. Nenhum e-mail foi enviado.','success');
    btn.textContent='Disponibilização confirmada';cancel.textContent='Concluir';
    Promise.resolve().then(()=>syncPortalBackend(false)).catch(e=>console.warn('A resposta foi disponibilizada; atualização da tela pendente.',e));
   }catch(e){show('Não foi possível confirmar a disponibilização: '+e.message,'error');}

@@ -2741,7 +2741,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
   <div class="assigned-filter-row">
-    <input id="search" placeholder="Buscar por número ou cliente">
+    <input id="search" placeholder="Buscar por número ou cliente" oninput="nucleoScheduleRoSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();nucleoRunRoSearch()}">
     <select id="assignedSectorFilter" onchange="render()"><option value="all">Todos os setores</option></select>
     <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
@@ -2954,6 +2954,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <p class="small">Histórico dos PDCAs já enviados. Administradores visualizam todos; usuários operacionais visualizam apenas os PDCAs permitidos para seu usuário.</p>
   <div class="toolbar">
     <input id="sentSearch" placeholder="Buscar por R.O., cliente, responsável, reclamante ou setor" oninput="renderSentPdcas()">
+    <select id="sentLifecycleFilter" onchange="renderSentPdcas()"><option value="active">Pendentes de entrega</option><option value="history">Histórico de entregas</option><option value="all">Todos</option></select>
     <select id="sentStatusFilter" onchange="renderSentPdcas()">
       <option value="todos">Todos os status</option>
       <option value="Enviado">Enviado</option>
@@ -4228,7 +4229,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261006-6m34"></script>
+<script src="assets/nucleo-app.js?v=20261006-triage37"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
