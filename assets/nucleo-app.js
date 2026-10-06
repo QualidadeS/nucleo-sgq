@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix40',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix41',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -6884,6 +6884,11 @@ function resolvedTriageForRo(ro,map=getSavedTriageMap()){
   if(!ro)return null;
   const base=String(triageBaseRoNumber(ro)||'').trim();
   const baseSituation=baseTriageSituation(ro);
+  const manual=getTriageRecordsForRoNumber(base,map).filter(t=>t?.decision&&!t.importedFromSheet).sort((a,b)=>String(b.triagedAt||'').localeCompare(String(a.triagedAt||'')));
+  const exactManual=map.get(String(triageKeyOf(ro)||''));
+  if(manual.length&&manual[0].decision!=='directed')return manual[0];
+  if(exactManual?.decision&&!exactManual.importedFromSheet)return exactManual;
+  if(manual.length)return manual[0];
 
   // FONTE ÚNICA DA SITUAÇÃO DA R.O.: Setor (causa) + Status da planilha-base.
   // SGQ_TRIAGENS fornece os detalhes da triagem (pessoa, motivo, prazo, PDCA),
@@ -7053,7 +7058,7 @@ function getTriageRecords(){
     // A planilha continua sendo a fonte principal quando já refletiu a decisão.
     // Enquanto a planilha ainda não atualizou, uma decisão MANUAL do SGQ
     // já salva no Núcleo também tira a R.O. da fila "A triar".
-    let decision=baseSituation.decision;
+    let decision=tri.decision||baseSituation.decision;
 
     if(!decision && tri?.decision && !tri?.importedFromSheet){
       decision=tri.decision;
@@ -7840,11 +7845,7 @@ async function saveTriageRecord(){
   }else{
     hideNucleoLoading(true);
 
-    const decisionLabel=
-      decision==='record' ? 'Somente para registro' :
-      decision==='obsolete' ? 'R.O. obsoleta' :
-      decision==='cancelled' ? 'R.O. cancelada' :
-      'Triagem concluída';
+    const decisionLabel=decisionRule.label||triageDecisionLabel(decision);
 
     alert(
       'Triagem concluída com sucesso.\n\n'+
@@ -16080,7 +16081,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix40',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix41',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16288,7 +16289,7 @@ function nucleoPopulateDecisions(ro,tri){
  select.innerHTML=options.map(rule=>'<option value="'+escapeHtml(rule.id)+'">'+escapeHtml(rule.label)+(rule.active===false?' (desativada)':'')+'</option>').join('')+'<option value="unit_correction">Correção de unidade</option>';
  select.value=current?.id||options[0]?.id||'unit_correction';select._decisionRules=rules.concat(current?[current]:[]);
 }
-function nucleoSelectedDecision(){const select=document.getElementById('triageDecision');if(select?.value==='unit_correction')return {id:'unit_correction',behavior:'unit_correction',requireReason:false,pdcaRequired:false};return select?._decisionRules?.find(rule=>rule.id===select.value)||NUCLEO_DEFAULT_DECISIONS[0];}
+function nucleoSelectedDecision(){const select=document.getElementById('triageDecision');if(select?.value==='unit_correction')return {id:'unit_correction',behavior:'unit_correction',requireReason:false,pdcaRequired:false};const rule=select?._decisionRules?.find(rule=>rule.id===select.value);if(!rule)throw new Error('A decisão selecionada não foi encontrada. Reabra a triagem e selecione novamente.');return rule;}
 function nucleoDecisionDeadline(rule){if(rule.deadlineDays===null||rule.deadlineDays===undefined)return nextTuesdayIsoDate();const date=new Date();date.setDate(date.getDate()+Number(rule.deadlineDays));return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');}
 function nucleoRenderDecisionSettings(unit){
  let box=document.getElementById('decisionRuleSettings');if(!box){box=document.createElement('section');box.id='decisionRuleSettings';box.className='unit-settings-section';document.getElementById('unitQualitySettings').appendChild(box);}
@@ -16402,6 +16403,6 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 40';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 41';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
