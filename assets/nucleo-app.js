@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix42',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix44',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -3499,7 +3499,8 @@ function openUserRegistrationEditor(key){
   if(!isAdmin())return;
   const users=getOperationalUsers();
   const u=users.find(x=>String(x.email||x.name)===String(key));
-  if(!u||nucleoPersonPermissions(u).sgq)return;
+  if(!u)return;
+  if(nucleoPersonPermissions(u).sgq&&!nucleoPersonPermissions(getSession()).sgq)return;
 
   const title=document.getElementById('userRegistrationEditTitle');
   const keyEl=document.getElementById('userRegistrationEditKey');
@@ -3725,16 +3726,16 @@ function renderOperationalUsers(){
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
           <span class="role-tag">${u.permissions?'Acesso personalizado':u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
-          ${u.role==='manager'?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
+          ${u.role==='manager'||(u.managedSectors||[]).length?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
         </div>
       </div>
       ${nucleoPersonCan('users',true)?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Editar acesso</button>`:''}
-      ${u.role==='admin'?`<div class="actions"><button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button></div>`:`<div class="actions">
-        <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">${u.role==='manager'?'Editar gestão':'Tornar gestor'}</button>
+      <div class="actions">
+        <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">Editar gestão</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
         <button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button>
-        <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Apagar</button>
-      </div>`}
+        <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Excluir login</button>
+      </div>
     </div>`).join(''):'';
 
   box.innerHTML=filtered.length?pendingHtml+approvedHtml+(users.length<filtered.length?'<div class="actions"><button class="btn secondary" type="button" onclick="showMoreOperationalUsers()">Mostrar mais 5</button></div>':''):'<div class="small">Nenhum cadastro encontrado com estes filtros.</div>';
@@ -3835,7 +3836,8 @@ function removeOperationalUserByKey(key){
     String(x.email||'').trim().toLowerCase()===normalized ||
     String(x.name||'').trim().toLowerCase()===normalized
   );
-  if(!u||u.role==='admin')return;
+  if(!u)return;
+  if(u.role==='admin'){if(!nucleoPersonPermissions(getSession()).sgq)return;return deleteAdminAccountByEmail(u.email);}
 
   const label=u.name||u.email||'este usuário';
   if(!confirm('Apagar definitivamente o cadastro de '+label+'?'))return;
@@ -6864,7 +6866,7 @@ function baseTriageSituation(ro){
   // Obsoleto é uma decisão terminal do SGQ: dispensa PDCA e NUNCA volta para a fila de triagem.
   if(status.includes('obsolet'))return {code:'obsolete',decision:'obsolete',sector,hasSector,rawStatus};
   if(status.includes('cancel'))return {code:'cancelled',decision:'cancelled',sector,hasSector,rawStatus};
-  if(status.includes('registro'))return {code:'record',decision:'record',sector,hasSector,rawStatus};
+  if(status.includes('registro')||status==='falta de caixa'||status==='falta de caixas')return {code:'record',decision:'record',sector,hasSector,rawStatus};
   if(hasSector && /\benviad[oa]s?\b/.test(status) && !/\b(?:não|nao)\s+enviad[oa]s?\b/.test(status))return {code:'directed',decision:'directed',sector,hasSector,rawStatus};
   return {code:'new',decision:'',sector,hasSector,rawStatus};
 }
@@ -7567,7 +7569,7 @@ function applyTriageDecisionLocal(roNumber,decision,savedRecords,roUnitValue){
 
   const status=
     decision==='directed' ? 'Enviado' :
-    decision==='record' ? 'Registro' :
+    decision==='record' ? (first.decisionId==='falta_caixa'?'Falta de caixa':'Registro') :
     decision==='obsolete' ? 'Obsoleto' :
     decision==='cancelled' ? 'Cancelada' : '';
 
@@ -7732,7 +7734,7 @@ async function saveTriageRecord(){
             setor:record.responsibleSector||'',
             setorAnterior:record.previousResponsibleSector||record.responsibleSector||'',
             pessoa:decision==='directed'?(record.responsibleUserName||'Todo o setor'):'',
-            status:decision==='directed'?'Enviado':decision==='record'?'Registro':decision==='obsolete'?'Obsoleto':'Cancelada'
+            status:decision==='directed'?'Enviado':decision==='record'?(decisionRule.id==='falta_caixa'?'Falta de caixa':'Registro'):decision==='obsolete'?'Obsoleto':'Cancelada'
           }),
           new Promise((_,reject)=>setTimeout(()=>reject(new Error('Tempo excedido ao atualizar a planilha.')),18000))
         ]);
@@ -10197,14 +10199,15 @@ function refreshNewUserManagerFields(){
 }
 function openManagerSectorsEditor(key){
   if(!isAdmin())return;
-  const u=getOperationalUsers().find(x=>String(x.email||x.name)===String(key));if(!u||u.role==='admin')return;
+  const u=getOperationalUsers().find(x=>String(x.email||x.name)===String(key));if(!u)return;
+  if(u.role==='admin'&&!nucleoPersonPermissions(getSession()).sgq)return;
   const role=document.getElementById('managerRoleSelect');
   const sel=document.getElementById('managerSectorsSelect');
   const keyEl=document.getElementById('managerSectorsUserKey');
   const title=document.getElementById('managerSectorsTitle');
   if(keyEl)keyEl.value=String(u.email||u.name||'');
   if(title)title.textContent='Configurar acesso · '+(u.name||u.email||'Usuário');
-  if(role)role.value=u.role==='manager'?'manager':'operational';
+  if(role){role.value=u.role==='manager'||(u.managedSectors||[]).length?'manager':'operational';role.disabled=false;}
   if(sel){
     const current=new Set(Array.isArray(u.managedSectors)?u.managedSectors:[]);
     sel.innerHTML=getConfiguredSectorsForTriage().map(s=>`<option value="${escapeHtml(s)}" ${current.has(s)?'selected':''}>${escapeHtml(s)}</option>`).join('');
@@ -10228,7 +10231,7 @@ function saveManagerSectorsEditor(){
   const managed=role==='manager'?[...(document.getElementById('managerSectorsSelect')?.selectedOptions||[])].map(o=>o.value):[];
   if(role==='manager'&&!managed.length){alert('Selecione pelo menos um setor sob gestão.');return}
   const users=getOperationalUsers();const i=users.findIndex(u=>String(u.email||u.name)===String(key));if(i<0)return;
-  users[i]={...users[i],role,managedSectors:managed,updatedAt:new Date().toISOString(),updatedBy:getSession()?.name||'SGQ'};
+  users[i]={...users[i],role:users[i].role==='admin'?'admin':role,managedSectors:managed,updatedAt:new Date().toISOString(),updatedBy:getSession()?.name||'SGQ'};
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
   portalBackendSave('users',users[i].email||users[i].name,users[i]);
   addPortalAuditEvent('alterar_acesso_gestor',users[i].email||users[i].name,{role,managedSectors:managed});
@@ -14005,7 +14008,7 @@ function assignedRoStatus(r){
   const tri=getRoTriageRecord(r)||{};
   if(raw.includes('cancel')) return 'Cancelada';
   if(raw.includes('obsolet')) return 'Obsoleto';
-  if(raw.includes('registro') || raw.includes('somente para registro')) return 'Registro';
+  if(tri.decision==='record'||raw==='falta de caixa'||raw==='falta de caixas'||raw.includes('registro')) return 'Registro';
   if(tri.pdcaExternal===true&&!tri.pdcaFileId) return 'PDCA externo';
 
   // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
@@ -16082,7 +16085,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix42',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix44',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16404,7 +16407,7 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 42';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 44';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
 
