@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix48',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix49',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -16088,7 +16088,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix48',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix49',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16410,7 +16410,7 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 48';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 49';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
 
@@ -16432,10 +16432,34 @@ function nucleoManagerRecordMatches(record,scope,sectors,roRecords,triages){
  const selected=normalizeAnswer(scope.sector);return own.length?own.some(s=>normalizeAnswer(s)===selected):true;
 }
 const nucleoManagerRawRos=getAllRoRecords;
-function nucleoManagerScopeAllows(record){if(!nucleoHasManagedScope())return true;let triages=[];try{triages=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');}catch(_){}return nucleoManagerRecordMatches(record,nucleoManagerScopeState(),managedSectorsForCurrentUser(),nucleoManagerRawRos(),triages);}
-function nucleoManagerFilterRows(rows){return nucleoManagerRendering&&nucleoHasManagedScope()&&Array.isArray(rows)?rows.filter(nucleoManagerScopeAllows):rows;}
+let nucleoManagerQueryContext=null;
+function nucleoManagerQuery(){
+ if(nucleoManagerQueryContext&&nucleoManagerRendering)return nucleoManagerQueryContext;
+ const state=nucleoManagerScopeState();
+ // A opção padrão não precisa ler ROs, triagens ou cadastros.
+ const context={state:{...state},active:state.sector!=='all'||state.unit!=='all',roSectors:new Map()};
+ if(context.active&&!nucleoHasManagedScope())context.active=false;
+ if(context.active&&state.sector!=='all'){
+  let triages=[];try{triages=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');}catch(_){}
+  const add=(ro,sector)=>{if(!ro||!sector)return;const key=String(ro).split('::')[0],list=context.roSectors.get(key)||new Set();list.add(normalizeAnswer(sector));context.roSectors.set(key,list);};
+  triages.forEach(t=>add(t.roNumber||t.roKey,t.responsibleSector||t.decisionSector));
+  nucleoManagerRawRos().forEach(r=>add(r.numero||r.id,r.setorResponsavelPlanilha||r.setor));
+ }
+ if(nucleoManagerRendering)nucleoManagerQueryContext=context;return context;
+}
+function nucleoManagerMatchQuery(record,context){
+ if(!context.active)return true;
+ const state=context.state,unit=state.unit==='all'?'':explicitRecordUnit(record);
+ if(unit&&unit!==state.unit)return false;
+ if(state.sector==='all')return true;
+ const own=[record.responsibleSector,record.decisionSector,record.setor,record.sector,record.__assignedSector,...(Array.isArray(record.responsibleSectors)?record.responsibleSectors:[])].filter(Boolean);
+ const ro=String(record.roNumber||record.ro||record.roKey||record.numero||record.roId||'').split('::')[0],linked=context.roSectors.get(ro),selected=normalizeAnswer(state.sector);
+ return own.some(s=>normalizeAnswer(s)===selected)||!!linked?.has(selected)||(!own.length&&!linked?.size);
+}
+function nucleoManagerScopeAllows(record){return nucleoManagerMatchQuery(record,nucleoManagerQuery());}
+function nucleoManagerFilterRows(rows){if(!nucleoManagerRendering||!Array.isArray(rows))return rows;const context=nucleoManagerQuery();return context.active?rows.filter(r=>nucleoManagerMatchQuery(r,context)):rows;}
 function nucleoManagerInstallReadScopes(){['getAllRoRecords','getAllSentPdcas','getSentPdcas','getAdminModuleRecords','getStandardDocuments','getDocumentDeliveries','getAnnouncements'].forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerReadScope)return;const wrapped=function(...args){return nucleoManagerFilterRows(original.apply(this,args));};wrapped._managerReadScope=true;window[name]=wrapped;});}
-function nucleoManagerInstallRenderScopes(){Object.keys(window).filter(name=>/^render/.test(name)).forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerRenderScope)return;const wrapped=function(...args){const previous=nucleoManagerRendering;nucleoManagerRendering=true;try{return original.apply(this,args);}finally{nucleoManagerRendering=previous;}};wrapped._managerRenderScope=true;window[name]=wrapped;});}
+function nucleoManagerInstallRenderScopes(){Object.keys(window).filter(name=>/^render/.test(name)).forEach(name=>{const original=window[name];if(typeof original!=='function'||original._managerRenderScope)return;const wrapped=function(...args){const previous=nucleoManagerRendering;if(!previous)nucleoManagerQueryContext=null;nucleoManagerRendering=true;try{return original.apply(this,args);}finally{nucleoManagerRendering=previous;if(!previous)nucleoManagerQueryContext=null;}};wrapped._managerRenderScope=true;window[name]=wrapped;});}
 function nucleoManagerScopeControl(){
  let host=document.getElementById('managerGlobalScope');if(!host){host=document.createElement('div');host.id='managerGlobalScope';host.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;margin:10px 0;background:#eef4ff;border:1px solid #d9e5f5;border-radius:12px';const top=document.getElementById('globalSearchInput')?.closest('header')||document.getElementById('listView')?.parentElement;if(!top)return;if(top.tagName==='HEADER')top.after(host);else top.prepend(host);}
  host.hidden=!nucleoHasManagedScope();host.style.display=nucleoHasManagedScope()?'flex':'none';if(!nucleoHasManagedScope())return;
@@ -16447,8 +16471,17 @@ function nucleoManagerScopeControl(){
 }
 function nucleoManagerChangeScope(){const state=nucleoManagerScopeState();state.sector=document.getElementById('managerGlobalSector').value;state.unit=document.getElementById('managerGlobalUnit').value;
  ['assignedSectorFilter','assignedUnitFilter'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
- const previous=nucleoManagerRendering;nucleoManagerRendering=true;
- try{[render,renderCurrentOverview,renderSentPdcas,renderActionsDashboard].forEach(fn=>{try{fn();}catch(e){console.warn('[Filtro do gestor]',e);}});if(!document.getElementById('sgqIndicatorsView')?.classList.contains('hidden'))renderSgqIndicators();if(!document.getElementById('adminModuleView')?.classList.contains('hidden')&&window.nucleoManagerModuleKey)showAdminOperationalModule(window.nucleoManagerModuleKey);if(typeof nucleoDriveRenderRequests==='function')nucleoDriveRenderRequests();}finally{nucleoManagerRendering=previous;}
+ const previous=nucleoManagerRendering;nucleoManagerQueryContext=null;nucleoManagerRendering=true;
+ try{
+  const visible=id=>{const el=document.getElementById(id);return el&&!el.classList.contains('hidden');};
+  if(visible('roListView'))render();
+  else if(visible('listView'))renderCurrentOverview();
+  else if(visible('sentView'))renderSentPdcas();
+  else if(visible('actionsDashboardView'))renderActionsDashboard();
+  else if(visible('sgqIndicatorsView'))renderSgqIndicators();
+  else if(visible('adminModuleView')&&window.nucleoManagerModuleKey)showAdminOperationalModule(window.nucleoManagerModuleKey);
+  else if(typeof nucleoDriveRenderRequests==='function'&&document.getElementById('nucleoDriveView')?.classList.contains('hidden')===false)nucleoDriveRenderRequests();
+ }finally{nucleoManagerRendering=previous;nucleoManagerQueryContext=null;}
 }
 const nucleoManagerOriginalView=view;
 view=function(id){nucleoManagerOriginalView(id);nucleoManagerScopeControl();};
