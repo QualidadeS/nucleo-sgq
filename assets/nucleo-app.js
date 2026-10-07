@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix64',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix66',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -2642,7 +2642,7 @@ function fillSectorSelect(selectId,{includeSgq=false,selectedValue=''}={}){
   const current=selectedValue || sel.value || '';
   const unitField={registerSector:'registerUnit',loginSector:'loginUnit',newUserSector:'newUserUnit'}[selectId];
   const unit=unitField?normalizePortalUnit(document.getElementById(unitField)?.value):adminScopeUnit();
-  let sectors=getConfiguredSectors(unit).slice();
+  let sectors=(['loginSector','registerSector'].includes(selectId)?nucleoPublicLoginSectors(unit):getConfiguredSectors(unit)).slice();
 
   if(includeSgq && !sectors.some(s=>s.toLocaleLowerCase('pt-BR')==='sgq')){
     sectors.unshift('SGQ');
@@ -2737,7 +2737,7 @@ function refreshLoginSectorByUnit(){
   const sector=document.getElementById('loginSector');
   if(!sector)return;
 
-  const all=unit?getConfiguredSectors(normalizePortalUnit(unit)):[];
+  const all=unit?nucleoPublicLoginSectors(normalizePortalUnit(unit)):[];
   const current=sector.value||'';
   sector.innerHTML='<option value="">Selecione o setor...</option>'+all.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   if(current && all.some(s=>normalizeAnswer(s)===normalizeAnswer(current))) sector.value=all.find(s=>normalizeAnswer(s)===normalizeAnswer(current));
@@ -5747,8 +5747,14 @@ function sacDirectedSector(record){
 
 async function saveSacDecisionLocally(record){
   if(!nucleoFeatureRequire('sac','edit'))return;
-  const confirmation=await portalBackendSaveConfirmedPost('external_ro_controls',record.id,record,90000);
-  if(!confirmation?.registro||confirmation.registro.sacDecision!==record.sacDecision)throw new Error('A decisão salva na base não corresponde à selecionada. Sincronize e confira a R.O. antes de tentar novamente.');
+  try{
+    const confirmation=await portalBackendSaveConfirmedPost('external_ro_controls',record.id,record,90000);
+    if(!confirmation?.registro||confirmation.registro.sacDecision!==record.sacDecision)throw new Error('A decisão salva na base não corresponde à selecionada.');
+    nucleoSacDraftRemove(record.id);
+  }catch(e){
+    nucleoSacDraftPut(record);nucleoRenderSacDrafts();
+    throw new Error('Decisão guardada neste computador, pendente de sincronização. Use Tentar novamente em Pendências locais do SAC. Detalhe: '+e.message);
+  }
   const stored=(()=>{
     try{const x=JSON.parse(localStorage.getItem(EXTERNAL_RO_CONTROL_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return []}
   })();
@@ -5835,6 +5841,7 @@ function sacSortRows(rows,mode){
 }
 
 function renderExternalRoControl(){
+  nucleoRenderSacDrafts();
   if(!isAdmin()&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
   const treatment=document.getElementById('externalRoImpactFilter')?.value||'all';
@@ -16078,7 +16085,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix64',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix66',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16568,4 +16575,17 @@ async function nucleoSaveAvatar(button){const status=document.getElementById('pr
 var nucleoAvatarGalleryPreviews={};
 async function nucleoLoadAvatarGallery(offset=0){const host=document.getElementById('profileAvatarGallery');if(!host)return;host.textContent='Carregando galeria…';try{const r=await portalJsonp({acao:'portal_avatar_gallery',offset},60000);if(!r?.sucesso)throw new Error(r?.erro||'Galeria indisponível.');host.innerHTML='';if(!r.items.length){host.textContent='O SGQ ainda não disponibilizou imagens na galeria.';return;}const grid=document.createElement('div');grid.style.cssText='display:flex;flex-wrap:wrap;gap:12px;margin:12px 0';r.items.forEach(item=>{nucleoAvatarGalleryPreviews[item.value]=item.preview;const button=document.createElement('button');button.type='button';button.className='btn secondary';button.title=item.name;button.setAttribute('aria-label','Escolher '+item.name);button.innerHTML=nucleoAvatarHtml(item.preview);const label=document.createElement('span');label.textContent=item.name;label.style.cssText='display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis';button.appendChild(label);button.onclick=()=>{nucleoAvatarDraft=item.value;nucleoAvatarPreview();document.getElementById('profileAvatarStatus').textContent='Avatar selecionado. Clique em Salvar foto ou ícone.';};grid.appendChild(button);});host.appendChild(grid);for(const [label,page] of [['Anterior',offset>=20?offset-20:null],['Próximas imagens',r.next]])if(page!==null){const btn=document.createElement('button');btn.type='button';btn.className='btn secondary';btn.textContent=label;btn.onclick=()=>nucleoLoadAvatarGallery(page);host.appendChild(btn);}}catch(e){host.textContent=e.message;}}
 async function nucleoConfigureAvatarGallery(button){const status=document.getElementById('avatarGalleryConfigStatus');button.disabled=true;status.textContent='Salvando e conferindo a pasta…';try{const r=await portalJsonp({acao:'portal_avatar_gallery',folder:document.getElementById('avatarGalleryFolder').value.trim()},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não confirmado.');status.textContent=r.folder?'Galeria salva. As imagens estão disponíveis em Meu perfil.':'Galeria desativada.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}}
-async function nucleoReadAvatarGalleryConfig(){if(!nucleoPersonPermissions(getSession()).sgq){document.getElementById('avatarGalleryConfig')?.setAttribute('hidden','');return;}try{const r=await portalJsonp({acao:'portal_avatar_gallery'},60000);if(r?.sucesso)document.getElementById('avatarGalleryFolder').value=r.folder?'https://drive.google.com/drive/folders/'+r.folder:'';}catch(e){document.getElementById('avatarGalleryConfigStatus').textContent=e.message;}}
+async function nucleoReadAvatarGalleryConfig(){const box=document.getElementById('avatarGalleryConfig');if(box)box.hidden=!nucleoPersonPermissions(getSession()).sgq;if(box?.hidden)return;try{const r=await portalJsonp({acao:'portal_avatar_gallery'},60000);if(r?.sucesso)document.getElementById('avatarGalleryFolder').value=r.folder?'https://drive.google.com/drive/folders/'+r.folder:'';}catch(e){document.getElementById('avatarGalleryConfigStatus').textContent=e.message;}}
+
+function nucleoSacDraftKey(){const u=getSession();return 'nucleo-sac-pending-v1:'+String(u?.personId||u?.email||u?.name||'');}
+function nucleoSacDrafts(){try{return JSON.parse(localStorage.getItem(nucleoSacDraftKey())||'[]');}catch(e){return [];}}
+function nucleoSacDraftPut(record){const list=nucleoSacDrafts().filter(r=>r.id!==record.id);list.push(record);try{localStorage.setItem(nucleoSacDraftKey(),JSON.stringify(list));}catch(e){throw new Error('Não foi possível guardar a decisão localmente. O armazenamento deste navegador está indisponível ou cheio.');}}
+function nucleoSacDraftRemove(id){localStorage.setItem(nucleoSacDraftKey(),JSON.stringify(nucleoSacDrafts().filter(r=>r.id!==id)));}
+function nucleoRenderSacDrafts(){const host=document.getElementById('sacLocalPending');if(!host)return;host.innerHTML='';const list=nucleoSacDrafts();host.hidden=!list.length;if(!list.length)return;const title=document.createElement('h3');title.textContent='Pendências locais do SAC';host.appendChild(title);const note=document.createElement('p');note.className='small';note.textContent='Guardadas apenas neste navegador e computador. Ainda não confirmadas na base central.';host.appendChild(note);list.forEach(r=>{const row=document.createElement('div');row.className='actions';const label=document.createElement('span');label.textContent=(r.ro||r.id)+' — '+(r.sacDecision==='ro_only'?'Somente R.O.':'Gerar SAC');row.appendChild(label);const btn=document.createElement('button');btn.type='button';btn.className='btn primary';btn.textContent='Tentar novamente';btn.onclick=()=>nucleoRetrySacDraft(r,btn);row.appendChild(btn);const del=document.createElement('button');del.type='button';del.className='btn secondary';del.textContent='Descartar pendência local';del.onclick=()=>{if(confirm('Descartar esta pendência local? Isso não altera a base central.')){nucleoSacDraftRemove(r.id);nucleoRenderSacDrafts();}};row.appendChild(del);host.appendChild(row);});}
+async function nucleoRetrySacDraft(record,button){button.disabled=true;button.textContent='Conferindo a base…';try{const current=await portalJsonp({acao:'portal_get_record',colecao:'external_ro_controls',id:record.id},15000);if(!current?.sucesso)throw new Error(current?.erro||'Não foi possível conferir a versão central.');if(current.registro&&String(current.registro.updatedAt||'')>String(record.updatedAt||''))throw new Error('Existe uma versão mais recente na base. Sincronize e revise a decisão antes de descartar esta pendência.');await saveSacDecisionLocally(record);renderExternalRoControl();refreshMenuNotificationBadges();alert('Decisão confirmada na base central.');}catch(e){hideNucleoLoading();alert(e.message);}finally{button.disabled=false;button.textContent='Tentar novamente';}}
+
+function nucleoPublicLoginSectors(unit){
+  try{const lists=JSON.parse(localStorage.getItem('nucleo-unit-public-sectors')||'{}');if(Object.prototype.hasOwnProperty.call(lists,unit)){const sectors=normalizeSectorList(lists[unit]);if(unit==='matriz'&&!sectors.some(s=>normalizeAnswer(s)==='sgq'))sectors.push('SGQ');return sectors;}}catch(_){}
+  const own=unitConfiguration(unit);return own?normalizeSectorList(own.sectorList):[];
+}
+function nucleoOpenAvatarGalleryConfig(){if(!nucleoPersonPermissions(getSession()).sgq)return;const box=document.getElementById('avatarGalleryConfig');if(!box)return;box.hidden=false;box.style.removeProperty('display');box.closest('.config-section')?.classList.add('active');box.scrollIntoView({behavior:'smooth',block:'center'});nucleoReadAvatarGalleryConfig();}

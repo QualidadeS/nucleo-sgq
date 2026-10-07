@@ -3189,7 +3189,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   <div id="mySacsCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:18px"></div>
 </section>
 
-<section id="externalRoControlView" class="card hidden">
+<section id="externalRoControlView" class="card hidden"><div id="sacLocalPending" class="settings-block" hidden></div>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
     <div class="small" style="margin:8px 0 12px;padding:10px 12px;border:1px solid #dbe4ee;border-radius:10px;background:#f8fafc"><b>Análise iniciada em 24/09/2026.</b> A partir desta data, toda R.O. Externa aparece primeiro para avaliação. Se não exigir atendimento de SAC, marque <b>Somente R.O.</b> e ela sai desta visualização. Se exigir SAC, crie o SAC e siga a tratativa normal.</div><div>
       <h2 style="margin:0">Análise e acompanhamento de SAC</h2>
@@ -3942,13 +3942,14 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
 </section>
 
 <section id="settingsView" class="card hidden">
-<div class="settings-block" id="avatarGalleryConfig"><h3>Galeria de avatares</h3><p class="small">Cole o link da pasta do Drive com as imagens aprovadas (JPG, PNG ou WebP). Cada pessoa pode escolher em Meu perfil.</p><input id="avatarGalleryFolder" placeholder="Link da pasta do Drive"><button type="button" class="btn primary" onclick="nucleoConfigureAvatarGallery(this)">Salvar pasta da galeria</button><p id="avatarGalleryConfigStatus" role="status"></p></div>
+
 
   <button class="back" onclick="showList()">← Voltar para Visão geral</button>
   <h2 style="margin:0">Administração</h2>
   <p class="small" style="margin-top:5px">Usuários, setores, triagem, avisos, base central e integração.</p>
 
   <div class="admin-config-nav" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+    <button class="sgq-only" type="button" onclick="nucleoOpenAvatarGalleryConfig()">🖼 Galeria de avatares</button>
     <button type="button" onclick="openUnitDriveSettings()">🏭 Unidades e pastas do Drive</button>
     <button type="button" onclick="document.getElementById('cfgUsers')?.scrollIntoView({behavior:'smooth'})">👥 Usuários e acessos</button>
     <button type="button" onclick="document.getElementById('cfgUnits')?.scrollIntoView({behavior:'smooth'})">🏭 Setores</button>
@@ -3968,6 +3969,7 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   </div>
 
   <div id="cfgUsers" class="config-section active"><h2 style="margin:0 0 12px">1. Usuários e acessos</h2><button class="btn secondary" type="button" onclick="openPersonIdentityManager()">Identidades e confirmação de reclamantes</button>
+    <div class="settings-block" id="avatarGalleryConfig"><h3>Galeria de avatares</h3><p class="small">Cole o link da pasta do Drive com as imagens aprovadas (JPG, PNG ou WebP). Cada pessoa pode escolher em Meu perfil.</p><input id="avatarGalleryFolder" placeholder="Link da pasta do Drive"><button type="button" class="btn primary" onclick="nucleoConfigureAvatarGallery(this)">Salvar pasta da galeria</button><p id="avatarGalleryConfigStatus" role="status"></p></div>
     <div class="settings-block sgq-only" id="sgqAdminRegistration">
       <h3>Administradores / SGQ</h3>
       <p class="help">Usuários com acesso à triagem, indicadores, conferência de ações e configurações.</p>
@@ -4232,7 +4234,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261007-fix64"></script>
+<script src="assets/nucleo-app.js?v=20261007-fix66"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
