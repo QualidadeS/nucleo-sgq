@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix63',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix64',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -5747,7 +5747,8 @@ function sacDirectedSector(record){
 
 async function saveSacDecisionLocally(record){
   if(!nucleoFeatureRequire('sac','edit'))return;
-  await portalBackendSaveConfirmed('external_ro_controls',record.id,record);
+  const confirmation=await portalBackendSaveConfirmedPost('external_ro_controls',record.id,record,90000);
+  if(!confirmation?.registro||confirmation.registro.sacDecision!==record.sacDecision)throw new Error('A decisão salva na base não corresponde à selecionada. Sincronize e confira a R.O. antes de tentar novamente.');
   const stored=(()=>{
     try{const x=JSON.parse(localStorage.getItem(EXTERNAL_RO_CONTROL_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return []}
   })();
@@ -5764,7 +5765,7 @@ async function markExternalRoAsRoOnly(id){
   if(!confirm('Manter '+String(r.ro||'esta ocorrência')+' somente como R.O.? Ela sairá da área de SAC.'))return;
   const now=new Date().toISOString();
   const record={...r,sacDecision:'ro_only',sacDecisionAt:now,sacDecisionBy:getSession()?.name||'SGQ',updatedAt:now};
-  try{await saveSacDecisionLocally(record)}catch(e){alert('Não foi possível confirmar a decisão de SAC na base central: '+(e?.message||e));return;}
+  try{await saveSacDecisionLocally(record)}catch(e){hideNucleoLoading();alert('Não foi possível confirmar a decisão de SAC na base central: '+(e?.message||e));return;}
   renderExternalRoControl();
   refreshMenuNotificationBadges();
 }
@@ -5782,7 +5783,7 @@ async function promoteExternalRoToSac(id){
     pdcaRequired:r.pdcaRequired===true,
     updatedAt:now
   };
-  try{await saveSacDecisionLocally(record)}catch(e){alert('Não foi possível confirmar a decisão de SAC na base central: '+(e?.message||e));return;}
+  try{await saveSacDecisionLocally(record)}catch(e){hideNucleoLoading();alert('Não foi possível confirmar a decisão de SAC na base central: '+(e?.message||e));return;}
   openExternalRoControlModal(record.id);
 }
 
@@ -16077,7 +16078,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix63',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix64',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
