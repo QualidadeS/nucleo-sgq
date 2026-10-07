@@ -28,6 +28,7 @@ function adminModuleFields(key){
   </select></label>`;
   const map={
     equipment:`
+      <label><span class="small">Unidade *</span><select id="admModEquipmentUnit" ${getSession()?.role==='quality'?'disabled':''}><option value="">Selecione a unidade</option><option value="matriz" ${getSession()?.role==='quality'?'':''}>SETA SC — Matriz</option><option value="filial" ${getSession()?.role==='quality'?'selected':''}>SETA ES — Unidade Linhares</option></select></label>
       <label><span class="small">Equipamento / instrumento</span><input id="admModTitle" placeholder="Nome do equipamento"></label>
       <label><span class="small">Código / patrimônio</span><input id="admModCode" placeholder="Código"></label>
       <label><span class="small">Localização</span><input id="admModLocation" placeholder="Setor / local"></label>
@@ -374,7 +375,7 @@ function editAdminOperationalRecord(id){
       </div>
     </div>
   </div>`;
-  if(key==='equipment')nucleoEquipmentReportsPanel(r);
+  if(key==='equipment'){document.getElementById('admModEquipmentUnit').value=explicitRecordUnit(r)||(getSession()?.role==='quality'?'filial':'');nucleoEquipmentReportsPanel(r);}
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
   [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncSector','sector'],['admModRncBlockArea','rncBlockArea'],['admModRncBlockStage','rncBlockStage'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
@@ -407,6 +408,7 @@ adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='do
 async function nucleoEquipmentReportsPanel(record){
  const list=document.getElementById('adminModuleContent'),box=document.createElement('div');box.className='card';box.style.cssText='padding:20px;margin-top:16px;grid-column:1/-1';box.id='equipmentReportsPanel';
  box.innerHTML='<h3>Laudos do equipamento</h3><label>Tipo / descrição do laudo<input id="equipmentReportTitle" maxlength="160" placeholder="Ex.: Laudo de calibração"></label><div class="grid"><label>Emissão<input type="date" id="equipmentReportIssued"></label><label>Validade (opcional)<input type="date" id="equipmentReportExpires"></label></div><label>Arquivo PDF<input id="equipmentReportFile" type="file" accept="application/pdf"></label><button class="btn primary" onclick="nucleoEquipmentUploadReport(this,\''+escapeHtml(record.id)+'\')">Anexar laudo</button><p id="equipmentReportStatus" role="status"></p><div id="equipmentReportsList">Consultando laudos…</div>';list.appendChild(box);
+ if(!explicitRecordUnit(record)){document.getElementById('equipmentReportsList').textContent='Selecione a Unidade no cadastro acima, clique em Salvar alterações e reabra o equipamento para anexar os laudos.';return;}
  try{const r=await portalJsonp({acao:'nucleo_drive_equipment_reports',unit:explicitRecordUnit(record),equipmentId:record.id},60000);if(!r?.sucesso)throw Error(r?.erro||'Consulta não concluída.');if(!box.isConnected)return;nucleoEquipmentRenderReports(record,r.reports||[]);}catch(e){if(box.isConnected)document.getElementById('equipmentReportsList').textContent=e.message;}
 }
 function nucleoEquipmentRenderReports(record,reports){
@@ -415,7 +417,7 @@ function nucleoEquipmentRenderReports(record,reports){
 }
 async function nucleoEquipmentUploadReport(button,id){
  if(!nucleoFeatureRequire('equipment','edit'))return;const status=document.getElementById('equipmentReportStatus');button.disabled=true;
- try{const record=adminModuleRecord(id),file=document.getElementById('equipmentReportFile').files[0];if(!file&&!localStorage.getItem(nucleoEquipmentPendingKey(record)))throw Error('Selecione o PDF do laudo.');if(file&&file.size>8*1024*1024)throw Error('Selecione um PDF de até 8 MB.');status.textContent='Salvando laudo no Drive e vinculando ao equipamento…';await nucleoDriveLoad();
+ try{const record=adminModuleRecord(id);if(!explicitRecordUnit(record))throw Error('Selecione a Unidade no cadastro acima e salve as alterações antes de anexar o laudo.');const file=document.getElementById('equipmentReportFile').files[0];if(!file&&!localStorage.getItem(nucleoEquipmentPendingKey(record)))throw Error('Selecione o PDF do laudo.');if(file&&file.size>8*1024*1024)throw Error('Selecione um PDF de até 8 MB.');status.textContent='Salvando laudo no Drive e vinculando ao equipamento…';await nucleoDriveLoad();
  const r=await nucleoEquipmentReportMutation({unit:explicitRecordUnit(record),equipmentId:id,fileData:file?await fileToBase64(file):'',fileName:file?.name||'',title:document.getElementById('equipmentReportTitle').value.trim(),issued:document.getElementById('equipmentReportIssued').value,expires:document.getElementById('equipmentReportExpires').value});
  nucleoEquipmentRenderReports(record,r.reports||[]);try{await syncPortalBackend(false);}catch(_){}document.getElementById('equipmentReportFile').value='';status.textContent='Laudo anexado e confirmado na base central.';
  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
