@@ -413,7 +413,7 @@ async function nucleoEquipmentReportsPanel(record){
 }
 function nucleoEquipmentRenderReports(record,reports){
  const host=document.getElementById('equipmentReportsList');if(!host)return;
- host.innerHTML=reports.slice().reverse().map(p=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.title||p.fileName)+'</b><p class="small">'+escapeHtml(p.fileName)+(p.issued?' · Emissão: '+escapeHtml(p.issued):'')+(p.expires?' · Validade: '+escapeHtml(p.expires):'')+'</p><button class="btn secondary" onclick="nucleoEquipmentViewReport(\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Abrir / baixar PDF</button></div>').join('')||'<p class="small">Nenhum laudo anexado.</p>';
+ host.innerHTML=reports.slice().reverse().map(p=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.title||p.fileName)+'</b><p class="small">'+escapeHtml(p.fileName)+(p.issued?' · Emissão: '+escapeHtml(p.issued):'')+(p.expires?' · Validade: '+escapeHtml(p.expires):'')+'</p><button class="btn secondary" onclick="nucleoEquipmentViewReport(\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Abrir / baixar PDF</button><button class="btn secondary" style="margin-left:8px;color:#b42318" onclick="nucleoEquipmentDeleteReport(this,\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Excluir laudo</button></div>').join('')||'<p class="small">Nenhum laudo anexado.</p>';
 }
 async function nucleoEquipmentUploadReport(button,id){
  if(!nucleoFeatureRequire('equipment','edit'))return;const status=document.getElementById('equipmentReportStatus');button.disabled=true;
@@ -454,4 +454,17 @@ async function nucleoEquipmentResetAttempt(id){
 async function nucleoEquipmentDeploymentMessage(){
  let version='sem identificação (versão anterior)';try{const r=await portalJsonp({acao:'portal_public_config'},20000);version=r.backendRevision||version;}catch(_){}
  return 'O endereço conectado ao Núcleo não reconhece os laudos. Versão recebida: '+version+'. No Apps Script, execute verificarImplantacaoLaudos e confira a URL registrada. A versão esperada é laudos-avatar-20261007-v2.';
+}
+
+async function nucleoEquipmentDeleteReport(button,id,reportId){
+ if(!nucleoFeatureRequire('equipment','edit'))return;
+ if(!confirm('Excluir este laudo? O vínculo será removido do equipamento e o PDF irá para a lixeira do Drive.'))return;
+ const record=adminModuleRecord(id),status=document.getElementById('equipmentReportStatus');button.disabled=true;
+ try{
+  status.textContent='Excluindo laudo e aguardando confirmação…';
+  const result=await portalJsonp({acao:'nucleo_drive_equipment_delete',equipmentId:id,unit:explicitRecordUnit(record),reportId,eventoId:'EQ-DEL-'+Date.now()+'-'+Math.random().toString(36).slice(2)},60000);
+  if(!result?.sucesso)throw Error(result?.erro||'A exclusão não foi confirmada.');
+  nucleoEquipmentRenderReports(record,result.reports||[]);status.textContent='Laudo excluído.';
+  try{await syncPortalBackend(false)}catch(_){}
+ }catch(e){status.textContent='Não foi possível confirmar a exclusão: '+e.message;button.disabled=false;}
 }
