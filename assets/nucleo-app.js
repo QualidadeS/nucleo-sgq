@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix70-runtime',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-integracao-central',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -666,14 +666,22 @@ function processDeadlineAlerts(showMessage=false){
   });
   localStorage.setItem(DEADLINE_ALERTS_KEY,JSON.stringify(state));if(showMessage)alert(created?created+' alerta(s) atualizado(s).':'Nenhum novo alerta de prazo.');refreshNotificationBell();
 }
-const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyCl5Cor0mqj0J5m00WfvqoQ6CE_5HJrep9O0DOjpoFHp2DGxYkP62zDpLggr8GmPS2kA/exec';
+const NUCLEO_DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyUG0UtKvvb8cNyqs7K8VmuADRp0x0m7wDwMsg0XEaj_b32t20HPBWEV6Hkh-BE6AY_Sw/exec';
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
 window.addEventListener('online',()=>setTimeout(retryPendingRncDeletes,300));
 
+let nucleoConfirmedApiUrl='';
+function nucleoValidApiUrl(value){return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(String(value||'').trim());}
 function portalApiBase(){
-  return String(NUCLEO_DEFAULT_API_URL||'').trim().replace(/\/+$/,'');
+  return String(nucleoConfirmedApiUrl||NUCLEO_DEFAULT_API_URL||'').trim().replace(/\/+$/,'');
+}
+async function nucleoCheckApiUrl(url){
+  if(!nucleoValidApiUrl(url))throw new Error('Informe a URL do aplicativo da Web do Apps Script, terminada em /exec.');
+  const result=await portalJsonp({acao:'portal_public_config'},20000,url);
+  if(!result?.sucesso||!result.config)throw new Error('O endereço não confirmou uma conexão válida com o Núcleo. A conexão atual foi mantida.');
+  return result;
 }
 function portalBackendEnabled(){
   return /^https:\/\/script\.google\.com\/macros\/s\//i.test(portalApiBase());
@@ -683,9 +691,9 @@ function portalBase64EncodeJson(obj){
   const json=JSON.stringify(obj||{});
   return btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function portalJsonp(params,timeoutMs=60000){
+function portalJsonp(params,timeoutMs=60000,baseOverride=''){
   return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
+    const base=baseOverride||portalApiBase();
     if(!base){reject(new Error('URL do Apps Script não configurada.'));return;}
 
     const cb='nucleoLoginCallback_'+Date.now()+'_'+Math.floor(Math.random()*100000);
@@ -714,7 +722,7 @@ function portalJsonp(params,timeoutMs=60000){
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
     const sessionToken=String(getSession()?.authToken||'').trim();
-    if(sessionToken && !requestParams.token && !['portal_login','portal_login_jsonp','portal_register_user'].includes(actionName)){
+    if(sessionToken && !requestParams.token && actionName!=='portal_public_config' && !['portal_login','portal_login_jsonp','portal_register_user'].includes(actionName)){
       requestParams.token=sessionToken;
     }
     Object.entries(requestParams).forEach(([k,v])=>{
@@ -1022,7 +1030,7 @@ function applyPortalBackendSnapshot(snapshot){
     const localIntegration=getSavedIntegrationSettings();
     const mergedConfig={
       ...data.config,
-      apiUrl:localIntegration.apiUrl||data.config.apiUrl||'',
+      apiUrl:portalApiBase(),
       apiKey:localIntegration.apiKey||data.config.apiKey||'',
       autoSync:data.config.autoSync??localIntegration.autoSync??'0',
       roSyncPeriod:data.config.roSyncPeriod??localIntegration.roSyncPeriod??'all',
@@ -2712,7 +2720,12 @@ async function saveSectorConfiguration(){
 
 async function syncPublicPortalConfig(){
   try{
-    const res=await portalJsonp({acao:'portal_public_config'},60000);
+    let res=await portalJsonp({acao:'portal_public_config'},20000,NUCLEO_DEFAULT_API_URL);
+    const target=String(res?.config?.apiUrl||'').trim();
+    if(target && target!==portalApiBase()){
+      try{res=await nucleoCheckApiUrl(target);nucleoConfirmedApiUrl=target;}
+      catch(error){console.warn('Endereço central não confirmado; mantendo a conexão atual.',error);}
+    }
     if(res?.config?.sectorListsByUnit)localStorage.setItem('nucleo-unit-public-sectors',JSON.stringify(res.config.sectorListsByUnit));
     if(!res?.sucesso||!res.config)return false;
     const local=getAdminConfig();
@@ -4732,7 +4745,7 @@ function getSavedIntegrationSettings(){
   try{admin=JSON.parse(localStorage.getItem(ADMIN_CONFIG_KEY)||'{}')||{};}catch(e){admin={};}
 
   const sync={
-    apiUrl:String(NUCLEO_DEFAULT_API_URL||dedicated.apiUrl||legacy.apiUrl||admin.apiUrl||'').trim(),
+    apiUrl:portalApiBase(),
     apiKey:String(dedicated.apiKey||legacy.apiKey||admin.apiKey||'').trim(),
     autoSync:String(dedicated.autoSync??legacy.autoSync??admin.autoSync??'0'),
     roSyncPeriod:String(dedicated.roSyncPeriod??legacy.roSyncPeriod??admin.roSyncPeriod??'all'),
@@ -10522,26 +10535,31 @@ async function adminDeleteTestDataForRo(){
 
 async function saveIntegrationSettingsConfirmed(){
   if(!isAdmin()){alert('Configuração indisponível.');return false}
-  const sync=saveIntegrationSettings(true);
-  if(!sync)return false;
+  if(!requireIntegrationUnlock())return false;
+  const candidate=String(document.getElementById('apiUrl')?.value||portalApiBase()).trim();
+  const currentBase=portalApiBase();
+  const keys=[INTEGRATION_PERSIST_KEY,'ro-sync-settings',ADMIN_CONFIG_KEY];
+  const before=keys.map(key=>localStorage.getItem(key));
   const st=document.getElementById('configSavedState');
-  if(st){st.classList.remove('hidden');st.textContent='Confirmando integração na base central...'}
+  if(st){st.classList.remove('hidden');st.textContent='Verificando conexão antes de salvar...'}
   try{
-    const res=await portalJsonp({
-      acao:'portal_save_config',
-      dados:JSON.stringify(getAdminConfig()),
-      ator:getSession()?.name||'SGQ'
-    },60000);
+    await nucleoCheckApiUrl(candidate);
+    const sync=saveIntegrationSettings(true);
+    if(!sync)return false;
+    const res=await portalJsonp({acao:'portal_save_config',dados:JSON.stringify(getAdminConfig()),ator:getSession()?.name||'SGQ'},60000,currentBase);
     if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
-    if(st)st.textContent='Integração salva na base central.';
-    alert('Integração atualizada para todos os usuários.');
+    nucleoConfirmedApiUrl=candidate;
+    if(st)st.textContent='Integração confirmada e salva na base central.';
+    alert('Integração salva para todos. Os demais usuários receberão o endereço ao reabrir o Núcleo.');
     return true;
   }catch(e){
-    if(st)st.textContent='Integração não confirmada na base central.';
-    alert('Não foi possível salvar a integração para todos: '+(e?.message||e));
+    keys.forEach((key,i)=>before[i]===null?localStorage.removeItem(key):localStorage.setItem(key,before[i]));
+    if(st)st.textContent='Alteração não confirmada. A conexão anterior foi mantida.';
+    alert('Não foi possível confirmar a alteração: '+(e?.message||e));
     return false;
   }
 }
+
 function saveIntegrationSettings(silent=false){
   if(!requireIntegrationUnlock())return;
 
@@ -16046,7 +16064,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix70-runtime',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-integracao-central',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
