@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix67',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix68',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -5965,7 +5965,7 @@ function renderExternalRoControl(){
           ${r.pdfFileId?`<button class="btn secondary" type="button" onclick="openSacPdf('${escapeHtml(r.id)}')">PDF SAC</button>`:''}
           ${startBtn}${updateBtn}${finishBtn}${reviewBtn}
           ${isSacRework(r)?`<button class="btn secondary" type="button" onclick="showSacTracking()">Acompanhar retrabalho</button>`:''}
-          ${r.treatmentStatus==='done'?`<button class="btn primary" type="button" onclick="finalizeAndSendSac('${escapeHtml(r.id)}')">${r.sacSentAt?'Conferir novo envio':'Preparar e-mail do SAC'}</button>`:''}
+          ${nucleoPersonFeatureCan('sac','finalize')?`<button class="btn primary" type="button" onclick="finalizeAndSendSac('${escapeHtml(r.id)}')">${r.sacSentAt?'Conferir novo envio':'Preparar e-mail do SAC'}</button>`:''}
         `:`
           ${sacHasFilledForm(r)?`<button class="btn secondary" type="button" onclick="openSacOfficialFormPreview('${escapeHtml(r.id)}')">Ver ficha SAC</button>`:''}
           ${r.pdfFileId?`<button class="btn secondary" type="button" onclick="openSacPdf('${escapeHtml(r.id)}')">PDF SAC</button>`:''}
@@ -16044,7 +16044,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix67',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix68',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16559,7 +16559,7 @@ function nucleoRenderSacEmailSettings(){
 function nucleoSacMailKey(id){return 'nucleo-sac-mail-v1:'+String(getSession()?.personId||getSession()?.email||'')+':'+id;}
 async function finalizeAndSendSac(id){
  if(!nucleoFeatureRequire('sac','finalize'))return;const record=getExternalRoControls().find(r=>String(r.id)===String(id));if(!record)return;
- const missing=sacRequiredMissing(record);if(missing.length){alert('Preencha antes de preparar: '+missing.join(', '));return;}if(record.treatmentStatus!=='done'){alert('Conclua a tratativa antes de preparar o envio.');return;}
+ const missing=sacRequiredMissing(record);if(missing.length){alert('Preencha antes de preparar: '+missing.join(', '));return;}
  let dialog=document.getElementById('sacEmailReview');dialog?.remove();dialog=document.createElement('dialog');dialog.id='sacEmailReview';dialog.style.cssText='width:min(850px,94vw);max-height:90vh;border:0;border-radius:16px;padding:24px;z-index:100060';dialog.innerHTML='<h2>Conferir envio do SAC</h2><p id="sacMailStatus" role="status">Preparando destinatários e PDF…</p><div id="sacMailFields"></div><button type="button" class="btn secondary" id="sacMailClose">Fechar</button>';document.body.appendChild(dialog);dialog.querySelector('#sacMailClose').onclick=()=>dialog.close();const restart=document.createElement('button');restart.className='btn secondary';restart.textContent='Descartar rascunho local e preparar novamente';restart.onclick=()=>{if(confirm('Descartar o rascunho local e preparar novamente? Nenhum e-mail será enviado agora.')){localStorage.removeItem(nucleoSacMailKey(id));finalizeAndSendSac(id);}};dialog.appendChild(restart);dialog.showModal();
  const status=dialog.querySelector('#sacMailStatus');let local=null;try{local=JSON.parse(localStorage.getItem(nucleoSacMailKey(id))||'null');}catch(_){}
  try{let r;if(local?.draft?.token){r=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,token:local.draft.token},60000);if(r?.sucesso&&r.state==='sent'){localStorage.removeItem(nucleoSacMailKey(id));status.textContent='Este envio já foi confirmado. Nenhum novo e-mail foi enviado.';await portalBackendSync({silent:true});return;}if(r?.sucesso&&r.state==='sending'){status.textContent='O envio anterior está sem confirmação. Confira os e-mails e o histórico antes de reenviar. O rascunho continua salvo.';return;}if(!r?.sucesso)throw new Error(r?.erro||'Não foi possível conferir a pendência.');}else r=await portalJsonp({acao:'portal_finalize_sac',mode:'prepare',id},90000);
