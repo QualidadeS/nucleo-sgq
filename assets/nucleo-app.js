@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261006-fix50',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix53',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -1009,7 +1009,7 @@ function applyPortalBackendSnapshot(snapshot){
   if(!snapshot||snapshot.sucesso===false)return false;
 
   const data=snapshot.dados||{};
-  if(snapshot.session&&getSession()){setSession({...getSession(),...snapshot.session});}
+  if(snapshot.session&&getSession()){setSession({...getSession(),...snapshot.session,...(data.overviewIndicators!==undefined?{overviewIndicators:data.overviewIndicators}:{})});}
 
   if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
   if(Array.isArray(data.unitConfigs))localStorage.setItem('nucleo-unit-configs',JSON.stringify(data.unitConfigs));
@@ -7805,33 +7805,17 @@ async function saveTriageRecord(){
     const triageRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').split('::')[0]===roNumber)||{};
     const emailErrors=[];
     let totalSent=0;
+    try{
+      updateNucleoLoading('Enviando os e-mails por setor…','Processando');
+      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:'Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'})))},90000);
+      if(!Array.isArray(result?.results))throw new Error(result?.erro||'Atualize a implantação do Apps Script para a revisão 53.');
+      totalSent=result.results.filter(r=>r.sucesso).length;
+      result.results.filter(r=>!r.sucesso).forEach(r=>emailErrors.push(r.sector+': '+r.erro));
+    }catch(err){emailErrors.push(err.message||String(err));}
     for(const record of savedRecords){
-      const sec=record.responsibleSector;
-      const email=record.responsibleUserEmail||'';
-      const person=record.responsibleUserName||'';
-      let emailResult=null;
-      try{
-        updateNucleoLoading('Enviando R.O. para '+sec+'...','Processando');
-        emailResult=await portalJsonp({
-          acao:'portal_send_directed_ro_email', ro:roNumber, setor:sec, email,
-          unidade:triageRo.unidade||roUnitValue||'', tipoRO:triageRo.tipoRO||triageRo.tipo||'',
-          cliente:triageRo.cliente||'', registrante:triageRo.registrante||'',
-          mensagem:(email
-            ? ('A '+roNumber+' foi direcionada para '+(person||email)+' em '+sec+'.')
-            : ('A '+roNumber+' foi direcionada para '+sec+'.'))+
-            ' Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'
-        },45000);
-        totalSent+=(emailResult?.enviados||[]).length;
-        if(!emailResult?.sucesso)emailErrors.push(sec+': '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado'));
-      }catch(emailErr){ emailErrors.push(sec+': '+(emailErr?.message||String(emailErr))); }
-      createNotification({
-        type:'ro',skipEmail:true,audience:email?'user':'sector',userKey:email,sector:sec,ro:roNumber,
-        unidade:triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',
-        title:email?'R.O. direcionada para você':'R.O. direcionada para tratativa',
-        message:email?('A '+roNumber+' foi direcionada para você em '+sec+'. Motivo: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'):
-          ('A '+roNumber+' foi direcionada para '+sec+'. Motivo: '+(record.assignmentReason||'Não informado')+'. Todos os usuários cadastrados no setor recebem esta pendência.')
-      });
-      if(email)notifyManagersOfDirectedRo(roNumber,sec,triageRo,person);
+      const sec=record.responsibleSector,email=record.responsibleUserEmail||'';
+      createNotification({type:'ro',skipEmail:true,audience:email?'user':'sector',userKey:email,sector:sec,ro:roNumber,unidade:roUnitValue||triageRo.unidade||'',title:'R.O. direcionada para tratativa',message:'A '+roNumber+' foi direcionada para '+sec+'. Motivo: '+(record.assignmentReason||'Não informado')+'.'});
+      notifyManagersOfDirectedRo(roNumber,sec,{...triageRo,unidade:roUnitValue||triageRo.unidade},record.responsibleUserName);
     }
     try{await refreshEmailHistory()}catch(_){ }
 
@@ -10243,7 +10227,7 @@ function notifyManagersOfDirectedRo(roKey,sector,triageRo,responsibleUserName){
   const managers=managersForSector(sector);
   managers.forEach(manager=>{
     createNotification({
-      type:'ro',
+      type:'ro',skipEmail:true,
       audience:'user',
       userKey:String(manager.email||'').trim().toLowerCase(),
       sector,
@@ -14911,7 +14895,7 @@ function renderUserOverview(){
     if(canRequestDocuments()){
       cards.push(overviewKpi(d.docs,'Solicitações de documentos abertas','',"showAdminOperationalModule('documents')",'Acompanhar'));
     }
-    k.innerHTML=cards.join('');
+    nucleoRenderKpiChoices(cards,['pdca_pending','sector_actions','submitted','sacs',...(canRequestDocuments()?['documents']:[])]);
   }
 
   const priorities=[];
@@ -14936,14 +14920,14 @@ function renderAdminOverview(){
   if(sub)sub.textContent='Pendências e pontos que exigem atuação administrativa agora. Não é uma listagem de todas as R.O.s.';
 
   const k=document.getElementById('overviewKpis');
-  if(k)k.innerHTML=[
+  if(k)nucleoRenderKpiChoices([
     overviewKpi(d.triagePending,'R.O.s aguardando triagem',d.triagePending?'warn':'','showTriage()','Triar'),
     overviewKpi(d.sacToClassify,'SACs aguardando classificação',d.sacToClassify?'warn':'','showExternalRoControl()','Classificar'),
     overviewKpi(d.actionReview,'Ações para atenção do SGQ',d.actionReview?'danger':'','showPendingActions()','Analisar'),
     overviewKpi(d.contests.length,'Contestações pendentes',d.contests.length?'warn':'','showContestations()','Analisar'),
     overviewKpi(d.registrations.length,'Cadastros aguardando aprovação',d.registrations.length?'warn':'','showPendingHub()','Revisar'),
     overviewKpi(d.docs.length,'Solicitações de documentos abertas','',"showAdminOperationalModule('documents')",'Atender')
-  ].join('');
+  ],['triage','sac_classify','action_review','contests','registrations','documents']);
 
   const priorities=[];
   if(d.triagePending)priorities.push(overviewPriority(`${d.triagePending} R.O.(s) sem triagem`,'Precisam ser classificadas e direcionadas pelo SGQ.','showTriage()','warn'));
@@ -16088,7 +16072,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261006-fix50',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix53',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16410,7 +16394,7 @@ function nucleoRenderPdcaLifecycle(data,lifecycle){
  const text=document.getElementById('sentLifecycleDescription');if(text)text.textContent=!isAdmin()?'Respostas disponíveis para consulta.':lifecycle==='history'?'Respostas já entregues ao reclamante. Encerradas nesta etapa e mantidas para consulta e indicadores.':'Confirme o reclamante e entregue a resposta. Reclamante já confirmado não exige nova confirmação de identidade.';
 }
 
-function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 50';}
+function nucleoShowTriageBuild(){const host=document.getElementById('triageModalOverlay');if(!host)return;let badge=document.getElementById('nucleoTriageBuild');if(!badge){badge=document.createElement('p');badge.id='nucleoTriageBuild';badge.className='small';badge.style.cssText='margin:6px 0;color:#667085';const heading=host.querySelector('h2,h3');if(heading)heading.after(badge);}if(badge)badge.textContent='Versão da triagem: 06/10 — revisão 53';}
 document.addEventListener('DOMContentLoaded',nucleoShowTriageBuild);
 nucleoShowTriageBuild();
 
@@ -16464,7 +16448,7 @@ function nucleoManagerScopeControl(){
  let host=document.getElementById('managerGlobalScope');if(!host){host=document.createElement('div');host.id='managerGlobalScope';host.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;margin:10px 0;background:#eef4ff;border:1px solid #d9e5f5;border-radius:12px';const top=document.getElementById('globalSearchInput')?.closest('header')||document.getElementById('listView')?.parentElement;if(!top)return;if(top.tagName==='HEADER')top.after(host);else top.prepend(host);}
  host.hidden=!nucleoHasManagedScope();host.style.display=nucleoHasManagedScope()?'flex':'none';if(!nucleoHasManagedScope())return;
  const state=nucleoManagerScopeState(),sectors=nucleoVisibleManagerSectors(true,managedSectorsForCurrentUser(),[]),units=nucleoPersonUnits(getSession());if(!sectors.includes(state.sector))state.sector='all';if(!units.includes(state.unit))state.unit='all';
- host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span>';
+ host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span><button class="btn secondary" type="button" onclick="nucleoOpenManagerEmails()">Recebimento de e-mails</button>';
  document.getElementById('managerGlobalSector').value=state.sector;document.getElementById('managerGlobalUnit').value=state.unit;
  ['managerGlobalSector','managerGlobalUnit'].forEach(id=>document.getElementById(id).onchange=nucleoManagerChangeScope);
  nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();
@@ -16488,3 +16472,28 @@ view=function(id){nucleoManagerOriginalView(id);nucleoManagerScopeControl();};
 document.addEventListener('DOMContentLoaded',()=>{nucleoManagerScopeControl();nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();});
 
 function nucleoHasManagedScope(){return isManager()||managedSectorsForCurrentUser().length>0;}
+
+function nucleoKpiCatalog(){return isAdmin()?[['triage','R.O.s aguardando triagem','ros','triage'],['sac_classify','SACs aguardando classificação','sac','edit'],['action_review','Ações para atenção do SGQ','pdca','reviewActions'],['contests','Contestações pendentes','ros','reviewContests'],['registrations','Cadastros aguardando aprovação','users','approve'],['documents','Solicitações de documentos abertas','documents','consult']]:[['pdca_pending','PDCAs que aguardam sua resposta','ros','assigned'],['sector_actions','Ações do seu setor','pdca','actions'],['submitted','R.O.s que você abriu aguardando triagem','ros','submitted'],['sacs','SACs em acompanhamento','sac','consult'],['documents','Solicitações de documentos abertas','documents','consult']];}
+function nucleoKpiOrder(available,saved){return Array.isArray(saved)?[...new Set(saved)].filter(id=>available.includes(id)):available;}
+function nucleoRenderKpiChoices(cards,ids){const host=document.getElementById('overviewKpis');if(!host)return;const allowed=nucleoKpiCatalog().filter(x=>nucleoPersonFeatureCan(x[2],x[3])).map(x=>x[0]),order=nucleoKpiOrder(ids.filter(id=>allowed.includes(id)),getSession()?.overviewIndicators);host.innerHTML=order.map(id=>cards[ids.indexOf(id)]).join('')||'<p class="small">Nenhum indicador selecionado. Use Personalizar indicadores.</p>';let toolbar=document.getElementById('overviewIndicatorToolbar');if(!toolbar){toolbar=document.createElement('div');toolbar.id='overviewIndicatorToolbar';toolbar.className='actions';toolbar.style.cssText='justify-content:flex-end;margin:8px 0';toolbar.innerHTML='<button class="btn secondary" type="button" onclick="nucleoOpenKpiEditor()">⚙ Personalizar indicadores</button><button class="btn secondary" type="button" onclick="nucleoOpenMyTeam()">Minha equipe</button>';host.before(toolbar);}}
+var nucleoKpiDraft;
+function nucleoOpenKpiEditor(){const catalog=nucleoKpiCatalog().filter(x=>nucleoPersonFeatureCan(x[2],x[3]));nucleoKpiDraft=nucleoKpiOrder(catalog.map(x=>x[0]),getSession()?.overviewIndicators);let overlay=document.getElementById('overviewIndicatorEditor');overlay?.remove();overlay=document.createElement('div');overlay.id='overviewIndicatorEditor';overlay.className='modal open';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';overlay.innerHTML='<div class="modal-box" style="max-width:650px;max-height:85vh;overflow:auto"><h3>Personalizar indicadores</h3><p class="small">Escolha os cartões e a ordem. A preferência acompanha seu login.</p><div id="overviewIndicatorChoices"></div><p id="overviewIndicatorSaveStatus" role="status"></p><div class="actions"><button class="btn primary" id="overviewIndicatorSave" onclick="nucleoSaveKpis()">Salvar</button><button class="btn secondary" onclick="nucleoKpiDraft=null;nucleoRenderKpiEditor()">Restaurar padrão</button><button class="btn secondary" onclick="document.getElementById(\'overviewIndicatorEditor\').remove()">Cancelar</button></div></div>';document.body.appendChild(overlay);nucleoRenderKpiEditor();}
+function nucleoRenderKpiEditor(){const catalog=nucleoKpiCatalog().filter(x=>nucleoPersonFeatureCan(x[2],x[3]));if(!Array.isArray(nucleoKpiDraft))nucleoKpiDraft=catalog.map(x=>x[0]);const ordered=[...nucleoKpiDraft,...catalog.map(x=>x[0]).filter(id=>!nucleoKpiDraft.includes(id))];document.getElementById('overviewIndicatorChoices').innerHTML=ordered.map(id=>{const item=catalog.find(x=>x[0]===id);if(!item)return '';const pos=nucleoKpiDraft.indexOf(id);return '<div style="display:flex;gap:12px;align-items:center;padding:10px;border-bottom:1px solid #eee"><label style="flex:1"><input type="checkbox" style="width:20px;height:20px" '+(pos>=0?'checked':'')+' onchange="nucleoToggleKpi(\''+id+'\',this.checked)"> '+escapeHtml(item[1])+'</label><button class="btn secondary" '+(pos<=0?'disabled':'')+' onclick="nucleoMoveKpi(\''+id+'\',-1)" aria-label="Mover para cima">↑</button><button class="btn secondary" '+(pos<0||pos===nucleoKpiDraft.length-1?'disabled':'')+' onclick="nucleoMoveKpi(\''+id+'\',1)" aria-label="Mover para baixo">↓</button></div>';}).join('');}
+function nucleoToggleKpi(id,checked){nucleoKpiDraft=nucleoKpiDraft.filter(x=>x!==id);if(checked)nucleoKpiDraft.push(id);nucleoRenderKpiEditor();}
+function nucleoMoveKpi(id,delta){const i=nucleoKpiDraft.indexOf(id),j=i+delta;if(i<0||j<0||j>=nucleoKpiDraft.length)return;[nucleoKpiDraft[i],nucleoKpiDraft[j]]=[nucleoKpiDraft[j],nucleoKpiDraft[i]];nucleoRenderKpiEditor();}
+async function nucleoSaveKpis(){const button=document.getElementById('overviewIndicatorSave'),status=document.getElementById('overviewIndicatorSaveStatus');button.disabled=true;status.textContent='Salvando na base central…';try{const result=await portalJsonp({acao:'portal_save_overview_preferences',indicators:JSON.stringify(nucleoKpiDraft)},60000);if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a preferência.');setSession({...getSession(),overviewIndicators:result.indicators});document.getElementById('overviewIndicatorEditor').remove();renderCurrentOverview();alert('Indicadores salvos para seu login.');}catch(e){status.textContent='Não foi possível salvar: '+e.message;}finally{button.disabled=false;}}
+
+async function nucleoOpenManagerEmails(){
+ try{const result=await portalJsonp({acao:'portal_manager_email_preferences'},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível carregar.');const old=document.getElementById('managerEmailEditor');old?.remove();const box=document.createElement('div');box.id='managerEmailEditor';box.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';box.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:650px;max-height:85vh;overflow:auto"><h3>Recebimento de e-mails por setor</h3><p>Avisos de triagem como gestor. As notificações no Núcleo continuam disponíveis.</p>'+result.scopes.map(m=>{const key=m.key;return '<label style="display:block;padding:12px"><input type="checkbox" data-manager-email="'+escapeHtml(key)+'" style="width:22px;height:22px" '+(result.preferences[key]!==false?'checked':'')+'> '+escapeHtml(m.sector)+' · '+(m.unit==='filial'?'Filial — Linhares':'Matriz')+'</label>';}).join('')+'<p role="status" id="managerEmailStatus"></p><button class="btn primary" onclick="nucleoSaveManagerEmails(this)">Salvar</button> <button class="btn secondary" onclick="document.getElementById(\'managerEmailEditor\').remove()">Cancelar</button></div>';document.body.appendChild(box);}catch(err){alert(err.message);}
+}
+async function nucleoSaveManagerEmails(button){button.disabled=true;const status=document.getElementById('managerEmailStatus');status.textContent='Salvando na base central…';try{const data={};document.querySelectorAll('[data-manager-email]').forEach(el=>data[el.dataset.managerEmail]=el.checked);const result=await portalJsonp({acao:'portal_manager_email_preferences',data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Salvamento não confirmado.');status.textContent='Preferências salvas na base central.';}catch(err){status.textContent=err.message;}finally{button.disabled=false;}}
+
+var nucleoMyTeamData=[];
+async function nucleoOpenMyTeam(){
+ const old=document.getElementById('myTeamOverlay');old?.remove();const overlay=document.createElement('div');overlay.id='myTeamOverlay';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';overlay.innerHTML='<div style="background:white;padding:24px;border-radius:16px;width:min(850px,96vw);max-height:85vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Minha equipe</h3><button class="btn secondary" onclick="document.getElementById(\'myTeamOverlay\').remove()">Fechar</button></div><p class="small">Gestores e colegas com cadastro aprovado e ativo nos seus setores.</p><div id="myTeamFilters"></div><div id="myTeamContents" role="status">Carregando equipes da base central…</div></div>';document.body.appendChild(overlay);
+ try{const result=await portalJsonp({acao:'portal_my_team'},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível carregar a equipe.');if(!overlay.isConnected)return;nucleoMyTeamData=result.teams||[];document.getElementById('myTeamFilters').innerHTML='<div class="actions"><label>Setor <select id="myTeamSector"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoMyTeamData.map(t=>t.sector))].map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="myTeamUnit"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoMyTeamData.map(t=>t.unit))].map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label></div>';['myTeamSector','myTeamUnit'].forEach(id=>document.getElementById(id).onchange=nucleoRenderMyTeam);nucleoRenderMyTeam();}catch(err){if(overlay.isConnected)document.getElementById('myTeamContents').textContent='Não foi possível consultar: '+err.message;}
+}
+function nucleoRenderMyTeam(){
+ const host=document.getElementById('myTeamContents');if(!host)return;const sector=document.getElementById('myTeamSector')?.value||'all',unit=document.getElementById('myTeamUnit')?.value||'all',teams=nucleoMyTeamData.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit));
+ host.innerHTML=teams.map(t=>'<section style="border:1px solid #dce5ee;border-radius:12px;padding:18px;margin-top:16px"><h3 style="margin:0">'+escapeHtml(t.sector)+'</h3><p class="small">'+(t.unit==='filial'?'Filial — Linhares':'Matriz')+' · '+t.people.length+' pessoa(s)</p>'+(!t.people.some(p=>p.manager)?'<p class="small">Nenhum gestor cadastrado para esta equipe.</p>':'')+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'+t.people.map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div style="padding:14px;border-radius:10px;background:'+(p.manager?'#eef4ff':'#f6f8fa')+'"><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':'Integrante da equipe')+'</div>'+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div>';}).join('')+'</div></section>').join('')||'<p>Nenhuma equipe disponível para esta seleção.</p>';
+}
