@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix66',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix67',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -5965,7 +5965,7 @@ function renderExternalRoControl(){
           ${r.pdfFileId?`<button class="btn secondary" type="button" onclick="openSacPdf('${escapeHtml(r.id)}')">PDF SAC</button>`:''}
           ${startBtn}${updateBtn}${finishBtn}${reviewBtn}
           ${isSacRework(r)?`<button class="btn secondary" type="button" onclick="showSacTracking()">Acompanhar retrabalho</button>`:''}
-          ${r.treatmentStatus==='done'?`<button class="btn primary" type="button" onclick="finalizeAndSendSac('${escapeHtml(r.id)}')">${r.sacSentAt?'Regerar e reenviar SAC':'Finalizar e enviar SAC'}</button>`:''}
+          ${r.treatmentStatus==='done'?`<button class="btn primary" type="button" onclick="finalizeAndSendSac('${escapeHtml(r.id)}')">${r.sacSentAt?'Conferir novo envio':'Preparar e-mail do SAC'}</button>`:''}
         `:`
           ${sacHasFilledForm(r)?`<button class="btn secondary" type="button" onclick="openSacOfficialFormPreview('${escapeHtml(r.id)}')">Ver ficha SAC</button>`:''}
           ${r.pdfFileId?`<button class="btn secondary" type="button" onclick="openSacPdf('${escapeHtml(r.id)}')">PDF SAC</button>`:''}
@@ -6103,48 +6103,7 @@ function sacRequiredMissing(r){
   if(r?.treatmentType==='missing_items'&&r?.receiptSigned==='no'&&r?.directorDecision==='pending')required.push(['Decisão da Diretoria','']);
   return required.filter(([,v])=>String(v??'').trim()==='').map(([k])=>k);
 }
-async function finalizeAndSendSac(id){
-  if(!nucleoFeatureRequire('sac','finalize'))return;
-  if(!isAdmin())return;
-  const r=getExternalRoControls().find(x=>String(x.id)===String(id));
-  if(!r){alert('Controle de SAC não encontrado.');return}
-  const missing=sacRequiredMissing(r);
-  if(missing.length){
-    alert('Antes de finalizar o SAC, preencha:\\n\\n• '+missing.join('\\n• '));
-    openExternalRoControlModal(id);
-    return;
-  }
-  if(r.treatmentStatus!=='done'){
-    alert('Conclua a tratativa antes de finalizar e enviar o SAC.');
-    return;
-  }
-  const cfg=getAdminConfig();
-  if(!String(cfg.sgqNotificationEmail||'').trim()||!String(cfg.directorSacEmail||'').trim()){
-    alert('Cadastre o e-mail do SGQ e o e-mail da Diretoria em Administração > Avisos e e-mails.');
-    return;
-  }
-  const resend=!!r.sacSentAt;
-  if(!confirm((resend?'Gerar uma nova versão':'Gerar o PDF oficial')+' do SAC '+r.ro+' e enviar para Diretoria e SGQ?'))return;
 
-  try{
-    const result=await portalJsonp({
-      acao:'portal_finalize_sac',
-      id:r.id,
-      ator:getSession()?.name||'SGQ'
-    },45000);
-    if(!result||result.sucesso===false)throw new Error(result?.erro||'Falha ao finalizar o SAC.');
-    await portalBackendSync({silent:true});
-    renderExternalRoControl();
-    createNotification({
-      type:'ro',audience:'complainant',ro:r.ro,
-      title:'SAC finalizado',
-      message:'O SAC da R.O. '+r.ro+' foi finalizado pelo SGQ.'
-    });
-    alert('SAC finalizado. PDF versão '+(result.versao||1)+' gerado e enviado para Diretoria e SGQ.');
-  }catch(e){
-    alert('Não foi possível finalizar/enviar o SAC: '+(e?.message||e));
-  }
-}
 function openSacPdf(id){
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r?.pdfFileId){alert('Este SAC ainda não possui PDF gerado.');return}
@@ -16018,7 +15977,7 @@ function ensureUnitQualitySettings(){
 function loadUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value;const c=unitConfiguration(unit)||{};
   const sectors=c.sectorList??(unit==='matriz'?getConfiguredSectors('matriz').join('\n'):'');const legacyField=document.getElementById('sectorList');if(legacyField)legacyField.value=sectors;
-  document.getElementById('qualityConfigSectors').value=sectors;document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';renderDocumentTypeSettings(unit);nucleoRenderDecisionSettings(unit);
+  document.getElementById('qualityConfigSectors').value=sectors;document.getElementById('qualityConfigEmail').value=c.sgqNotificationEmail||'';document.getElementById('qualityConfigDirector').value=c.directorSacEmail||'';renderDocumentTypeSettings(unit);nucleoRenderDecisionSettings(unit);nucleoRenderSacEmailSettings();
 }
 async function saveUnitQualitySettings(){
   const unit=document.getElementById('qualityConfigUnit').value,data={sectorList:document.getElementById('qualityConfigSectors').value,sgqNotificationEmail:document.getElementById('qualityConfigEmail').value,directorSacEmail:document.getElementById('qualityConfigDirector').value};
@@ -16085,7 +16044,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix66',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix67',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16589,3 +16548,29 @@ function nucleoPublicLoginSectors(unit){
   const own=unitConfiguration(unit);return own?normalizeSectorList(own.sectorList):[];
 }
 function nucleoOpenAvatarGalleryConfig(){if(!nucleoPersonPermissions(getSession()).sgq)return;const box=document.getElementById('avatarGalleryConfig');if(!box)return;box.hidden=false;box.style.removeProperty('display');box.closest('.config-section')?.classList.add('active');box.scrollIntoView({behavior:'smooth',block:'center'});nucleoReadAvatarGalleryConfig();}
+function nucleoRenderSacEmailSettings(){
+ const unit=document.getElementById('qualityConfigUnit')?.value||'matriz',parent=document.getElementById('unitQualitySettings');if(!parent)return;
+ let box=document.getElementById('sacEmailSettings');if(!box){box=document.createElement('section');box.id='sacEmailSettings';box.className='settings-block';parent.appendChild(box);}box.hidden=!nucleoPersonFeatureCan('sectors','emails');if(box.hidden)return;
+ const selected=unitConfiguration(unit)?.sacEmailRecipients||[],sectors=getConfiguredSectors(unit),users=getOperationalUsers().filter(u=>u.active!==false&&u.email);
+ box.innerHTML='<h3>Destinatários dos SACs — '+escapeHtml(unit==='filial'?'Filial':'Matriz')+'</h3><p>Marque as pessoas por setor. As cópias fixas da unidade também serão incluídas. Salve pelo botão abaixo.</p>';
+ sectors.forEach(sector=>{const list=users.filter(u=>userHasUnitSector(u,unit,sector));if(!list.length)return;const group=document.createElement('details'),title=document.createElement('summary');title.textContent=sector;group.appendChild(title);list.forEach(u=>{const label=document.createElement('label');label.style.cssText='display:flex;align-items:center;gap:10px;margin:10px 0';const input=document.createElement('input');input.type='checkbox';input.style.cssText='width:22px;height:22px';input.dataset.person=String(u.personId||u.email||u.name);input.dataset.sector=sector;input.checked=selected.some(r=>r.person===input.dataset.person&&r.sector===sector);label.append(input,document.createTextNode(u.name+' — '+u.email));group.appendChild(label);});box.appendChild(group);});
+ const btn=document.createElement('button');btn.className='btn primary';btn.textContent='Salvar destinatários dos SACs';btn.onclick=async()=>{btn.disabled=true;try{const recipients=[...box.querySelectorAll('input:checked')].map(i=>({person:i.dataset.person,sector:i.dataset.sector}));const r=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sacEmailRecipients:recipients})},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não confirmado.');const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(c=>c.id!==unit).concat({...old,id:unit,unit,sacEmailRecipients:recipients})));alert('Destinatários dos SACs salvos na base central.');}catch(e){alert(e.message);}finally{btn.disabled=false;}};box.appendChild(btn);
+}
+function nucleoSacMailKey(id){return 'nucleo-sac-mail-v1:'+String(getSession()?.personId||getSession()?.email||'')+':'+id;}
+async function finalizeAndSendSac(id){
+ if(!nucleoFeatureRequire('sac','finalize'))return;const record=getExternalRoControls().find(r=>String(r.id)===String(id));if(!record)return;
+ const missing=sacRequiredMissing(record);if(missing.length){alert('Preencha antes de preparar: '+missing.join(', '));return;}if(record.treatmentStatus!=='done'){alert('Conclua a tratativa antes de preparar o envio.');return;}
+ let dialog=document.getElementById('sacEmailReview');dialog?.remove();dialog=document.createElement('dialog');dialog.id='sacEmailReview';dialog.style.cssText='width:min(850px,94vw);max-height:90vh;border:0;border-radius:16px;padding:24px;z-index:100060';dialog.innerHTML='<h2>Conferir envio do SAC</h2><p id="sacMailStatus" role="status">Preparando destinatários e PDF…</p><div id="sacMailFields"></div><button type="button" class="btn secondary" id="sacMailClose">Fechar</button>';document.body.appendChild(dialog);dialog.querySelector('#sacMailClose').onclick=()=>dialog.close();const restart=document.createElement('button');restart.className='btn secondary';restart.textContent='Descartar rascunho local e preparar novamente';restart.onclick=()=>{if(confirm('Descartar o rascunho local e preparar novamente? Nenhum e-mail será enviado agora.')){localStorage.removeItem(nucleoSacMailKey(id));finalizeAndSendSac(id);}};dialog.appendChild(restart);dialog.showModal();
+ const status=dialog.querySelector('#sacMailStatus');let local=null;try{local=JSON.parse(localStorage.getItem(nucleoSacMailKey(id))||'null');}catch(_){}
+ try{let r;if(local?.draft?.token){r=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,token:local.draft.token},60000);if(r?.sucesso&&r.state==='sent'){localStorage.removeItem(nucleoSacMailKey(id));status.textContent='Este envio já foi confirmado. Nenhum novo e-mail foi enviado.';await portalBackendSync({silent:true});return;}if(r?.sucesso&&r.state==='sending'){status.textContent='O envio anterior está sem confirmação. Confira os e-mails e o histórico antes de reenviar. O rascunho continua salvo.';return;}if(!r?.sucesso)throw new Error(r?.erro||'Não foi possível conferir a pendência.');}else r=await portalJsonp({acao:'portal_finalize_sac',mode:'prepare',id},90000);
+ if(!r?.sucesso||!r.draft)throw new Error(r?.erro||'Não foi possível preparar o SAC.');const draft=r.draft,host=dialog.querySelector('#sacMailFields');
+ host.innerHTML='<p><b>Para:</b> <span id="sacMailTo"></span></p><p><b>Cópia:</b> <span id="sacMailCc"></span></p><label>Assunto<input id="sacMailSubject" maxlength="200"></label><label>Mensagem<textarea id="sacMailBody" rows="9" maxlength="12000"></textarea></label><p id="sacMailPdfName"></p><button class="btn secondary" id="sacMailPdf">Abrir PDF em outra aba</button><label style="display:flex;gap:10px;align-items:center;margin:16px 0"><input id="sacMailChecked" type="checkbox" style="width:24px;height:24px">Conferi os destinatários, a mensagem e o PDF.</label><div class="actions"><button class="btn secondary" id="sacMailLocal">Guardar para depois</button><button class="btn primary" id="sacMailSend" disabled>Confirmar e enviar e-mail</button></div>';
+ host.querySelector('#sacMailTo').textContent=draft.to;host.querySelector('#sacMailCc').textContent=draft.cc||'Sem cópias';host.querySelector('#sacMailSubject').value=local?.subject||draft.subject;host.querySelector('#sacMailBody').value=local?.body||draft.body;host.querySelector('#sacMailPdfName').textContent='Anexo: '+draft.pdfName;
+ const saveLocal=()=>{const data={draft,subject:host.querySelector('#sacMailSubject').value,body:host.querySelector('#sacMailBody').value};localStorage.setItem(nucleoSacMailKey(id),JSON.stringify(data));return data;};saveLocal();host.querySelector('#sacMailSubject').oninput=host.querySelector('#sacMailBody').oninput=()=>{try{saveLocal();}catch(e){status.textContent='O navegador não conseguiu guardar o rascunho local.';}};
+ host.querySelector('#sacMailLocal').onclick=()=>{try{saveLocal();status.textContent='Rascunho guardado neste navegador. Abra Preparar e-mail neste SAC para continuar.';}catch(e){status.textContent='Não foi possível guardar localmente.';}};
+ host.querySelector('#sacMailChecked').onchange=e=>host.querySelector('#sacMailSend').disabled=!e.target.checked;
+ host.querySelector('#sacMailPdf').onclick=async()=>{const tab=window.open('about:blank','_blank');if(!tab){status.textContent='Permita abrir a aba do PDF neste navegador.';return;}tab.opener=null;tab.document.body.textContent='Carregando PDF…';try{const pdf=await portalJsonp({acao:'portal_finalize_sac',mode:'pdf',id,token:draft.token},90000);if(!pdf?.sucesso)throw new Error(pdf?.erro||'PDF indisponível.');const bytes=Uint8Array.from(atob(pdf.base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));tab.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),300000);}catch(e){tab.document.body.textContent=e.message;}};
+ host.querySelector('#sacMailSend').onclick=async()=>{const btn=host.querySelector('#sacMailSend');btn.disabled=true;try{const data=saveLocal();status.textContent='Enviando e conferindo…';await portalPostForm({acao:'portal_finalize_sac',mode:'send',id,token:draft.token,message:JSON.stringify({subject:data.subject,body:data.body})});let result;for(let i=0;i<20;i++){await new Promise(resolve=>setTimeout(resolve,1500));result=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,token:draft.token},15000);if(result?.state==='failed')throw new Error(result.draft?.error||'O servidor não conseguiu enviar. O rascunho ficou guardado.');if(result?.state==='sent')break;}if(result?.state!=='sent')throw new Error('O envio ainda não foi confirmado. O rascunho ficou guardado. Confira antes de tentar novamente.');localStorage.removeItem(nucleoSacMailKey(id));status.textContent='E-mail enviado e confirmado. PDF versão '+draft.version+'.';host.querySelector('#sacMailChecked').disabled=true;await portalBackendSync({silent:true});renderExternalRoControl();}catch(e){status.textContent=e.message+' Abra novamente este SAC para consultar o resultado ou retomar o rascunho.';}finally{if(status.textContent.indexOf('E-mail enviado')!==0)btn.disabled=false;}};
+ status.textContent='Confira o conteúdo. O e-mail ainda não foi enviado.';
+ }catch(e){status.textContent=e.message;}
+}
