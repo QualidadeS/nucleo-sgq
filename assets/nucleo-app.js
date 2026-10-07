@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix70',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix70-pdca',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -5302,11 +5302,11 @@ function setSacTrackingTab(tab){
 function renderSacReworkTracking(){
   const host=document.getElementById('sacTrackingContent');if(!host)return;
   const list=getExternalRoControls().map(r=>ensureSacReworkState({...r}))
-    .filter(r=>isSacRework(r)&&normalizeAnswer(r.reworkStage)!=='concluido')
+    .filter(r=>sacIsRealSac(r)&&r.treatmentStatus!=='done'&&r.status!=='done')
     .sort((a,b)=>String(a.treatmentDeadline||'').localeCompare(String(b.treatmentDeadline||'')));
 
   if(!list.length){
-    host.innerHTML='<div class="card" style="padding:26px"><b>Nenhum retrabalho em andamento.</b><div class="small" style="margin-top:6px">Quando um SAC receber uma tratativa de retrabalho, ele aparecerá aqui.</div></div>';
+    host.innerHTML='<div class="card" style="padding:26px"><b>Nenhum SAC em andamento.</b><div class="small" style="margin-top:6px">As tratativas abertas de todos os tipos de SAC aparecem aqui.</div></div>';
     return;
   }
 
@@ -5314,7 +5314,7 @@ function renderSacReworkTracking(){
     ${list.map(r=>`<div class="card" style="padding:16px;min-width:0">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">
         <div><b>${escapeHtml(r.ro||'—')}</b><div class="small"><b>Direcionado para:</b> ${escapeHtml(sacDirectedSector(r))}</div></div>
-        <span class="status-badge pending">${escapeHtml(sacReworkStageLabel(r.reworkStage))}</span>
+        <span class="status-badge pending">${escapeHtml(isSacRework(r)?sacReworkStageLabel(r.reworkStage):externalTreatmentStatusLabel(r.treatmentStatus))}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px">
         <div><div class="small">Tratativa</div><b>${escapeHtml(externalTreatmentLabel(r.treatmentType))}</b></div>
@@ -5323,7 +5323,7 @@ function renderSacReworkTracking(){
         <div><div class="small">Última atualização</div><b>${escapeHtml(r.reworkHistory?.length?(formatDateTimeBR(r.reworkHistory[r.reworkHistory.length-1].changedAt)||'—'):'—')}</b></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
-        <button class="btn primary" type="button" onclick="openSacStageUpdate('${escapeHtml(r.id)}')">Atualizar estágio</button>
+        ${isSacRework(r)?`<button class="btn primary" type="button" onclick="openSacStageUpdate('${escapeHtml(r.id)}')">Atualizar estágio</button>`:`<button class="btn primary" type="button" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Atualizar tratativa</button>`}
         ${sacHasFilledForm(r)?`<button class="btn secondary" type="button" onclick="openSacOfficialFormPreview('${escapeHtml(r.id)}')">Ver ficha</button>`:''}
       </div>
     </div>`).join('')}
@@ -16044,7 +16044,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix70',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix70-pdca',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
