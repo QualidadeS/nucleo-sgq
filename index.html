@@ -4229,7 +4229,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261007-fix59"></script>
+<script src="assets/nucleo-app.js?v=20261007-fix60"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4322,6 +4322,11 @@ Cancelada</textarea></label>
             <option value="obsolete">Obsoleto</option>
              <option value="unit_correction">Correção de unidade</option>
           </select>
+        <div class="field" style="margin-top:14px">
+          <div class="label">Unidade da R.O. *</div>
+          <select id="triageRoUnit"></select>
+          <div class="small" style="margin-top:5px">O SGQ/ADM pode corrigir a unidade quando ela foi informada incorretamente no cadastro.</div>
+        </div>
         </div>
 
         <div class="field">
@@ -4331,11 +4336,7 @@ Cancelada</textarea></label>
           <div class="small">Obrigatório: selecione um ou mais dos 6Ms ou informe outra classificação. Esta seleção não altera a decisão nem a exigência de PDCA.</div>
         </div>
 
-        <div class="field">
-          <div class="label">Unidade da R.O. *</div>
-          <select id="triageRoUnit"></select>
-          <div class="small" style="margin-top:5px">O SGQ/ADM pode corrigir a unidade quando ela foi informada incorretamente no cadastro.</div>
-        </div>
+
 
         <div class="field full" id="triageDecisionSectorField" style="display:none">
           <div class="label">Setor responsável pela ocorrência</div>
