@@ -415,11 +415,27 @@ function nucleoEquipmentRenderReports(record,reports){
 }
 async function nucleoEquipmentUploadReport(button,id){
  if(!nucleoFeatureRequire('equipment','edit'))return;const status=document.getElementById('equipmentReportStatus');button.disabled=true;
- try{const record=adminModuleRecord(id),file=document.getElementById('equipmentReportFile').files[0];if(!file)throw Error('Selecione o PDF do laudo.');if(file.size>8*1024*1024)throw Error('Selecione um PDF de até 8 MB.');status.textContent='Salvando laudo no Drive e vinculando ao equipamento…';await nucleoDriveLoad();
- const r=await nucleoDriveMutation('nucleo_drive_equipment_upload',{unit:explicitRecordUnit(record),equipmentId:id,fileData:await fileToBase64(file),fileName:file.name,title:document.getElementById('equipmentReportTitle').value.trim(),issued:document.getElementById('equipmentReportIssued').value,expires:document.getElementById('equipmentReportExpires').value});
- await syncPortalBackend(false);nucleoEquipmentRenderReports(record,r.reports||[]);document.getElementById('equipmentReportFile').value='';status.textContent='Laudo anexado e confirmado na base central.';
+ try{const record=adminModuleRecord(id),file=document.getElementById('equipmentReportFile').files[0];if(!file&&!localStorage.getItem(nucleoEquipmentPendingKey(record)))throw Error('Selecione o PDF do laudo.');if(file&&file.size>8*1024*1024)throw Error('Selecione um PDF de até 8 MB.');status.textContent='Salvando laudo no Drive e vinculando ao equipamento…';await nucleoDriveLoad();
+ const r=await nucleoEquipmentReportMutation({unit:explicitRecordUnit(record),equipmentId:id,fileData:file?await fileToBase64(file):'',fileName:file?.name||'',title:document.getElementById('equipmentReportTitle').value.trim(),issued:document.getElementById('equipmentReportIssued').value,expires:document.getElementById('equipmentReportExpires').value});
+ nucleoEquipmentRenderReports(record,r.reports||[]);try{await syncPortalBackend(false);}catch(_){}document.getElementById('equipmentReportFile').value='';status.textContent='Laudo anexado e confirmado na base central.';
  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
 }
 async function nucleoEquipmentViewReport(id,reportId){
  try{const record=adminModuleRecord(id),r=await portalJsonp({acao:'nucleo_drive_equipment_read',unit:explicitRecordUnit(record),equipmentId:id,reportId},90000);if(!r?.sucesso)throw Error(r?.erro||'Laudo indisponível.');const url=URL.createObjectURL(new Blob([Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0))],{type:'application/pdf'}));const dialog=document.createElement('dialog');dialog.style.cssText='width:90vw;border:0;border-radius:12px';dialog.innerHTML='<h3>'+escapeHtml(r.fileName)+'</h3><a class="btn secondary" download="'+escapeHtml(r.fileName)+'" href="'+url+'">Baixar PDF</a> <button class="btn secondary">Fechar</button><iframe title="Laudo" src="'+url+'" style="width:100%;height:70vh"></iframe>';document.body.appendChild(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>{URL.revokeObjectURL(url);dialog.remove();};dialog.showModal();}catch(e){alert(e.message);}
+}
+
+function nucleoEquipmentPendingKey(record){return 'nucleo-equipment-upload:'+String(getSession()?.personId||getSession()?.email||getSession()?.name)+':'+record.id;}
+async function nucleoEquipmentReportMutation(params){
+ const record=adminModuleRecord(params.equipmentId),key=nucleoEquipmentPendingKey(record),prior=localStorage.getItem(key);let pending=prior?JSON.parse(prior):null;
+ if(!pending){pending={id:'EQ-'+Date.now()+'-'+Math.random().toString(36).slice(2),at:Date.now()};localStorage.setItem(key,JSON.stringify(pending));if(!portalPostForm({acao:'nucleo_drive_equipment_upload',eventoId:pending.id,...params})){localStorage.removeItem(key);throw Error('Não foi possível enviar o laudo.');}}
+ const status=document.getElementById('equipmentReportStatus');
+ for(let attempt=0;attempt<6;attempt++){
+  status.textContent=prior?'Conferindo o envio anterior, sem reenviar o arquivo…':'Aguardando confirmação do laudo na base central…';
+  await new Promise(r=>setTimeout(r,2000));let result;
+  try{result=await portalJsonp({acao:'nucleo_drive_status',eventoId:pending.id},15000);}catch(e){if(/sess[aã]o|acesso|permiss/i.test(e.message))throw e;}
+  if(result&&!result.pending){if(!result.sucesso){localStorage.removeItem(key);throw Error(result.erro||'O envio não foi concluído.');}localStorage.removeItem(key);return result;}
+  // The equipment record remains authoritative even if the callback cache expires.
+  if(attempt===2||attempt===5){try{const check=await portalJsonp({acao:'nucleo_drive_equipment_reports',equipmentId:params.equipmentId,unit:params.unit},20000);if(check?.sucesso&&(check.reports||[]).some(p=>p.id===pending.id)){localStorage.removeItem(key);return check;}}catch(e){if(/sess[aã]o|acesso|permiss/i.test(e.message))throw e;}}
+ }
+ throw Error('A confirmação ainda não chegou. Clique em Anexar laudo para conferir novamente o mesmo envio; o arquivo não será reenviado.');
 }
