@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix57',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix59',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -4388,7 +4388,7 @@ function createRoPdfBlob(ro){
     ['R.O.', ro.numero||ro.id||ro.codigo||'-'],
     ['Data', ro.data||ro.dataSolicitacao||'-'],
     ['Unidade', ro.unidade||'-'],
-    ['Cliente', ro.cliente||ro.origem||'-'],
+    ['Cliente', firstValue(raw,['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro.cliente||'Não informado'],
     ['Tipo de ocorrência', ro.tipoRO||ro.assunto||'-'],
     ['Setor identificado', ro.setorIdentificado||'-'],
     ['Setor causa/responsável', ro.setor||'-'],
@@ -4466,7 +4466,7 @@ function createRoPdfBlob(ro){
   });
 
   // font is object 1, pages object 2, catalog after pages
-  objs[1]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>';
+  objs[1]='<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
   objs[2]=`<< /Type /Pages /Kids [${pageRefs.join(' ')}] /Count ${pageRefs.length} >>`;
   const catalogObj=objNum++;
   objs[catalogObj]='<< /Type /Catalog /Pages 2 0 R >>';
@@ -4484,7 +4484,8 @@ function createRoPdfBlob(ro){
   }
   pdf+='trailer\n<< /Size '+objs.length+' /Root '+catalogObj+' 0 R >>\nstartxref\n'+xref+'\n%%EOF';
 
-  return new Blob([pdf],{type:'application/pdf'});
+  // PDF literal strings use WinAnsi bytes, not UTF-8. Offsets and stream lengths remain byte-exact.
+  return new Blob([Uint8Array.from(pdf,c=>c.charCodeAt(0))],{type:'application/pdf'});
 }
 
 function openExternalRoPdf(url){
@@ -16074,7 +16075,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix57',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix59',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16545,4 +16546,10 @@ document.addEventListener('DOMContentLoaded',()=>{try{renderCurrentOverview();}c
 
 function nucleoAiRulesTable(rules){return '<div style="overflow:auto"><table style="width:100%"><thead><tr><th>Critério</th>'+[0,1,2,3].map(n=>'<th>Nota '+n+'</th>').join('')+'</tr></thead><tbody>'+rules.criteria.map(c=>'<tr><th>'+escapeHtml(c.label)+'</th>'+c.points.map(t=>'<td>'+escapeHtml(t)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><p>'+rules.maxima.map((n,i)=>'Nível '+(i+1)+': '+(i?rules.maxima[i-1]+1:0)+' a '+n+' pontos').join(' · ')+'</p>'+(rules.clientForcesLevel4?'<p>Reclamação ou devolução do cliente: nível 4.</p>':'')+'<p>'+escapeHtml(rules.recurrenceInstructions)+'</p>';}
 async function nucleoAiManual(button){const state=nucleoAiScoreState,host=document.getElementById('roAiScoreResult');button.disabled=true;host.textContent='Carregando critérios para pontuação manual…';try{const r=await portalJsonp({acao:'portal_ai_rules'},60000);if(state!==nucleoAiScoreState)return;if(!r?.sucesso)throw new Error(r?.erro||'Não foi possível carregar os critérios.');state.assessment={mode:'manual',rules:r.rules,confirmed:false,answer:{scores:r.rules.criteria.map(c=>({id:c.id,score:null,reason:''})),clientComplaint:null}};nucleoAiRenderAssessment(state.assessment);}catch(err){if(state===nucleoAiScoreState)host.textContent=err.message;}finally{button.disabled=false;}}
-function nucleoAiOpenRoTab(){try{const ro=nucleoAiScoreState?.roRecord;if(!ro||!canViewRO(ro))throw new Error('R.O. indisponível para consulta.');const blob=createRoPdfBlob(ro);if(!(blob instanceof Blob)||!blob.size)throw new Error('O PDF foi gerado vazio.');const url=URL.createObjectURL(blob),tab=window.open(url,'_blank');if(!tab){URL.revokeObjectURL(url);throw new Error('Permita a abertura de outra aba para consultar o PDF.');}tab.opener=null;setTimeout(()=>URL.revokeObjectURL(url),300000);}catch(err){alert(err.message);}}
+async function nucleoAiOpenRoTab(){
+ const ro=nucleoAiScoreState?.roRecord,state=nucleoAiScoreState;
+ if(!ro||!canViewRO(ro)){alert('R.O. indisponível para consulta.');return;}
+ const tab=window.open('about:blank','_blank');if(!tab){alert('Permita a abertura de outra aba para consultar o PDF.');return;}tab.opener=null;tab.document.title='PDF da R.O.';tab.document.body.textContent='Gerando PDF completo da R.O. com as evidências…';
+ try{const r=await portalJsonp({acao:'portal_ro_scoring_pdf',ro:state.ro,origin:state.origin},90000);if(!r?.sucesso||!r.base64)throw new Error(r?.erro||'PDF não confirmado.');if(tab.closed)return;const bytes=Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));tab.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),300000);}
+ catch(err){if(!tab.closed)tab.document.body.textContent='Não foi possível abrir o PDF: '+err.message;}
+}
