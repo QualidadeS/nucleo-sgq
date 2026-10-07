@@ -4229,7 +4229,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261007-fix53"></script>
+<script src="assets/nucleo-app.js?v=20261007-fix55"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4311,7 +4311,8 @@ Cancelada</textarea></label>
       </div>
 
 
-      <div class="triage-form-grid">
+      <div id="roAiScores" style="padding:16px;border:1px solid #dce5ee;border-radius:12px;margin:12px 0"></div>
+<div class="triage-form-grid">
         <div class="field">
           <div class="label">Decisão do SGQ *</div>
           <select id="triageDecision" onchange="updateTriageDecisionUi()">
