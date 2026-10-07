@@ -374,6 +374,7 @@ function editAdminOperationalRecord(id){
       </div>
     </div>
   </div>`;
+  if(key==='equipment')nucleoEquipmentReportsPanel(r);
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
   [['admModRncReporter','rncReporter'],['admModRncShift','rncShift'],['admModRncSupervisor','rncSupervisor'],['admModRncManager','rncManager'],['admModRncSector','sector'],['admModRncBlockArea','rncBlockArea'],['admModRncBlockStage','rncBlockStage'],['admModRncSummary','rncSummary'],['admModRncDetailedDescription','rncDetailedDescription'],['admModRncEffect','rncEffect']].forEach(([id,k])=>set(id,r[k]));
@@ -402,3 +403,23 @@ const ndOriginalShowAdmin=showAdminOperationalModule;
 showAdminOperationalModule=function(key){const result=ndOriginalShowAdmin(key);const host=document.getElementById('adminModuleContent');if(host&&['documents','processes'].includes(key)){const btn=document.createElement('button');btn.className='btn primary';btn.style.margin='12px 0';btn.textContent=key==='processes'?'Modelos de documentos solicitados':'Preencher e gerar documento solicitado';btn.onclick=()=>nucleoDriveOpen(key==='processes'?'templates':'requests');host.prepend(btn);}return result;};
 const ndOriginalAdminFields=adminModuleFields;
 adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='documents'){const unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';html='<label>Unidade da solicitação<select id="ndRequestUnit" onchange="document.getElementById(\'admModCode\').innerHTML=documentTypeOptions(this.value)" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz" '+(unit==='matriz'?'selected':'')+'>SETA SC — Matriz</option><option value="filial" '+(unit==='filial'?'selected':'')+'>SETA ES — Unidade Linhares</option></select></label>'+html;}return html;};
+
+async function nucleoEquipmentReportsPanel(record){
+ const list=document.getElementById('adminModuleContent'),box=document.createElement('div');box.className='card';box.style.cssText='padding:20px;margin-top:16px;grid-column:1/-1';box.id='equipmentReportsPanel';
+ box.innerHTML='<h3>Laudos do equipamento</h3><label>Tipo / descrição do laudo<input id="equipmentReportTitle" maxlength="160" placeholder="Ex.: Laudo de calibração"></label><div class="grid"><label>Emissão<input type="date" id="equipmentReportIssued"></label><label>Validade (opcional)<input type="date" id="equipmentReportExpires"></label></div><label>Arquivo PDF<input id="equipmentReportFile" type="file" accept="application/pdf"></label><button class="btn primary" onclick="nucleoEquipmentUploadReport(this,\''+escapeHtml(record.id)+'\')">Anexar laudo</button><p id="equipmentReportStatus" role="status"></p><div id="equipmentReportsList">Consultando laudos…</div>';list.appendChild(box);
+ try{const r=await portalJsonp({acao:'nucleo_drive_equipment_reports',unit:explicitRecordUnit(record),equipmentId:record.id},60000);if(!r?.sucesso)throw Error(r?.erro||'Consulta não concluída.');if(!box.isConnected)return;nucleoEquipmentRenderReports(record,r.reports||[]);}catch(e){if(box.isConnected)document.getElementById('equipmentReportsList').textContent=e.message;}
+}
+function nucleoEquipmentRenderReports(record,reports){
+ const host=document.getElementById('equipmentReportsList');if(!host)return;
+ host.innerHTML=reports.slice().reverse().map(p=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.title||p.fileName)+'</b><p class="small">'+escapeHtml(p.fileName)+(p.issued?' · Emissão: '+escapeHtml(p.issued):'')+(p.expires?' · Validade: '+escapeHtml(p.expires):'')+'</p><button class="btn secondary" onclick="nucleoEquipmentViewReport(\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Abrir / baixar PDF</button></div>').join('')||'<p class="small">Nenhum laudo anexado.</p>';
+}
+async function nucleoEquipmentUploadReport(button,id){
+ if(!nucleoFeatureRequire('equipment','edit'))return;const status=document.getElementById('equipmentReportStatus');button.disabled=true;
+ try{const record=adminModuleRecord(id),file=document.getElementById('equipmentReportFile').files[0];if(!file)throw Error('Selecione o PDF do laudo.');if(file.size>8*1024*1024)throw Error('Selecione um PDF de até 8 MB.');status.textContent='Salvando laudo no Drive e vinculando ao equipamento…';await nucleoDriveLoad();
+ const r=await nucleoDriveMutation('nucleo_drive_equipment_upload',{unit:explicitRecordUnit(record),equipmentId:id,fileData:await fileToBase64(file),fileName:file.name,title:document.getElementById('equipmentReportTitle').value.trim(),issued:document.getElementById('equipmentReportIssued').value,expires:document.getElementById('equipmentReportExpires').value});
+ await syncPortalBackend(false);nucleoEquipmentRenderReports(record,r.reports||[]);document.getElementById('equipmentReportFile').value='';status.textContent='Laudo anexado e confirmado na base central.';
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function nucleoEquipmentViewReport(id,reportId){
+ try{const record=adminModuleRecord(id),r=await portalJsonp({acao:'nucleo_drive_equipment_read',unit:explicitRecordUnit(record),equipmentId:id,reportId},90000);if(!r?.sucesso)throw Error(r?.erro||'Laudo indisponível.');const url=URL.createObjectURL(new Blob([Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0))],{type:'application/pdf'}));const dialog=document.createElement('dialog');dialog.style.cssText='width:90vw;border:0;border-radius:12px';dialog.innerHTML='<h3>'+escapeHtml(r.fileName)+'</h3><a class="btn secondary" download="'+escapeHtml(r.fileName)+'" href="'+url+'">Baixar PDF</a> <button class="btn secondary">Fechar</button><iframe title="Laudo" src="'+url+'" style="width:100%;height:70vh"></iframe>';document.body.appendChild(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>{URL.revokeObjectURL(url);dialog.remove();};dialog.showModal();}catch(e){alert(e.message);}
+}
