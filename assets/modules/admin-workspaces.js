@@ -407,7 +407,7 @@ adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='do
 
 async function nucleoEquipmentReportsPanel(record){
  const list=document.getElementById('adminModuleContent'),box=document.createElement('div');box.className='card';box.style.cssText='padding:20px;margin-top:16px;grid-column:1/-1';box.id='equipmentReportsPanel';
- box.innerHTML='<h3>Laudos do equipamento</h3><label>Tipo / descrição do laudo<input id="equipmentReportTitle" maxlength="160" placeholder="Ex.: Laudo de calibração"></label><div class="grid"><label>Emissão<input type="date" id="equipmentReportIssued"></label><label>Validade (opcional)<input type="date" id="equipmentReportExpires"></label></div><label>Arquivo PDF<input id="equipmentReportFile" type="file" accept="application/pdf"></label><button class="btn primary" onclick="nucleoEquipmentUploadReport(this,\''+escapeHtml(record.id)+'\')">Anexar laudo</button><p id="equipmentReportStatus" role="status"></p><div id="equipmentReportsList">Consultando laudos…</div>';list.appendChild(box);
+ box.innerHTML='<h3>Laudos do equipamento</h3><label>Tipo / descrição do laudo<input id="equipmentReportTitle" maxlength="160" placeholder="Ex.: Laudo de calibração"></label><div class="grid"><label>Emissão<input type="date" id="equipmentReportIssued"></label><label>Validade (opcional)<input type="date" id="equipmentReportExpires"></label></div><label>Arquivo PDF<input id="equipmentReportFile" type="file" accept="application/pdf"></label><button class="btn primary" onclick="nucleoEquipmentUploadReport(this,\''+escapeHtml(record.id)+'\')">Anexar laudo</button><p id="equipmentReportStatus" role="status"></p><button class="btn secondary" onclick="nucleoEquipmentResetAttempt(\''+escapeHtml(record.id)+'\')">Descartar tentativa pendente</button><div id="equipmentReportsList">Consultando laudos…</div>';list.appendChild(box);
  if(!explicitRecordUnit(record)){document.getElementById('equipmentReportsList').textContent='Selecione a Unidade no cadastro acima, clique em Salvar alterações e reabra o equipamento para anexar os laudos.';return;}
  try{const r=await portalJsonp({acao:'nucleo_drive_equipment_reports',unit:explicitRecordUnit(record),equipmentId:record.id},60000);if(!r?.sucesso)throw Error(r?.erro||'Consulta não concluída.');if(!box.isConnected)return;nucleoEquipmentRenderReports(record,r.reports||[]);}catch(e){if(box.isConnected)document.getElementById('equipmentReportsList').textContent=e.message;}
 }
@@ -429,6 +429,7 @@ async function nucleoEquipmentViewReport(id,reportId){
 function nucleoEquipmentPendingKey(record){return 'nucleo-equipment-upload:'+String(getSession()?.personId||getSession()?.email||getSession()?.name)+':'+record.id;}
 async function nucleoEquipmentReportMutation(params){
  const record=adminModuleRecord(params.equipmentId),key=nucleoEquipmentPendingKey(record),prior=localStorage.getItem(key);let pending=prior?JSON.parse(prior):null;
+ const ready=await portalJsonp({acao:'nucleo_drive_equipment_reports',equipmentId:params.equipmentId,unit:params.unit},30000);if(!ready?.sucesso)throw Error(/desconhecid/i.test(ready?.erro||'')?'O Apps Script publicado ainda não tem o módulo de laudos. Atualize o código e publique uma Nova versão da implantação.':ready?.erro||'Não foi possível consultar os laudos.');if(pending&&(ready.reports||[]).some(r=>r.id===pending.id)){localStorage.removeItem(key);return ready;}
  if(!pending){pending={id:'EQ-'+Date.now()+'-'+Math.random().toString(36).slice(2),at:Date.now()};localStorage.setItem(key,JSON.stringify(pending));if(!portalPostForm({acao:'nucleo_drive_equipment_upload',eventoId:pending.id,...params})){localStorage.removeItem(key);throw Error('Não foi possível enviar o laudo.');}}
  const status=document.getElementById('equipmentReportStatus');
  for(let attempt=0;attempt<6;attempt++){
@@ -440,4 +441,12 @@ async function nucleoEquipmentReportMutation(params){
   if(attempt===2||attempt===5){try{const check=await portalJsonp({acao:'nucleo_drive_equipment_reports',equipmentId:params.equipmentId,unit:params.unit},20000);if(check?.sucesso&&(check.reports||[]).some(p=>p.id===pending.id)){localStorage.removeItem(key);return check;}}catch(e){if(/sess[aã]o|acesso|permiss/i.test(e.message))throw e;}}
  }
  throw Error('A confirmação ainda não chegou. Clique em Anexar laudo para conferir novamente o mesmo envio; o arquivo não será reenviado.');
+}
+
+async function nucleoEquipmentResetAttempt(id){
+ const record=adminModuleRecord(id),status=document.getElementById('equipmentReportStatus');
+ try{const r=await portalJsonp({acao:'nucleo_drive_equipment_reports',unit:explicitRecordUnit(record),equipmentId:id},30000);if(!r?.sucesso)throw Error(r?.erro||'Confira a implantação do Apps Script.');nucleoEquipmentRenderReports(record,r.reports||[]);
+ if(!confirm('Confira a lista de laudos acima. Deseja descartar apenas a tentativa pendente deste navegador? Nenhum laudo salvo será removido.'))return;
+ localStorage.removeItem(nucleoEquipmentPendingKey(record));status.textContent='Tentativa pendente descartada. Se o laudo ainda não aparece na lista, selecione o PDF e clique em Anexar laudo.';
+ }catch(e){status.textContent=e.message;}
 }
