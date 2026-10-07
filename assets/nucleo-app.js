@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix60',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-fix62',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -2995,6 +2995,7 @@ function initLogin(){
   }
 }
 function showProfile(){
+  if(getSession())nucleoLoadAvatar();
   const s=getSession();
 
   // Meu perfil nunca deve executar logout. Se por algum motivo a sessão
@@ -10885,7 +10886,7 @@ function normalizeImportedRo(raw,index){
     'Não informada'
   ).trim();
 
-  const cliente=String(firstValue(raw,[
+  const cliente=String(raw.__cliente||firstValue(raw,[
     'Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'
   ])||'Não informado').trim();
 
@@ -16075,7 +16076,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix60',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-fix62',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16498,7 +16499,7 @@ async function nucleoOpenMyTeam(){
 }
 function nucleoRenderMyTeam(){
  const host=document.getElementById('myTeamContents');if(!host)return;const sector=document.getElementById('myTeamSector')?.value||'all',unit=document.getElementById('myTeamUnit')?.value||'all',teams=nucleoMyTeamData.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit));
- host.innerHTML=teams.map(t=>'<section style="border:1px solid #dce5ee;border-radius:12px;padding:18px;margin-top:16px"><h3 style="margin:0">'+escapeHtml(t.sector)+'</h3><p class="small">'+(t.unit==='filial'?'Filial — Linhares':'Matriz')+' · '+t.people.length+' pessoa(s)</p>'+(!t.people.some(p=>p.manager)?'<p class="small">Nenhum gestor cadastrado para esta equipe.</p>':'')+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'+t.people.map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div style="padding:14px;border-radius:10px;background:'+(p.manager?'#eef4ff':'#f6f8fa')+'"><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.functionLabel||'Integrante da equipe'))+'</div>'+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div>';}).join('')+'</div></section>').join('')||'<p>Nenhuma equipe disponível para esta seleção.</p>';
+ host.innerHTML=teams.map(t=>'<section style="border:1px solid #dce5ee;border-radius:12px;padding:18px;margin-top:16px"><h3 style="margin:0">'+escapeHtml(t.sector)+'</h3><p class="small">'+(t.unit==='filial'?'Filial — Linhares':'Matriz')+' · '+t.people.length+' pessoa(s)</p>'+(!t.people.some(p=>p.manager)?'<p class="small">Nenhum gestor cadastrado para esta equipe.</p>':'')+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'+t.people.map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div style="padding:14px;border-radius:10px;background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.functionLabel||'Integrante da equipe'))+'</div>'+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div>';}).join('')+'</div></section>').join('')||'<p>Nenhuma equipe disponível para esta seleção.</p>';
 }
 
 var nucleoAiScoreState;
@@ -16553,3 +16554,11 @@ async function nucleoAiOpenRoTab(){
  try{const r=await portalJsonp({acao:'portal_ro_scoring_pdf',ro:state.ro,origin:state.origin},90000);if(!r?.sucesso||!r.base64)throw new Error(r?.erro||'PDF não confirmado.');if(tab.closed)return;const bytes=Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));tab.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),300000);}
  catch(err){if(!tab.closed)tab.document.body.textContent='Não foi possível abrir o PDF: '+err.message;}
 }
+
+var nucleoAvatarDraft='';
+var nucleoAvatarIcons={flower:'🌸',star:'⭐',fox:'🦊',cat:'🐱',robot:'🤖',sun:'☀️',leaf:'🍃',heart:'💜'};
+function nucleoAvatarHtml(value){if(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(value||'')&&value.length<=3000)return '<img alt="Foto de perfil" src="'+value+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block;margin-bottom:8px">';const icon=nucleoAvatarIcons[String(value||'').replace('icon:','')];return '<span style="display:block;font-size:32px;margin-bottom:8px">'+(icon||'👤')+'</span>';}
+function nucleoAvatarPreview(){document.getElementById('profileAvatarPreview').innerHTML=nucleoAvatarHtml(nucleoAvatarDraft);}
+async function nucleoLoadAvatar(){const status=document.getElementById('profileAvatarStatus');try{const r=await portalJsonp({acao:'portal_profile_avatar'},60000);if(!r?.sucesso)throw new Error(r?.erro||'Falha na consulta do perfil.');nucleoAvatarDraft=r.avatar||'';nucleoAvatarPreview();document.getElementById('profileAvatarIcons').innerHTML=Object.entries(nucleoAvatarIcons).map(([key,icon])=>'<button type="button" class="btn secondary" aria-label="Escolher '+key+'" onclick="nucleoAvatarDraft=\'icon:'+key+'\';nucleoAvatarPreview()">'+icon+'</button>').join('');status.textContent='';}catch(e){status.textContent=e.message;}}
+async function nucleoAvatarPhoto(input){const file=input.files?.[0];if(!file)return;const status=document.getElementById('profileAvatarStatus');try{if(!['image/jpeg','image/png','image/webp'].includes(file.type))throw new Error('Escolha uma foto JPG, PNG ou WebP.');if(file.size>10000000)throw new Error('Escolha uma foto de até 10 MB.');const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('Não foi possível ler a foto.'));img.src=url;});const canvas=document.createElement('canvas');canvas.width=canvas.height=64;const c=canvas.getContext('2d'),side=Math.min(img.width,img.height);c.fillStyle='#fff';c.fillRect(0,0,64,64);c.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,64,64);let data=canvas.toDataURL('image/jpeg',0.6);if(data.length>3000)data=canvas.toDataURL('image/jpeg',0.25);if(data.length>3000){canvas.width=canvas.height=40;c.fillStyle='#fff';c.fillRect(0,0,40,40);c.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,40,40);data=canvas.toDataURL('image/jpeg',0.25);}if(data.length>3000)throw new Error('Não foi possível reduzir essa foto. Escolha outra imagem.');nucleoAvatarDraft=data;nucleoAvatarPreview();status.textContent='Foto preparada. Clique em Salvar foto ou ícone.';}finally{URL.revokeObjectURL(url);}}catch(e){status.textContent=e.message;}}
+async function nucleoSaveAvatar(button){const status=document.getElementById('profileAvatarStatus');button.disabled=true;status.textContent='Salvando na base central…';try{const r=await portalJsonp({acao:'portal_profile_avatar',avatar:nucleoAvatarDraft},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não confirmado.');setSession({...getSession(),avatar:r.avatar});const users=getOperationalUsers(),own=users.find(u=>getSession()?.personId?u.personId===getSession().personId:u.email===getSession()?.email);if(own){own.avatar=r.avatar;localStorage.setItem(USERS_KEY,JSON.stringify(users));}status.textContent='Foto ou ícone salvo.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}}
