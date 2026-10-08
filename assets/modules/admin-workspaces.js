@@ -247,7 +247,7 @@ function openAdminOperationalWorkspace(key,index){
   const back=`<button class="btn secondary" type="button" onclick="showAdminOperationalModule('${key}')">← Voltar ao módulo</button>`;
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
-  if(key==='processes'&&mode==='templates'){renderProcessTemplatesWorkspace();return}
+  if(key==='processes'&&mode==='templates'){window.nucleoRncTemplateEditorOpen=false;renderProcessTemplatesWorkspace();return}
   if(key==='nccapa'&&mode==='active'){renderNcCapaTreatmentWorkspace();return}
   if(mode==='new'||mode==='new_internal'||mode==='new_rnc'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
