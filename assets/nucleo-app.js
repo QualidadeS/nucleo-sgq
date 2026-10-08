@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-triagem-multissetores',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-pdca-modelo-visual',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -9191,6 +9191,7 @@ function printCurrentPdca(){
     return;
   }
 
+  if(nucleoSystemFormat('pdca',explicitRecordUnit(p))?.design){void nucleoPdcaDownloadModelPdf(p,true);return;}
   renderPdcaPrintDocument(p);
 
   const report=document.getElementById('pdcaPrintReport');
@@ -9823,9 +9824,10 @@ function wrapText(text,maxChars){
   if(line)lines.push(line);
   return lines.length?lines:['-'];
 }
-function downloadCurrentPdcaPdf(){
+async function downloadCurrentPdcaPdf(){
   const p=window.currentReportPdca;
   if(!p){alert('Abra um PDCA antes de gerar o PDF.');return}
+  if(nucleoSystemFormat('pdca',explicitRecordUnit(p))?.design)return nucleoPdcaDownloadModelPdf(p,false);
   const ans=p.answers||{};
   const model=nucleoSystemFormat('pdca',explicitRecordUnit(p));
 
@@ -16040,7 +16042,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-triagem-multissetores',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-pdca-modelo-visual',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16635,4 +16637,11 @@ function nucleoRoDisplayRows(rows,model){
  const canonical=label=>aliases[label]||label,bySource=new Map(rows.map(row=>[canonical(row[0]),row]));
  const selected=model.fields.filter(f=>f.enabled&&bySource.has(f.source)).map(f=>[f.label,bySource.get(f.source)[1]]),known=new Set(model.fields.map(f=>f.source));
  return selected.concat(rows.filter(row=>!known.has(canonical(row[0]))));
+}
+
+async function nucleoPdcaDownloadModelPdf(p,open){
+ if(!p?.id){alert('Salve o PDCA na base central antes de gerar o PDF.');return;}
+ const tab=open?window.open('about:blank','_blank'):null;if(open&&!tab){alert('Permita abrir a aba do PDF neste navegador.');return;}if(tab){tab.opener=null;tab.document.body.textContent='Gerando PDF com o modelo da unidade…';}
+ try{await showNucleoLoading('Gerando PDF do PDCA…','Aplicando o modelo salvo para esta unidade.');const result=await portalJsonp({acao:'portal_pdca_model_pdf',id:p.id},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');const blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'}),url=URL.createObjectURL(blob);if(tab){if(!tab.closed)tab.location.replace(url);}else{const a=document.createElement('a');a.href=url;a.download=result.fileName||'PDCA.pdf';document.body.appendChild(a);a.click();a.remove();}setTimeout(()=>URL.revokeObjectURL(url),300000);
+ }catch(error){if(tab&&!tab.closed){tab.document.body.textContent=error.message;}else alert(error.message);}finally{hideNucleoLoading(true);}
 }
