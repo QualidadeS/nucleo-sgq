@@ -247,7 +247,7 @@ function openAdminOperationalWorkspace(key,index){
   const back=`<button class="btn secondary" type="button" onclick="showAdminOperationalModule('${key}')">← Voltar ao módulo</button>`;
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
-  if(key==='processes'&&mode==='templates'){window.nucleoRncTemplateEditorOpen=false;renderProcessTemplatesWorkspace();return}
+  if(key==='processes'&&mode==='templates'){window.nucleoRncTemplateEditorOpen=false;window.nucleoProcessTemplateEditor='';renderProcessTemplatesWorkspace();return}
   if(key==='nccapa'&&mode==='active'){renderNcCapaTreatmentWorkspace();return}
   if(mode==='new'||mode==='new_internal'||mode==='new_rnc'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
@@ -309,19 +309,56 @@ function openAdminOperationalWorkspace(key,index){
 }
 
 
-function nucleoOpenRncTemplateEditor(){
-  window.nucleoRncTemplateEditorOpen=true;
+if(typeof window.nucleoRncTemplateEditorOpen!=='boolean')window.nucleoRncTemplateEditorOpen=false;
+if(typeof window.nucleoProcessTemplateEditor!=='string')window.nucleoProcessTemplateEditor='';
+
+function nucleoOpenProcessTemplateEditor(kind){
+  window.nucleoProcessTemplateEditor=String(kind||'');
+  window.nucleoRncTemplateEditorOpen=window.nucleoProcessTemplateEditor==='rnc';
   renderProcessTemplatesWorkspace();
-  setTimeout(()=>document.getElementById('rncTemplateEditorSplit')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
+  setTimeout(()=>document.getElementById('nucleoInlineProcessEditor')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
 }
-function nucleoCloseRncTemplateEditor(){
+function nucleoCloseProcessTemplateEditor(){
+  window.nucleoProcessTemplateEditor='';
   window.nucleoRncTemplateEditorOpen=false;
   renderProcessTemplatesWorkspace();
+}
+function nucleoOpenSystemModelEditor(kind){
+  if(!['ro','sac','pdca'].includes(kind))return;
+  nucleoOpenProcessTemplateEditor(kind);
+}
+function nucleoOpenFreeDocumentEditorInline(id){
+  if(!id)return;
+  nucleoOpenProcessTemplateEditor('free:'+id);
+}
+function nucleoOpenRncTemplateEditor(){
+  nucleoOpenProcessTemplateEditor('rnc');
+}
+function nucleoCloseRncTemplateEditor(){
+  nucleoCloseProcessTemplateEditor();
 }
 
 function renderProcessTemplatesWorkspace(){
   const list=document.getElementById('adminModuleContent');if(!list)return;const t=getRncProcessTemplate();
-  list.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button><button class="btn primary" onclick="nucleoDriveOpen('templates')">Modelos de documentos solicitados</button>${processDocumentLibraryHtml()}
+  const active=String(window.nucleoProcessTemplateEditor||'');
+  window.nucleoRncTemplateEditorOpen=active==='rnc';
+  const base=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button><button class="btn primary" onclick="nucleoDriveOpen('templates')">Modelos de documentos solicitados</button>${processDocumentLibraryHtml()}`;
+  if(!active){
+    list.innerHTML=base+`</div>`;
+    return;
+  }
+  if(['ro','sac','pdca'].includes(active)){
+    list.innerHTML=base+`<div id="nucleoInlineProcessEditor" class="card" style="margin-top:14px;padding:0;overflow:hidden;min-height:620px;height:calc(100vh - 180px)"><div style="padding:20px">Carregando editor…</div></div></div>`;
+    setTimeout(()=>nucleoEditRoModelVisual(active,true),0);
+    return;
+  }
+  if(active.startsWith('free:')){
+    const id=active.slice(5);
+    list.innerHTML=base+`<div id="nucleoInlineProcessEditor" class="card" style="margin-top:14px;padding:0;overflow:hidden;min-height:620px;height:calc(100vh - 180px)"><div style="padding:20px">Carregando editor…</div></div></div>`;
+    setTimeout(()=>nucleoOpenFreeDocumentEditor(id,true),0);
+    return;
+  }
+  list.innerHTML=base+`
   <div class="card" style="margin-top:14px;padding:20px">
     <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">MODELO CONTROLADO</div><h3 style="margin:6px 0 4px">${escapeHtml(t.code)} · ${escapeHtml(t.name)}</h3><div class="small">A prévia mantém a estrutura do formulário padrão atual. Aqui você controla a identidade SETA e quais partes entram no documento, sem precisar editar o Excel.</div></div><div style="display:flex;gap:8px;align-items:center"><span class="pill">${t.status==='obsolete'?'Obsoleto':'Vigente'}</span><button class="btn secondary" type="button" onclick="nucleoCloseRncTemplateEditor()">Fechar editor</button></div></div>
     <div id="rncTemplateEditorSplit" style="display:grid;grid-template-columns:minmax(430px,.95fr) minmax(520px,1.35fr);gap:18px;margin-top:18px;align-items:start;height:calc(100vh - 185px);min-height:560px;overflow:hidden">
@@ -352,7 +389,6 @@ function renderProcessTemplatesWorkspace(){
     </div>
   </div></div>`;
   const editor=list.querySelector('.card[style*="margin-top:14px"]');
-  if(!window.nucleoRncTemplateEditorOpen){editor?.remove();return;}
   if(!nucleoProcessShowRetired&&!getProcessTemplates().some(x=>x.kind==='RNC'&&x.status!=='obsolete')){editor?.remove();window.nucleoRncTemplateEditorOpen=false;return;}
   if(editor){editor.addEventListener('input',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()});editor.addEventListener('change',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()})}
   refreshRncTemplatePreview();
@@ -550,8 +586,9 @@ function nucleoEditProcessLayout(id){
  dialog.onclose=()=>dialog.remove();document.body.appendChild(dialog);dialog.showModal();
 }
 // Editor de folha para os modelos livres. Não modifica o fluxo dos modelos operacionais.
-function nucleoOpenFreeDocumentEditor(id){
+function nucleoOpenFreeDocumentEditor(id,inlineRender=false){
  if(!nucleoFeatureRequire('processes','templates'))return;
+ if(!inlineRender){nucleoOpenFreeDocumentEditorInline(id);return;}
  const original=getProcessTemplates().find(x=>x.id===id);if(!original)return;
  const model=JSON.parse(JSON.stringify(original));
  model.freeLayout={...{page:'A4',orientation:'portrait',margin:14,fontSize:11,border:'#334155',text:'#172033',background:'#ffffff'},...(model.freeLayout||{})};
@@ -560,9 +597,10 @@ function nucleoOpenFreeDocumentEditor(id){
  const row=(cells=[mk()])=>({id:uid(),cells});
  model.freeGrid=Array.isArray(model.freeGrid)&&model.freeGrid.length?model.freeGrid.map(r=>({id:r.id||uid(),cells:(r.cells||[]).map(c=>mk({...c,id:c.id||uid(),rowSpan:num(c.rowSpan,1,20,1),fontSize:num(c.fontSize,6,28,model.freeLayout.fontSize||11),borderWidth:num(c.borderWidth,0,4,.5),textColor:clr(c.textColor,model.freeLayout.text||'#172033'),borderColor:clr(c.borderColor,model.freeLayout.border||'#334155')}))})):[row([mk({text:model.title||model.name||'DOCUMENTO',bold:true,align:'center',fontSize:16})]),row([mk()])];
  selectedId=model.freeGrid[0]?.cells[0]?.id||'';
- const dlg=document.createElement('dialog');dlg.style.cssText='width:min(1450px,99vw);max-width:99vw;height:95vh;max-height:95vh;padding:0;overflow:hidden;border:1px solid #cbd5e1;border-radius:14px';
+ const dlg=document.getElementById('nucleoInlineProcessEditor');if(!dlg)return;dlg.style.cssText='margin-top:14px;padding:0;overflow:hidden;border:1px solid #cbd5e1;border-radius:14px;min-height:620px;height:calc(100vh - 180px)';
+ dlg.close=()=>nucleoCloseProcessTemplateEditor();
  dlg.innerHTML=`<div style="height:100%;display:flex;flex-direction:column"><header style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #dbe2ea"><div><b>Editor universal · ${escapeHtml(model.name||'Documento')}</b><div class="small">Edição livre de folha, células, imagens, bordas e conteúdo.</div></div><div style="display:flex;gap:7px"><button class="btn secondary" data-act="print">Imprimir / PDF</button><button class="btn primary" data-act="save">Salvar modelo</button><button class="btn secondary" data-act="close">Fechar</button></div></header><div style="display:grid;grid-template-columns:370px minmax(0,1fr);min-height:0;flex:1"><aside style="padding:12px;overflow:auto;border-right:1px solid #e2e8f0"><label>Nome<input data-setting="name"></label><label>Título da folha<input data-setting="title"></label><label>Código<input data-setting="code"></label><label>Revisão<input data-setting="revision"></label><label>Rodapé<textarea data-setting="footerText" rows="2"></textarea></label><div style="display:grid;grid-template-columns:1fr 1fr;gap:7px"><label>Orientação<select data-layout="orientation"><option value="portrait">Retrato</option><option value="landscape">Paisagem</option></select></label><label>Margem (mm)<input data-layout="margin" type="number" min="5" max="35"></label><label>Fonte base<input data-layout="fontSize" type="number" min="7" max="24"></label><label>Cor do texto<input data-layout="text" type="color"></label><label>Cor da borda<input data-layout="border" type="color"></label><label>Fundo da folha<input data-layout="background" type="color"></label></div><hr><div id="fgToolbar"></div><input data-image type="file" accept="image/png,image/jpeg,image/webp" hidden><p data-status class="small">Clique em uma célula da folha para editar.</p></aside><main style="background:#e9edf2;overflow:auto;padding:20px"><div data-page style="margin:auto;background:#fff;box-shadow:0 7px 28px #15223925;box-sizing:border-box"></div></main></div></div>`;
- document.body.appendChild(dlg);dlg.onclose=()=>dlg.remove();dlg.showModal();const $=q=>dlg.querySelector(q),status=$('[data-status]');
+ const $=q=>dlg.querySelector(q),status=$('[data-status]');
  ['name','title','code','revision','footerText'].forEach(k=>{const el=$(`[data-setting="${k}"]`);el.value=model[k]||'';el.oninput=()=>{model[k]=el.value;drawPaper();}});
  ['orientation','margin','fontSize','text','border','background'].forEach(k=>{const el=$(`[data-layout="${k}"]`);if(!el)return;el.value=model.freeLayout[k]??(k==='orientation'?'portrait':'');el.oninput=()=>{model.freeLayout[k]=el.type==='number'?Number(el.value):el.value;drawPaper();};el.onchange=el.oninput;});
  function locate(){for(let ri=0;ri<model.freeGrid.length;ri++){const ci=model.freeGrid[ri].cells.findIndex(c=>c.id===selectedId);if(ci>=0)return{grid:model.freeGrid,row:model.freeGrid[ri],cell:model.freeGrid[ri].cells[ci],ri,ci}}return null;}
@@ -573,13 +611,13 @@ function nucleoOpenFreeDocumentEditor(id){
  function drawPaper(){const page=$('[data-page]'),L=model.freeLayout,land=L.orientation==='landscape';page.style.width=land?'1123px':'794px';page.style.minHeight=land?'794px':'1123px';page.style.padding=(num(L.margin,5,35,14)*3.78)+'px';page.style.background=clr(L.background,'#ffffff');page.style.color=clr(L.text,'#172033');page.style.fontSize=num(L.fontSize,7,24,11)+'pt';const top=`<div style="display:flex;justify-content:space-between;gap:8px;padding-bottom:8px"><span>${escapeHtml(model.code||'')}</span><span>${escapeHtml(model.revision||'')}</span></div>`;const table=`<table style="width:100%;border-collapse:collapse;table-layout:fixed">${model.freeGrid.map(r=>`<tr>${r.cells.map(c=>{const selected=c.id===selectedId,border=selected?'#2f6fed':clr(c.borderColor,L.border||'#334155'),bw=selected?2:num(c.borderWidth,0,4,.5);const content=c.type==='image'?(c.dataUrl?`<img src="${c.dataUrl}" style="display:block;width:100%;max-height:${num(c.height,3,120,10)*3.78}px;object-fit:${c.imageFit||'contain'}">`:'Imagem'):`<div data-edit="${c.id}" contenteditable="true" style="min-height:16px;outline:0;white-space:pre-wrap">${escapeHtml(c.text||'')}</div>`;return `<td data-cell="${c.id}" ${Number(c.rowSpan)>1?`rowspan="${Math.floor(Number(c.rowSpan))}"`:''} style="cursor:pointer;width:${num(c.width,5,100,50)}%;height:${num(c.height,3,120,10)*3.78}px;background:${clr(c.background,'#ffffff')};color:${clr(c.textColor,L.text||'#172033')};border:${bw}pt solid ${border};padding:5px;text-align:${c.align||'left'};vertical-align:${c.verticalAlign||'middle'};font-size:${num(c.fontSize,6,28,L.fontSize||11)}pt;font-weight:${c.bold?'700':'400'};font-style:${c.italic?'italic':'normal'}">${content}</td>`}).join('')}</tr>`).join('')}</table>`;page.innerHTML=top+table+`<footer style="margin-top:20px;padding-top:7px;border-top:1px solid ${clr(L.border,'#334155')};white-space:pre-wrap;font-size:9px">${escapeHtml(model.footerText||'')}</footer>`;page.querySelectorAll('[data-cell]').forEach(td=>td.onclick=e=>{selectedId=td.dataset.cell;if(e.target.closest('[contenteditable]'))drawToolbar();else draw();e.stopPropagation();});page.querySelectorAll('[data-edit]').forEach(el=>el.oninput=()=>{const id=el.dataset.edit;for(const r of model.freeGrid){const c=r.cells.find(x=>x.id===id);if(c){c.text=el.innerText;break}}});}
  function draw(){drawToolbar();drawPaper();}
  $('[data-image]').onchange=e=>{const file=e.target.files[0],s=locate();if(!file||!s)return;if(file.size>120*1024){status.textContent='Use imagem de até 120 KB.';e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{s.cell.type='image';s.cell.dataUrl=String(rd.result||'');s.cell.imageFileId='';draw();};rd.readAsDataURL(file);e.target.value='';};
- dlg.querySelectorAll('[data-act]').forEach(b=>b.onclick=async()=>{const a=b.dataset.act;if(a==='close')return dlg.close();if(a==='print'){const w=window.open('','_blank');if(!w)return;const clone=$('[data-page]').cloneNode(true);clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));w.document.write('<!doctype html><html><head><title>'+escapeHtml(model.name||'Documento')+'</title><style>@page{size:A4 '+(model.freeLayout.orientation==='landscape'?'landscape':'portrait')+';margin:0}body{margin:0;background:#fff}button{display:none}</style></head><body>'+clone.outerHTML+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),120);return;}if(a==='save'){b.disabled=true;try{if(!String(model.name||'').trim())throw new Error('Informe o nome do modelo.');model.updatedAt=new Date().toISOString();const all=getProcessTemplates(),items=all.map(x=>x.id===id?model:x);await saveProcessTemplates(items);status.textContent='Modelo salvo e confirmado na base central.';setTimeout(()=>{dlg.close();renderProcessTemplatesWorkspace();},450);}catch(err){status.textContent=err.message;}finally{b.disabled=false;}}});
+ dlg.querySelectorAll('[data-act]').forEach(b=>b.onclick=async()=>{const a=b.dataset.act;if(a==='close')return dlg.close();if(a==='print'){const w=window.open('','_blank');if(!w)return;const clone=$('[data-page]').cloneNode(true);clone.querySelectorAll('[contenteditable]').forEach(x=>x.removeAttribute('contenteditable'));w.document.write('<!doctype html><html><head><title>'+escapeHtml(model.name||'Documento')+'</title><style>@page{size:A4 '+(model.freeLayout.orientation==='landscape'?'landscape':'portrait')+';margin:0}body{margin:0;background:#fff}button{display:none}</style></head><body>'+clone.outerHTML+'</body></html>');w.document.close();w.focus();setTimeout(()=>w.print(),120);return;}if(a==='save'){b.disabled=true;try{if(!String(model.name||'').trim())throw new Error('Informe o nome do modelo.');model.updatedAt=new Date().toISOString();const all=getProcessTemplates(),items=all.map(x=>x.id===id?model:x);await saveProcessTemplates(items);status.textContent='Modelo salvo e confirmado na base central.';setTimeout(()=>{dlg.close();},450);}catch(err){status.textContent=err.message;}finally{b.disabled=false;}}});
  draw();
 }
 
 function nucleoSystemModelsHtml(){return '<div class="card" style="padding:16px"><h3>Modelos usados pelo sistema</h3><p class="small">Alterações valem para próximas emissões. Arquivos já emitidos permanecem preservados.</p><div class="actions"><button class="btn secondary" onclick="nucleoEditProcessTypes()">Editar tipos: POP, Formulário, Relatório…</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'ro\')">R.O.</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'sac\')">SAC</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'pdca\')">PDCA gerado no Núcleo</button><button class="btn secondary" onclick="nucleoOpenRncTemplateEditor()">RNC — campos e estrutura</button><button class="btn secondary" onclick="nucleoDriveOpen(\'templates\')">Laudos e documentos solicitados — campos e estrutura</button></div></div>';}
 async function nucleoEditSystemModel(kind){
- if(['ro','sac','pdca'].includes(kind))return nucleoEditRoModelVisual(kind);
+ if(['ro','sac','pdca'].includes(kind))return nucleoOpenSystemModelEditor(kind);
  if(!nucleoFeatureRequire('processes','templates'))return;
  const dialog=document.createElement('dialog');dialog.style.cssText='width:min(760px,94vw);max-height:90vh;overflow:auto';document.body.appendChild(dialog);dialog.onclose=()=>dialog.remove();dialog.innerHTML='<p>Consultando modelo…</p>';dialog.showModal();
  let unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';
@@ -607,14 +645,15 @@ async function toggleProcessDocumentStatus(id){
  if(!nucleoFeatureRequire('processes','templates'))return;const items=getProcessTemplates().map(x=>x.id===id?{...x,status:x.status==='obsolete'?'active':'obsolete',updatedAt:new Date().toISOString()}:x);try{await saveProcessTemplates(items);renderProcessTemplatesWorkspace();}catch(e){alert('A alteração não foi confirmada: '+e.message);}
 }
 
-async function nucleoEditRoModelVisual(kind='ro'){
+async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
  const modelName=kind==='pdca'?'PDCA':kind==='sac'?'SAC':'R.O.';
  const defaultTitle=kind==='pdca'?'RELATÓRIO PDCA':kind==='sac'?'SERVIÇO DE ATENDIMENTO AO CLIENTE':'RELATO DE OCORRÊNCIA';
  if(!nucleoFeatureRequire('processes','templates'))return;
- const dialog=document.createElement('dialog');
- dialog.style.cssText='width:min(1540px,99vw);max-width:99vw;height:96vh;max-height:96vh;padding:0;overflow:hidden;border:1px solid #cbd5e1;border-radius:14px';
+ const dialog=inlineRender?document.getElementById('nucleoInlineProcessEditor'):document.createElement('dialog');
+ if(!dialog)return;
+ dialog.style.cssText=inlineRender?'margin-top:14px;padding:0;overflow:hidden;border:1px solid #cbd5e1;border-radius:14px;min-height:620px;height:calc(100vh - 180px)':'width:min(1540px,99vw);max-width:99vw;height:96vh;max-height:96vh;padding:0;overflow:hidden;border:1px solid #cbd5e1;border-radius:14px';
  dialog.innerHTML='<p style="padding:20px">Carregando editor universal…</p>';
- document.body.appendChild(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();
+ if(inlineRender){dialog.close=()=>nucleoCloseProcessTemplateEditor();}else{document.body.appendChild(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();}
  let unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';
  let model={},fields=[],catalog=[],imagePreviews={},logoPreview='',pendingLogo=null,loadVersion=0,selectedId='',region='body';
  const esc=escapeHtml;
