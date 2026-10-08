@@ -309,11 +309,21 @@ function openAdminOperationalWorkspace(key,index){
 }
 
 
+function nucleoOpenRncTemplateEditor(){
+  window.nucleoRncTemplateEditorOpen=true;
+  renderProcessTemplatesWorkspace();
+  setTimeout(()=>document.getElementById('rncTemplateEditorSplit')?.scrollIntoView({behavior:'smooth',block:'start'}),0);
+}
+function nucleoCloseRncTemplateEditor(){
+  window.nucleoRncTemplateEditorOpen=false;
+  renderProcessTemplatesWorkspace();
+}
+
 function renderProcessTemplatesWorkspace(){
   const list=document.getElementById('adminModuleContent');if(!list)return;const t=getRncProcessTemplate();
   list.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button><button class="btn primary" onclick="nucleoDriveOpen('templates')">Modelos de documentos solicitados</button>${processDocumentLibraryHtml()}
   <div class="card" style="margin-top:14px;padding:20px">
-    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">MODELO CONTROLADO</div><h3 style="margin:6px 0 4px">${escapeHtml(t.code)} · ${escapeHtml(t.name)}</h3><div class="small">A prévia mantém a estrutura do formulário padrão atual. Aqui você controla a identidade SETA e quais partes entram no documento, sem precisar editar o Excel.</div></div><span class="pill">${t.status==='obsolete'?'Obsoleto':'Vigente'}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">MODELO CONTROLADO</div><h3 style="margin:6px 0 4px">${escapeHtml(t.code)} · ${escapeHtml(t.name)}</h3><div class="small">A prévia mantém a estrutura do formulário padrão atual. Aqui você controla a identidade SETA e quais partes entram no documento, sem precisar editar o Excel.</div></div><div style="display:flex;gap:8px;align-items:center"><span class="pill">${t.status==='obsolete'?'Obsoleto':'Vigente'}</span><button class="btn secondary" type="button" onclick="nucleoCloseRncTemplateEditor()">Fechar editor</button></div></div>
     <div id="rncTemplateEditorSplit" style="display:grid;grid-template-columns:minmax(430px,.95fr) minmax(520px,1.35fr);gap:18px;margin-top:18px;align-items:start;height:calc(100vh - 185px);min-height:560px;overflow:hidden">
       <div id="rncTemplateControlsScroll" style="display:grid;gap:12px;overflow-y:auto;overflow-x:hidden;height:100%;padding-right:10px;align-content:start;scrollbar-gutter:stable">
         <label><span class="small">Código do formulário</span><input id="tplCode" oninput="scheduleRncTemplatePreview()" value="${escapeHtml(t.code)}"></label>
@@ -342,7 +352,8 @@ function renderProcessTemplatesWorkspace(){
     </div>
   </div></div>`;
   const editor=list.querySelector('.card[style*="margin-top:14px"]');
-  if(!nucleoProcessShowRetired&&!getProcessTemplates().some(x=>x.kind==='RNC'&&x.status!=='obsolete')){editor?.remove();return;}
+  if(!window.nucleoRncTemplateEditorOpen){editor?.remove();return;}
+  if(!nucleoProcessShowRetired&&!getProcessTemplates().some(x=>x.kind==='RNC'&&x.status!=='obsolete')){editor?.remove();window.nucleoRncTemplateEditorOpen=false;return;}
   if(editor){editor.addEventListener('input',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()});editor.addEventListener('change',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()})}
   refreshRncTemplatePreview();
 }
@@ -566,7 +577,7 @@ function nucleoOpenFreeDocumentEditor(id){
  draw();
 }
 
-function nucleoSystemModelsHtml(){return '<div class="card" style="padding:16px"><h3>Modelos usados pelo sistema</h3><p class="small">Alterações valem para próximas emissões. Arquivos já emitidos permanecem preservados.</p><div class="actions"><button class="btn secondary" onclick="nucleoEditProcessTypes()">Editar tipos: POP, Formulário, Relatório…</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'ro\')">R.O.</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'sac\')">SAC</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'pdca\')">PDCA gerado no Núcleo</button><button class="btn secondary" onclick="document.getElementById(\'rncTemplateEditorSplit\').scrollIntoView({behavior:\'smooth\'})">RNC — campos e estrutura</button><button class="btn secondary" onclick="nucleoDriveOpen(\'templates\')">Laudos e documentos solicitados — campos e estrutura</button></div></div>';}
+function nucleoSystemModelsHtml(){return '<div class="card" style="padding:16px"><h3>Modelos usados pelo sistema</h3><p class="small">Alterações valem para próximas emissões. Arquivos já emitidos permanecem preservados.</p><div class="actions"><button class="btn secondary" onclick="nucleoEditProcessTypes()">Editar tipos: POP, Formulário, Relatório…</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'ro\')">R.O.</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'sac\')">SAC</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'pdca\')">PDCA gerado no Núcleo</button><button class="btn secondary" onclick="nucleoOpenRncTemplateEditor()">RNC — campos e estrutura</button><button class="btn secondary" onclick="nucleoDriveOpen(\'templates\')">Laudos e documentos solicitados — campos e estrutura</button></div></div>';}
 async function nucleoEditSystemModel(kind){
  if(['ro','sac','pdca'].includes(kind))return nucleoEditRoModelVisual(kind);
  if(!nucleoFeatureRequire('processes','templates'))return;
