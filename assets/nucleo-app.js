@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-abertura-central-v2',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-processos-anexos',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -4409,7 +4409,8 @@ function roPdfAllowed(ro){
 }
 function createRoPdfBlob(ro){
   const raw=ro.raw||{};
-  const title='RELATO DE OCORRÊNCIA';
+  const documentModel=nucleoSystemFormat('ro',explicitRecordUnit(ro));
+  const title=documentModel?.title||'RELATO DE OCORRÊNCIA';
 
   const info=[
     ['R.O.', ro.numero||ro.id||ro.codigo||'-'],
@@ -4438,7 +4439,8 @@ function createRoPdfBlob(ro){
     ['Status planilha', firstValue(raw,['Status'])]
   ].filter(x=>String(x[1]??'').trim()!=='');
 
-  const all=info.concat(extras);
+  const all=info.concat(extras).map(([label,value])=>[(documentModel?.labels||[]).find(x=>x.from===label)?.to||label,value]);
+  if(documentModel?.footer)all.push(['Observação',documentModel.footer]);
 
   function clean(s){
     return String(s??'')
@@ -4684,6 +4686,7 @@ function openRoReport(id){
     `<h1 class="ro-report-title">RELATO DE OCORRÊNCIA</h1>`+
     `<table class="ro-report-table">${rows.map(([k,v])=>`<tr><td>${roReportEsc(k)}</td><td>${roReportEsc(v||'-')}</td></tr>`).join('')}</table>`+
     evidenceHtml;
+  body.innerHTML=nucleoApplySystemModelHtml(body.innerHTML,'ro',explicitRecordUnit(ro));
 
   const overlay=document.getElementById('roReportOverlay');
   overlay.classList.add('open');
@@ -9386,7 +9389,7 @@ function renderPdcaPrintDocument(p){
       </section>`;
   }
 
-  target.innerHTML=page1+annex;
+  target.innerHTML=nucleoApplySystemModelHtml(page1+annex,'pdca',explicitRecordUnit(p));
 }
 
 
@@ -9818,6 +9821,7 @@ function downloadCurrentPdcaPdf(){
   const p=window.currentReportPdca;
   if(!p){alert('Abra um PDCA antes de gerar o PDF.');return}
   const ans=p.answers||{};
+  const model=nucleoSystemFormat('pdca',explicitRecordUnit(p));
 
   const W=842,H=595;
   const pages=[];
@@ -9825,7 +9829,7 @@ function downloadCurrentPdcaPdf(){
   function makePage(){
     const content=[];
     const cmd=s=>content.push(s);
-    const txt=(x,y,size,text,bold=false)=>cmd(`BT /F${bold?2:1} ${size} Tf ${x} ${y} Td (${pdfEsc(text)}) Tj ET`);
+    const txt=(x,y,size,text,bold=false)=>{text=(model?.labels||[]).find(z=>z.from===text)?.to||text;return cmd(`BT /F${bold?2:1} ${model?.fontSize&&size<=12?model.fontSize:size} Tf ${x} ${y} Td (${pdfEsc(text)}) Tj ET`);};
     const rect=(x,y,w,h,lw=1)=>cmd(`${lw} w ${x} ${y} ${w} ${h} re S`);
     const fillRect=(x,y,w,h,r,g,b)=>cmd(`${r} ${g} ${b} rg ${x} ${y} ${w} ${h} re f 0 0 0 rg`);
     const line=(x1,y1,x2,y2)=>cmd(`1 w ${x1} ${y1} m ${x2} ${y2} l S`);
@@ -9838,7 +9842,8 @@ function downloadCurrentPdcaPdf(){
 
   function renderHeader(pg){
     const {txt,rect,field}=pg;
-    txt(36,558,26,'PDCA',true);
+    txt(36,558,26,model?.title||'PDCA',true);
+    if(model?.footer)txt(36,20,8,model.footer);
     txt(36,542,8,'PLANO DE ACAO CORRETIVA E PREVENTIVA');
     field(36,492,374,'Responsavel:',p.responsavel);
     field(430,492,376,'Setor:',p.setor);
@@ -12551,7 +12556,7 @@ function collectAdminModuleForm(key,existing){
     ...(existing||{}),
     id:existing?.id||('ADM-'+key.toUpperCase()+'-'+Date.now()),
     module:key,
-    ...(key==='equipment'?{unit:val('admModEquipmentUnit'),unidade:val('admModEquipmentUnit')}:{ }),
+    ...(key==='equipment'?{unit:val('admModEquipmentUnit'),unidade:val('admModEquipmentUnit')}:key==='processes'?{unit:val('admModProcessUnit'),unidade:val('admModProcessUnit')}:{ }),
     ncType:val('admModNcType')||(existing?.ncType||''),
     rncNumber:(existing?.rncNumber||''),
     ncOrigin:val('admModNcOrigin')||(existing?.ncOrigin||''),
@@ -12622,8 +12627,10 @@ function saveAdminOperationalRecord(key,id){
   if(key==='processes'){
     if(!r.docType){alert('Selecione o tipo de documento interno.');return}
     if(!r.code){alert('Informe o código do documento interno.');return}
-    if(!r.link){alert('Informe o link do documento interno.');return}
+    if(!['matriz','filial'].includes(r.unit)){alert('Selecione a unidade do documento.');return}
+    if(existing?.processAttachments?.length&&explicitRecordUnit(existing)!==r.unit){alert('Remova os anexos antes de mudar a unidade do documento.');return}
   }
+  if(key==='processes'){void nucleoSaveProcessRecordConfirmed(r);return;}
   let all=getAdminModuleRecords();
   const ix=all.findIndex(x=>String(x.id)===String(r.id));
   if(ix>=0)all[ix]=r; else all.unshift(r);
@@ -12796,7 +12803,8 @@ function createProcessDocumentModel(){const name=prompt('Nome do novo modelo de 
 function duplicateProcessDocumentModel(id){const a=getProcessTemplates(),src=a.find(x=>x.id===id);if(!src)return;const cp=JSON.parse(JSON.stringify(src));cp.id='tpl-'+Date.now();cp.name=(src.name||'Documento')+' — cópia';cp.code='';cp.status='active';cp.updatedAt=new Date().toISOString();a.push(cp);saveProcessTemplates(a);renderProcessTemplatesWorkspace()}
 function toggleProcessDocumentStatus(id){const a=getProcessTemplates(),x=a.find(v=>v.id===id);if(!x)return;x.status=x.status==='obsolete'?'active':'obsolete';x.updatedAt=new Date().toISOString();saveProcessTemplates(a);renderProcessTemplatesWorkspace()}
 function applyProcessLayoutToRnc(id){const l=processLayoutById(id);if(!l)return;['tplLogoWidth','tplMetaWidth','tplHeaderHeight','tplRowHeight','tplBorderWidth','tplFontScale','tplSectionHeight'].forEach((elId,i)=>{const keys=['logoWidth','metaWidth','headerHeight','rowHeight','borderWidth','fontScale','sectionHeight'];const el=document.getElementById(elId);if(el)el.value=l.layout?.[keys[i]]??el.value});const ac=document.getElementById('tplAccent');if(ac)ac.value=l.accent||'#1f4e78';if(l.logoDataUrl){const h=document.getElementById('tplLogoData');if(h)h.value=l.logoDataUrl;const c=document.getElementById('tplLogoCurrent');if(c)c.innerHTML=`<img src="${l.logoDataUrl}" alt="Logo" style="max-width:150px;max-height:54px;object-fit:contain">`}const lt=document.getElementById('tplLogoText');if(lt)lt.value=l.logoText||'SETA';refreshRncTemplatePreview()}
-function processDocumentLibraryHtml(){const layouts=getProcessLayouts(),models=getProcessTemplates();return `<div style="display:grid;gap:14px;margin-bottom:18px"><div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><b>Padrões de layout</b><div class="small">Você pode ter vários padrões SETA. Eles servem como base visual e não obrigam todos os documentos a serem iguais.</div></div><button class="btn secondary" type="button" onclick="createProcessLayout()">+ Novo padrão</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:12px">${layouts.map(l=>`<div style="border:1px solid #e3e8f1;border-radius:11px;padding:11px;opacity:${l.status==='obsolete'?'.58':'1'}"><div style="display:flex;justify-content:space-between;gap:6px"><b>${escapeHtml(l.name)}</b><span class="pill">${l.status==='obsolete'?'Obsoleto':'Vigente'}</span></div><div class="small" style="margin-top:4px">${escapeHtml(l.type||'Personalizado')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn secondary" type="button" onclick="applyProcessLayoutToRnc('${l.id}')">Aplicar na RNC</button><button class="btn secondary" type="button" onclick="duplicateProcessLayout('${l.id}')">Duplicar</button><button class="btn secondary" type="button" onclick="toggleProcessLayoutStatus('${l.id}')">${l.status==='obsolete'?'Reativar':'Retirar'}</button></div></div>`).join('')}</div></div><div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><b>Modelos de documentos</b><div class="small">Cada documento escolhe seu próprio padrão ou pode ter layout independente.</div></div><button class="btn secondary" type="button" onclick="createProcessDocumentModel()">+ Novo modelo</button></div><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px">Código</th><th style="text-align:left;padding:7px">Documento</th><th style="text-align:left;padding:7px">Tipo</th><th style="text-align:left;padding:7px">Revisão</th><th style="text-align:left;padding:7px">Situação</th><th style="padding:7px"></th></tr></thead><tbody>${models.map(m=>`<tr style="border-top:1px solid #e8edf4;opacity:${m.status==='obsolete'?'.58':'1'}"><td style="padding:8px">${escapeHtml(m.code||'—')}</td><td style="padding:8px"><b>${escapeHtml(m.name||m.title||'Documento')}</b>${m.kind==='RNC'?'<div class="small">Modelo operacional da RNC</div>':''}</td><td style="padding:8px">${escapeHtml(m.documentType||m.kind||'Documento')}</td><td style="padding:8px">${escapeHtml(m.revision||'—')}</td><td style="padding:8px">${m.status==='obsolete'?'Obsoleto':'Vigente'}</td><td style="padding:8px;white-space:nowrap"><button class="btn secondary" type="button" onclick="duplicateProcessDocumentModel('${m.id}')">Duplicar</button> <button class="btn secondary" type="button" onclick="toggleProcessDocumentStatus('${m.id}')">${m.status==='obsolete'?'Reativar':'Retirar'}</button></td></tr>`).join('')}</tbody></table></div></div></div>`}
+var nucleoProcessShowRetired=false;
+function processDocumentLibraryHtml(){const layouts=getProcessLayouts().filter(x=>nucleoProcessShowRetired||x.status!=='obsolete'),models=getProcessTemplates().filter(x=>nucleoProcessShowRetired||x.status!=='obsolete');return `<div style="display:grid;gap:14px;margin-bottom:18px"><label><input type="checkbox" style="width:auto" ${nucleoProcessShowRetired?'checked':''} onchange="nucleoProcessShowRetired=this.checked;renderProcessTemplatesWorkspace()"> Mostrar itens retirados</label>${nucleoSystemModelsHtml()}<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><b>Padrões de layout</b><div class="small">Você pode ter vários padrões SETA. Eles servem como base visual e não obrigam todos os documentos a serem iguais.</div></div><button class="btn secondary" type="button" onclick="createProcessLayout()">+ Novo padrão</button></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin-top:12px">${layouts.map(l=>`<div style="border:1px solid #e3e8f1;border-radius:11px;padding:11px;opacity:${l.status==='obsolete'?'.58':'1'}"><div style="display:flex;justify-content:space-between;gap:6px"><b>${escapeHtml(l.name)}</b><span class="pill">${l.status==='obsolete'?'Obsoleto':'Vigente'}</span></div><div class="small" style="margin-top:4px">${escapeHtml(l.type||'Personalizado')}</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:9px"><button class="btn secondary" type="button" onclick="nucleoEditProcessLayout('${l.id}')">Editar</button><button class="btn secondary" type="button" onclick="applyProcessLayoutToRnc('${l.id}')">Aplicar na RNC</button><button class="btn secondary" type="button" onclick="duplicateProcessLayout('${l.id}')">Duplicar</button><button class="btn secondary" type="button" onclick="toggleProcessLayoutStatus('${l.id}')">${l.status==='obsolete'?'Reativar':'Retirar'}</button></div></div>`).join('')}</div></div><div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><b>Modelos de documentos</b><div class="small">Cada documento escolhe seu próprio padrão ou pode ter layout independente.</div></div><button class="btn secondary" type="button" onclick="createProcessDocumentModel()">+ Novo modelo</button></div><div style="overflow:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left;padding:7px">Código</th><th style="text-align:left;padding:7px">Documento</th><th style="text-align:left;padding:7px">Tipo</th><th style="text-align:left;padding:7px">Revisão</th><th style="text-align:left;padding:7px">Situação</th><th style="padding:7px"></th></tr></thead><tbody>${models.map(m=>`<tr style="border-top:1px solid #e8edf4;opacity:${m.status==='obsolete'?'.58':'1'}"><td style="padding:8px">${escapeHtml(m.code||'—')}</td><td style="padding:8px"><b>${escapeHtml(m.name||m.title||'Documento')}</b>${m.kind==='RNC'?'<div class="small">Modelo operacional da RNC</div>':''}</td><td style="padding:8px">${escapeHtml(m.documentType||m.kind||'Documento')}</td><td style="padding:8px">${escapeHtml(m.revision||'—')}</td><td style="padding:8px">${m.status==='obsolete'?'Obsoleto':'Vigente'}</td><td style="padding:8px;white-space:nowrap"><button class="btn secondary" type="button" onclick="nucleoEditProcessMetadata('${m.id}')">Editar cadastro</button><button class="btn secondary" type="button" onclick="duplicateProcessDocumentModel('${m.id}')">Duplicar</button> <button class="btn secondary" type="button" onclick="toggleProcessDocumentStatus('${m.id}')">${m.status==='obsolete'?'Reativar':'Retirar'}</button></td></tr>`).join('')}</tbody></table></div></div></div>`}
 const PROCESS_TEMPLATE_KEY='nucleo_process_templates_v1';
 function defaultRncProcessTemplate(){
   return {id:'tpl-rnc-for-cor-qua-0003',kind:'RNC',layoutId:'layout-form-seta',documentType:'Formulário',name:'RNC de fornecedor',code:'FOR-COR-QUA-0003',revision:'Vigente',title:'RELATÓRIO DE SEGREGAÇÃO',status:'active',accent:'#1f4e78',showLogo:true,logoText:'SETA',logoDataUrl:'',supplierResponseTitle:'RESPOSTA DO FORNECEDOR',supplierResponseNote:'As etapas abaixo registram somente as informações efetivamente devolvidas pelo fornecedor e podem permanecer em branco.',footerText:'',pageBreakBeforeSupplier:true,repeatHeaderOnPages:true,repeatFooterOnPages:true,headerStandard:false,footerStandard:false,sendFormat:'pdf',layout:{logoWidth:19,metaWidth:25,headerHeight:13,rowHeight:7,borderWidth:0.65,fontScale:100,sectionHeight:5},headerLayout:defaultRncHeaderLayout(),fixedImages:[],photoFields:[{id:'registro-fotografico',label:'REGISTRO FOTOGRÁFICO',maxPhotos:4,required:false,enabled:true}],fieldLayout:defaultRncFieldLayout(),updatedAt:'',sections:[
@@ -16026,7 +16034,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-abertura-central-v2',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-processos-anexos',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16597,4 +16605,20 @@ async function nucleoSaveProfessionalProfile(button){
  try{const jobTitle=document.getElementById('profileJobTitle').value.trim(),workDescription=document.getElementById('profileWorkDescription').value.trim();
  const r=await portalJsonp({acao:'portal_profile_avatar',profileDetails:JSON.stringify({jobTitle,workDescription})},60000);if(!r?.sucesso)throw Error(r?.erro||'Salvamento não confirmado.');setSession({...getSession(),jobTitle:r.jobTitle,workDescription:r.workDescription});nucleoInlineTeamAt=0;status.textContent='Cargo e descrição salvos.';
  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+
+async function nucleoSaveProcessRecordConfirmed(record){
+ await showNucleoLoading('Salvando documento na base central...');
+ try{const result=await portalBackendSaveConfirmedPost('admin_modules',record.id,record,150000),central=result?.registro||record;
+ const all=getAdminModuleRecords(),index=all.findIndex(r=>r.id===record.id);if(index>=0)all[index]=central;else all.unshift(central);saveAdminModuleRecords(all);
+ editAdminOperationalRecord(central.id);const status=document.getElementById('processAttachmentStatus');if(status)status.textContent='Registro salvo. Você já pode anexar o documento.';
+ }catch(e){alert('O registro não foi confirmado: '+e.message);}finally{hideNucleoLoading();}
+}
+
+function nucleoSystemFormat(kind,unit){try{return (JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]').find(x=>x.id===unit)?.documentFormats||{})[kind]||null}catch(e){return null}}
+function nucleoApplySystemModelHtml(html,kind,unit){const model=nucleoSystemFormat(kind,unit);if(!model)return html;const root=document.createElement('div');root.innerHTML=html;
+ const pairs=model.labels||[],walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){if(['STYLE','SCRIPT'].includes(node.parentElement?.tagName))continue;const text=node.textContent.trim(),pair=pairs.find(x=>x.from===text);if(pair)node.textContent=node.textContent.replace(text,pair.to);}
+ const heading=root.querySelector('h1,.pdca-doc-title');if(heading&&model.title)heading.textContent=model.title;
+ if(model.fontSize)root.querySelectorAll('p,td,th,span,.pdca-answer').forEach(el=>el.style.fontSize=model.fontSize+'pt');
+ if(model.footer){const footer=document.createElement('p');footer.textContent=model.footer;root.appendChild(footer);}return root.innerHTML;
 }

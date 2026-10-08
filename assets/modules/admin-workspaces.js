@@ -158,16 +158,9 @@ function adminModuleFields(key){
       <label style="grid-column:1/-1"><span class="small">Observações</span><textarea id="admModDescription" placeholder="Explique a necessidade ou inclua observações adicionais."></textarea></label>
       <label style="grid-column:1/-1"><span class="small">Documento entregue / link</span><input id="admModLink" placeholder="Cole aqui o link quando o documento estiver pronto."></label>`,
     processes:`
+      <label>Unidade *<select id="admModProcessUnit" onchange="document.getElementById('admModDocType').innerHTML=nucleoProcessTypeOptions(this.value)" ${getSession()?.role==='quality'?'disabled':''}><option value="matriz">SETA SC — Matriz</option><option value="filial" ${getSession()?.role==='quality'?'selected':''}>SETA ES — Linhares</option></select></label>
       <label><span class="small">Tipo de documento *</span><select id="admModDocType">
-        <option value="">Selecione...</option>
-        <option value="IT">IT</option>
-        <option value="GSP">GSP</option>
-        <option value="POP">POP</option>
-        <option value="LPP">LPP</option>
-        <option value="FORM">Formulário</option>
-        <option value="MANUAL">Manual</option>
-        <option value="OTHER">Outro</option>
-      </select></label>
+        ${nucleoProcessTypeOptions(getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz')}</select></label>
       <label><span class="small">Código do documento *</span><input id="admModCode" placeholder="Ex.: POP-QUA-001"></label>
       <label><span class="small">Título do documento *</span><input id="admModTitle" placeholder="Nome do documento interno"></label>
       <label><span class="small">Área / processo</span><input id="admModSector" placeholder="Setor ou processo relacionado"></label>
@@ -349,6 +342,7 @@ function renderProcessTemplatesWorkspace(){
     </div>
   </div></div>`;
   const editor=list.querySelector('.card[style*="margin-top:14px"]');
+  if(!nucleoProcessShowRetired&&!getProcessTemplates().some(x=>x.kind==='RNC'&&x.status!=='obsolete')){editor?.remove();return;}
   if(editor){editor.addEventListener('input',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()});editor.addEventListener('change',e=>{if(e.target.closest('#rncTemplatePreview'))return;if(e.target.matches('input,select,textarea'))scheduleRncTemplatePreview()})}
   refreshRncTemplatePreview();
 }
@@ -375,6 +369,7 @@ function editAdminOperationalRecord(id){
       </div>
     </div>
   </div>`;
+  if(key==='processes'){document.getElementById('admModProcessUnit').value=explicitRecordUnit(r)||(getSession()?.role==='quality'?'filial':'matriz');document.getElementById('admModDocType').innerHTML=nucleoProcessTypeOptions(document.getElementById('admModProcessUnit').value,r.docType);nucleoProcessReportsPanel(r);}
   if(key==='equipment'){document.getElementById('admModEquipmentUnit').value=explicitRecordUnit(r)||(getSession()?.role==='quality'?'filial':'');nucleoEquipmentReportsPanel(r);}
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v||''};
   set('admModNcType',r.ncType||'internal');set('admModNcOrigin',r.ncOrigin||'direct');set('admModSupplier',r.supplier);set('admModRelatedRo',r.relatedRo);
@@ -467,4 +462,113 @@ async function nucleoEquipmentDeleteReport(button,id,reportId){
   nucleoEquipmentRenderReports(record,result.reports||[]);status.textContent='Laudo excluído.';
   try{await syncPortalBackend(false)}catch(_){}
  }catch(e){status.textContent='Não foi possível confirmar a exclusão: '+e.message;button.disabled=false;}
+}
+
+// Anexos de Gestão de processos.
+async function nucleoProcessReportsPanel(record){
+ const list=document.getElementById('adminModuleContent'),box=document.createElement('div');box.className='card';box.style.cssText='padding:20px;margin-top:16px;grid-column:1/-1';box.id='processAttachmentsPanel';
+ box.innerHTML='<h3>Documentos anexados</h3><label>Descrição do documento<input id="processAttachmentTitle" maxlength="160" placeholder="Ex.: Procedimento vigente — revisão 03"></label><label>Arquivo PDF ou Word (.docx)<input id="processAttachmentFile" type="file" accept=".pdf,.docx"></label><button class="btn primary" onclick="nucleoProcessUploadReport(this,\''+escapeHtml(record.id)+'\')">Anexar documento</button><p id="processAttachmentStatus" role="status"></p><button class="btn secondary" onclick="nucleoProcessResetAttempt(\''+escapeHtml(record.id)+'\')">Descartar tentativa pendente</button><div id="processAttachmentsList">Consultando documentos…</div>';list.appendChild(box);
+ if(!explicitRecordUnit(record)){document.getElementById('processAttachmentsList').textContent='Selecione a Unidade no cadastro acima, clique em Salvar alterações e reabra o registro para anexar os documentos.';return;}
+ try{const r=await portalJsonp({acao:'nucleo_drive_process_reports',unit:explicitRecordUnit(record),processId:record.id},60000);if(!r?.sucesso){if(/desconhecid/i.test(r?.erro||''))throw Error(await nucleoProcessDeploymentMessage());throw Error(r?.erro||'Consulta não concluída.');}if(!box.isConnected)return;nucleoProcessRenderReports(record,r.reports||[]);}catch(e){if(box.isConnected)document.getElementById('processAttachmentsList').textContent=e.message;}
+}
+function nucleoProcessRenderReports(record,reports){
+ record.processAttachments=reports;const records=getAdminModuleRecords(),own=records.find(x=>x.id===record.id);if(own){own.processAttachments=reports;saveAdminModuleRecords(records);}
+ const host=document.getElementById('processAttachmentsList');if(!host)return;
+ host.innerHTML=reports.slice().reverse().map(p=>'<div class="card" style="padding:12px;margin:10px 0"><b>'+escapeHtml(p.title||p.fileName)+'</b><p class="small">'+escapeHtml(p.fileName)+(p.revision?' · Revisão: '+escapeHtml(p.revision):'')+'</p><button class="btn secondary" onclick="nucleoProcessViewReport(\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Abrir / baixar documento</button><button class="btn secondary" style="margin-left:8px;color:#b42318" onclick="nucleoProcessDeleteReport(this,\''+escapeHtml(record.id)+'\',\''+escapeHtml(p.id)+'\')">Excluir documento</button></div>').join('')||'<p class="small">Nenhum documento anexado.</p>';
+}
+async function nucleoProcessUploadReport(button,id){
+ if(!nucleoFeatureRequire('processes','edit'))return;const status=document.getElementById('processAttachmentStatus');button.disabled=true;
+ try{const record=adminModuleRecord(id);if(!explicitRecordUnit(record))throw Error('Selecione a Unidade no cadastro acima e salve as alterações antes de anexar o documento.');const file=document.getElementById('processAttachmentFile').files[0];if(!file&&!localStorage.getItem(nucleoProcessPendingKey(record)))throw Error('Selecione o documento PDF ou Word (.docx).');if(file&&file.size>8*1024*1024)throw Error('Selecione um PDF ou Word (.docx) de até 8 MB.');status.textContent='Salvando documento no Drive e vinculando ao registro…';await nucleoDriveLoad();
+ const r=await nucleoProcessReportMutation({unit:explicitRecordUnit(record),processId:id,fileData:file?await fileToBase64(file):'',fileName:file?.name||'',title:document.getElementById('processAttachmentTitle').value.trim(),mimeType:file?.type||''});
+ nucleoProcessRenderReports(record,r.reports||[]);try{await syncPortalBackend(false);}catch(_){}document.getElementById('processAttachmentFile').value='';status.textContent='Documento anexado e confirmado na base central.';
+ }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+async function nucleoProcessViewReport(id,reportId){
+ try{const record=adminModuleRecord(id),r=await portalJsonp({acao:'nucleo_drive_process_read',unit:explicitRecordUnit(record),processId:id,reportId},90000);if(!r?.sucesso)throw Error(r?.erro||'Documento indisponível.');const isPdf=r.mimeType==='application/pdf',url=URL.createObjectURL(new Blob([Uint8Array.from(atob(r.base64),c=>c.charCodeAt(0))],{type:r.mimeType||'application/octet-stream'}));const dialog=document.createElement('dialog');dialog.style.cssText='width:90vw;border:0;border-radius:12px';dialog.innerHTML='<h3>'+escapeHtml(r.fileName)+'</h3><a class="btn secondary" download="'+escapeHtml(r.fileName)+'" href="'+url+'">Baixar documento</a> <button class="btn secondary">Fechar</button>'+(isPdf?'<iframe title="Documento" src="'+url+'" style="width:100%;height:70vh"></iframe>':'<p>Baixe o arquivo Word para abrir e editar.</p>')+'';document.body.appendChild(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.onclose=()=>{URL.revokeObjectURL(url);dialog.remove();};dialog.showModal();}catch(e){alert(e.message);}
+}
+
+function nucleoProcessPendingKey(record){return 'nucleo-process-upload:'+String(getSession()?.personId||getSession()?.email||getSession()?.name)+':'+record.id;}
+async function nucleoProcessReportMutation(params){
+ const record=adminModuleRecord(params.processId),key=nucleoProcessPendingKey(record),prior=localStorage.getItem(key);let pending=prior?JSON.parse(prior):null;
+ const ready=await portalJsonp({acao:'nucleo_drive_process_reports',processId:params.processId,unit:params.unit},30000);if(!ready?.sucesso)throw Error(/desconhecid/i.test(ready?.erro||'')?await nucleoProcessDeploymentMessage():ready?.erro||'Não foi possível consultar os documentos.');if(pending&&(ready.reports||[]).some(r=>r.id===pending.id)){localStorage.removeItem(key);return ready;}
+ if(!pending){pending={id:'PROC-'+Date.now()+'-'+Math.random().toString(36).slice(2),at:Date.now()};localStorage.setItem(key,JSON.stringify(pending));if(!portalPostForm({acao:'nucleo_drive_process_upload',eventoId:pending.id,...params})){localStorage.removeItem(key);throw Error('Não foi possível enviar o documento.');}}
+ const status=document.getElementById('processAttachmentStatus');
+ for(let attempt=0;attempt<6;attempt++){
+  status.textContent=prior?'Conferindo o envio anterior, sem reenviar o arquivo…':'Aguardando confirmação do documento na base central…';
+  await new Promise(r=>setTimeout(r,2000));let result;
+  try{result=await portalJsonp({acao:'nucleo_drive_status',eventoId:pending.id},15000);}catch(e){if(/sess[aã]o|acesso|permiss/i.test(e.message))throw e;}
+  if(result&&!result.pending){if(!result.sucesso){localStorage.removeItem(key);throw Error(result.erro||'O envio não foi concluído.');}localStorage.removeItem(key);return result;}
+  // The process record remains authoritative even if the callback cache expires.
+  if(attempt===2||attempt===5){try{const check=await portalJsonp({acao:'nucleo_drive_process_reports',processId:params.processId,unit:params.unit},20000);if(check?.sucesso&&(check.reports||[]).some(p=>p.id===pending.id)){localStorage.removeItem(key);return check;}}catch(e){if(/sess[aã]o|acesso|permiss/i.test(e.message))throw e;}}
+ }
+ throw Error('A confirmação ainda não chegou. Clique em Anexar documento para conferir novamente o mesmo envio; o arquivo não será reenviado.');
+}
+
+async function nucleoProcessResetAttempt(id){
+ const record=adminModuleRecord(id),status=document.getElementById('processAttachmentStatus');
+ try{const r=await portalJsonp({acao:'nucleo_drive_process_reports',unit:explicitRecordUnit(record),processId:id},30000);if(!r?.sucesso)throw Error(r?.erro||'Confira a implantação do Apps Script.');nucleoProcessRenderReports(record,r.reports||[]);
+ if(!confirm('Confira a lista de documentos acima. Deseja descartar apenas a tentativa pendente deste navegador? Nenhum documento salvo será removido.'))return;
+ localStorage.removeItem(nucleoProcessPendingKey(record));status.textContent='Tentativa pendente descartada. Se o documento ainda não aparece na lista, selecione o PDF e clique em Anexar documento.';
+ }catch(e){status.textContent=e.message;}
+}
+
+async function nucleoProcessDeploymentMessage(){return 'A implantação atual do Apps Script ainda não reconhece os anexos de Gestão de processos. Atualize o código e publique uma nova versão da implantação existente.';}
+
+async function nucleoProcessDeleteReport(button,id,reportId){
+ if(!nucleoFeatureRequire('processes','edit'))return;
+ if(!confirm('Excluir este documento? O vínculo será removido do registro e o PDF irá para a lixeira do Drive.'))return;
+ const record=adminModuleRecord(id),status=document.getElementById('processAttachmentStatus');button.disabled=true;
+ try{
+  status.textContent='Excluindo documento e aguardando confirmação…';
+  const result=await portalJsonp({acao:'nucleo_drive_process_delete',processId:id,unit:explicitRecordUnit(record),reportId,eventoId:'PROC-DEL-'+Date.now()+'-'+Math.random().toString(36).slice(2)},60000);
+  if(!result?.sucesso)throw Error(result?.erro||'A exclusão não foi confirmada.');
+  nucleoProcessRenderReports(record,result.reports||[]);status.textContent='Documento excluído.';
+  try{await syncPortalBackend(false)}catch(_){}
+ }catch(e){status.textContent='Não foi possível confirmar a exclusão: '+e.message;button.disabled=false;}
+}
+
+
+function nucleoEditProcessLayout(id){
+ if(!nucleoFeatureRequire('processes','templates'))return;
+ const all=getProcessLayouts(),original=all.find(x=>x.id===id);if(!original)return;
+ const dialog=document.createElement('dialog');dialog.style.cssText='width:min(600px,94vw);max-height:85vh;overflow:auto';
+ const fields=['logoWidth','metaWidth','headerHeight','rowHeight','borderWidth','fontScale','sectionHeight'];
+ const labels=['Largura da logo (%)','Largura do código/revisão (%)','Altura do cabeçalho (mm)','Altura das linhas (mm)','Espessura das bordas','Tamanho do texto (%)','Altura das seções (mm)'];
+ dialog.innerHTML='<h3>Editar padrão</h3><label>Nome<input id="pmLayoutName" value="'+escapeHtml(original.name)+'"></label><label>Tipo<input id="pmLayoutType" value="'+escapeHtml(original.type||'')+'"></label>'+fields.map((k,i)=>'<label>'+labels[i]+'<input type="number" min="0.1" max="150" step="0.1" data-layout-key="'+k+'" value="'+Number(original.layout?.[k]||1)+'"></label>').join('')+'<p role="status"></p><button class="btn primary">Salvar</button> <button class="btn secondary">Cancelar</button>';
+ dialog.querySelector('.secondary').onclick=()=>dialog.close();dialog.querySelector('.primary').onclick=async()=>{const status=dialog.querySelector('[role="status"]');try{const layout={...original.layout};dialog.querySelectorAll('[data-layout-key]').forEach(el=>{const v=Number(el.value);if(!Number.isFinite(v)||v<=0||v>150)throw Error('Confira as proporções.');layout[el.dataset.layoutKey]=v});const name=dialog.querySelector('#pmLayoutName').value.trim();if(!name)throw Error('Informe o nome.');const updated={...original,name,type:dialog.querySelector('#pmLayoutType').value.trim(),layout,updatedAt:new Date().toISOString()},items=all.map(x=>x.id===id?updated:x);await portalBackendSaveConfirmedPost('shared_state','process_layouts',{items,updatedAt:updated.updatedAt});safeStorageSet(PROCESS_LAYOUT_KEY,JSON.stringify(items));dialog.close();renderProcessTemplatesWorkspace();}catch(e){status.textContent=e.message;}};
+ dialog.onclose=()=>dialog.remove();document.body.appendChild(dialog);dialog.showModal();
+}
+function nucleoEditProcessMetadata(id){
+ if(!nucleoFeatureRequire('processes','templates'))return;const all=getProcessTemplates(),original=all.find(x=>x.id===id);if(!original)return;
+ const dialog=document.createElement('dialog');dialog.style.cssText='width:min(600px,94vw)';dialog.innerHTML='<h3>Editar modelo</h3>'+[['name','Nome'],['code','Código'],['documentType','Tipo'],['revision','Revisão'],['title','Título no documento']].map(([key,label])=>'<label>'+label+'<input data-model-key="'+key+'" value="'+escapeHtml(original[key]||'')+'"></label>').join('')+'<p role="status"></p><button class="btn primary">Salvar</button> <button class="btn secondary">Cancelar</button>';
+ dialog.querySelector('.secondary').onclick=()=>dialog.close();dialog.querySelector('.primary').onclick=async()=>{const updated={...original,updatedAt:new Date().toISOString()};dialog.querySelectorAll('[data-model-key]').forEach(el=>updated[el.dataset.modelKey]=el.value.trim());if(!updated.name){dialog.querySelector('[role="status"]').textContent='Informe o nome.';return;}try{const items=all.map(x=>x.id===id?updated:x);await portalBackendSaveConfirmedPost('shared_state','process_templates',{items,updatedAt:updated.updatedAt});safeStorageSet(PROCESS_TEMPLATE_KEY,JSON.stringify(items));dialog.close();renderProcessTemplatesWorkspace();}catch(e){dialog.querySelector('[role="status"]').textContent=e.message;}};
+ dialog.onclose=()=>dialog.remove();document.body.appendChild(dialog);dialog.showModal();
+}
+function nucleoSystemModelsHtml(){return '<div class="card" style="padding:16px"><h3>Modelos usados pelo sistema</h3><p class="small">Alterações valem para próximas emissões. Arquivos já emitidos permanecem preservados.</p><div class="actions"><button class="btn secondary" onclick="nucleoEditProcessTypes()">Editar tipos: POP, Formulário, Relatório…</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'ro\')">R.O.</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'sac\')">SAC</button><button class="btn secondary" onclick="nucleoEditSystemModel(\'pdca\')">PDCA gerado no Núcleo</button><button class="btn secondary" onclick="document.getElementById(\'rncTemplateEditorSplit\').scrollIntoView({behavior:\'smooth\'})">RNC — campos e estrutura</button><button class="btn secondary" onclick="nucleoDriveOpen(\'templates\')">Laudos e documentos solicitados — campos e estrutura</button></div></div>';}
+async function nucleoEditSystemModel(kind){
+ if(!nucleoFeatureRequire('processes','templates'))return;
+ const dialog=document.createElement('dialog');dialog.style.cssText='width:min(760px,94vw);max-height:90vh;overflow:auto';document.body.appendChild(dialog);dialog.onclose=()=>dialog.remove();dialog.innerHTML='<p>Consultando modelo…</p>';dialog.showModal();
+ let unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';
+ async function load(){try{const r=await portalJsonp({acao:'nucleo_drive_process_formats',unit},60000);if(!r?.sucesso)throw Error(r?.erro||'Modelo indisponível.');const model=r.formats?.[kind]||{};
+ const defaults={ro:'RELATO DE OCORRÊNCIA',sac:'SERVIÇO DE ATENDIMENTO AO CLIENTE',pdca:'RELATÓRIO PDCA'};
+ dialog.innerHTML='<h3>Modelo de '+kind.toUpperCase()+'</h3><label>Unidade<select id="smUnit" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz">Matriz</option><option value="filial">Filial</option></select></label><label>Título<input id="smTitle" maxlength="180" value="'+escapeHtml(model.title||defaults[kind])+'"></label><label>Texto adicional no rodapé<textarea id="smFooter" maxlength="1500">'+escapeHtml(model.footer||'')+'</textarea></label><label>Tamanho do texto (opcional)<input id="smFont" type="number" min="7" max="18" value="'+(model.fontSize||'')+'"></label><h4>Nomes e textos dos campos</h4><p class="small">Informe o texto atual e como deve aparecer no documento. Os dados e as regras de preenchimento permanecem os mesmos.</p><div id="smLabels"></div><button class="btn secondary" id="smAdd">Adicionar texto para alterar</button><p id="smStatus" role="status"></p><button class="btn primary" id="smSave">Salvar modelo</button> <button class="btn secondary" id="smClose">Fechar</button>';
+ dialog.querySelector('#smUnit').value=unit;dialog.querySelector('#smUnit').onchange=e=>{unit=e.target.value;load()};
+ function row(from='',to=''){const el=document.createElement('div');el.className='actions';el.innerHTML='<input placeholder="Texto atual" maxlength="200" data-from value="'+escapeHtml(from)+'"><input placeholder="Novo texto" maxlength="200" data-to value="'+escapeHtml(to)+'"><button class="btn secondary">Remover</button>';el.querySelector('button').onclick=()=>el.remove();dialog.querySelector('#smLabels').appendChild(el);}
+ (model.labels||[]).forEach(x=>row(x.from,x.to));dialog.querySelector('#smAdd').onclick=()=>row();dialog.querySelector('#smClose').onclick=()=>dialog.close();dialog.querySelector('#smSave').onclick=async e=>{e.target.disabled=true;try{const labels=[...dialog.querySelectorAll('#smLabels>div')].map(el=>({from:el.querySelector('[data-from]').value.trim(),to:el.querySelector('[data-to]').value.trim()}));if(labels.some(x=>!x.from||!x.to))throw Error('Preencha os dois textos de cada linha.');const format={title:dialog.querySelector('#smTitle').value.trim(),footer:dialog.querySelector('#smFooter').value.trim(),fontSize:Number(dialog.querySelector('#smFont').value)||null,labels};const result=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind,data:JSON.stringify(format)},60000);if(!result?.sucesso)throw Error(result?.erro||'Modelo não confirmado.');const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),own=configs.find(x=>x.id===unit)||{id:unit,unit};own.documentFormats=result.formats;localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));dialog.querySelector('#smStatus').textContent='Modelo salvo na base central. Válido para próximas emissões desta unidade.';}catch(error){dialog.querySelector('#smStatus').textContent=error.message;}finally{e.target.disabled=false;}};
+ }catch(e){dialog.innerHTML='<p>'+escapeHtml(e.message)+'</p><button class="btn secondary">Fechar</button>';dialog.querySelector('button').onclick=()=>dialog.close();}}
+ await load();
+}
+
+function nucleoProcessTypes(unit){try{const types=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]').find(x=>x.id===unit)?.processDocumentTypes;if(Array.isArray(types))return types;}catch(e){}return [{id:'IT',label:'IT'},{id:'GSP',label:'GSP'},{id:'POP',label:'POP'},{id:'LPP',label:'LPP'},{id:'FORM',label:'Formulário'},{id:'MANUAL',label:'Manual'},{id:'REPORT',label:'Relatório'},{id:'OTHER',label:'Outro'}];}
+function nucleoProcessTypeOptions(unit,current){const types=nucleoProcessTypes(unit).slice();if(current&&!types.some(x=>x.id===current))types.push({id:current,label:current+' (tipo anterior)'});return '<option value="">Selecione...</option>'+types.map(x=>'<option value="'+escapeHtml(x.id)+'">'+escapeHtml(x.label)+'</option>').join('');}
+async function nucleoEditProcessTypes(){
+ if(!nucleoFeatureRequire('processes','templates'))return;let unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';const dialog=document.createElement('dialog');dialog.style.cssText='width:min(650px,94vw);max-height:85vh;overflow:auto';document.body.appendChild(dialog);dialog.onclose=()=>dialog.remove();dialog.showModal();
+ async function load(){try{const result=await portalJsonp({acao:'nucleo_drive_process_formats',unit},60000);if(!result?.sucesso)throw Error(result?.erro||'Consulta não concluída.');const types=result.processDocumentTypes||nucleoProcessTypes(unit);dialog.innerHTML='<h3>Tipos de documento</h3><label>Unidade<select id="ptUnit" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz">Matriz</option><option value="filial">Filial</option></select></label><div id="ptRows"></div><button class="btn secondary" id="ptAdd">Adicionar tipo</button><p id="ptStatus" role="status"></p><button class="btn primary" id="ptSave">Salvar</button> <button class="btn secondary" id="ptClose">Fechar</button>';dialog.querySelector('#ptUnit').value=unit;dialog.querySelector('#ptUnit').onchange=e=>{unit=e.target.value;load()};function row(type){const el=document.createElement('div');el.className='actions';el.dataset.typeId=type.id;el.innerHTML='<input maxlength="150" value="'+escapeHtml(type.label)+'"><button class="btn secondary">Retirar</button>';el.querySelector('button').onclick=()=>el.remove();dialog.querySelector('#ptRows').appendChild(el);}types.forEach(row);dialog.querySelector('#ptAdd').onclick=()=>row({id:'type-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),label:''});dialog.querySelector('#ptClose').onclick=()=>dialog.close();dialog.querySelector('#ptSave').onclick=async e=>{e.target.disabled=true;try{const items=[...dialog.querySelectorAll('#ptRows>div')].map(el=>({id:el.dataset.typeId,label:el.querySelector('input').value.trim()}));const r=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'types',data:JSON.stringify(items)},60000);if(!r?.sucesso)throw Error(r?.erro||'Não confirmado.');const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),own=configs.find(x=>x.id===unit)||{id:unit,unit};own.processDocumentTypes=r.processDocumentTypes;localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));dialog.querySelector('#ptStatus').textContent='Tipos salvos na base central. Os cadastros anteriores foram preservados.';}catch(error){dialog.querySelector('#ptStatus').textContent=error.message;}finally{e.target.disabled=false;}};}catch(error){dialog.innerHTML='<p>'+escapeHtml(error.message)+'</p><button>Fechar</button>';dialog.querySelector('button').onclick=()=>dialog.close();}}await load();
+}
+
+async function toggleProcessLayoutStatus(id){
+ if(!nucleoFeatureRequire('processes','templates'))return;const items=getProcessLayouts().map(x=>x.id===id?{...x,status:x.status==='obsolete'?'active':'obsolete',updatedAt:new Date().toISOString()}:x);try{await portalBackendSaveConfirmedPost('shared_state','process_layouts',{items,updatedAt:new Date().toISOString()});safeStorageSet(PROCESS_LAYOUT_KEY,JSON.stringify(items));renderProcessTemplatesWorkspace();}catch(e){alert('A alteração não foi confirmada: '+e.message);}
+}
+async function toggleProcessDocumentStatus(id){
+ if(!nucleoFeatureRequire('processes','templates'))return;const items=getProcessTemplates().map(x=>x.id===id?{...x,status:x.status==='obsolete'?'active':'obsolete',updatedAt:new Date().toISOString()}:x);try{await portalBackendSaveConfirmedPost('shared_state','process_templates',{items,updatedAt:new Date().toISOString()});safeStorageSet(PROCESS_TEMPLATE_KEY,JSON.stringify(items));renderProcessTemplatesWorkspace();}catch(e){alert('A alteração não foi confirmada: '+e.message);}
 }
