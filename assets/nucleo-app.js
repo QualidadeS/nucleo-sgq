@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-processos-anexos',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-ro-modelo-visual',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -4439,7 +4439,7 @@ function createRoPdfBlob(ro){
     ['Status planilha', firstValue(raw,['Status'])]
   ].filter(x=>String(x[1]??'').trim()!=='');
 
-  const all=info.concat(extras).map(([label,value])=>[(documentModel?.labels||[]).find(x=>x.from===label)?.to||label,value]);
+  const all=nucleoRoDisplayRows(info.concat(extras),documentModel).map(([label,value])=>[(documentModel?.labels||[]).find(x=>x.from===label)?.to||label,value]);
   if(documentModel?.footer)all.push(['Observação',documentModel.footer]);
 
   function clean(s){
@@ -4680,12 +4680,12 @@ function openRoReport(id){
     }
   }
 
-  const rows=known.concat(extras);
+  const rows=nucleoRoDisplayRows(known.concat(extras),nucleoSystemFormat('ro',explicitRecordUnit(ro)));
   const body=document.getElementById('roReportBody');
   body.innerHTML=
     `<h1 class="ro-report-title">RELATO DE OCORRÊNCIA</h1>`+
     `<table class="ro-report-table">${rows.map(([k,v])=>`<tr><td>${roReportEsc(k)}</td><td>${roReportEsc(v||'-')}</td></tr>`).join('')}</table>`+
-    evidenceHtml;
+    (nucleoSystemFormat('ro',explicitRecordUnit(ro))?.showEvidence===false?'':evidenceHtml);
   body.innerHTML=nucleoApplySystemModelHtml(body.innerHTML,'ro',explicitRecordUnit(ro));
 
   const overlay=document.getElementById('roReportOverlay');
@@ -16034,7 +16034,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-processos-anexos',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-ro-modelo-visual',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16621,4 +16621,12 @@ function nucleoApplySystemModelHtml(html,kind,unit){const model=nucleoSystemForm
  const heading=root.querySelector('h1,.pdca-doc-title');if(heading&&model.title)heading.textContent=model.title;
  if(model.fontSize)root.querySelectorAll('p,td,th,span,.pdca-answer').forEach(el=>el.style.fontSize=model.fontSize+'pt');
  if(model.footer){const footer=document.createElement('p');footer.textContent=model.footer;root.appendChild(footer);}return root.innerHTML;
+}
+
+function nucleoRoDisplayRows(rows,model){
+ if(!model?.fields)return rows;
+ const aliases={'Setor identificado':'Setor onde foi identificado','Setor causa/responsável':'Setor causa / responsável','Setor causa':'Setor causa / responsável','Liberado pelo setor da qualidade?':'Liberado pelo setor de qualidade?','Registro de quem liberou':'Quem liberou','Status planilha':'Status da planilha'};
+ const canonical=label=>aliases[label]||label,bySource=new Map(rows.map(row=>[canonical(row[0]),row]));
+ const selected=model.fields.filter(f=>f.enabled&&bySource.has(f.source)).map(f=>[f.label,bySource.get(f.source)[1]]),known=new Set(model.fields.map(f=>f.source));
+ return selected.concat(rows.filter(row=>!known.has(canonical(row[0]))));
 }
