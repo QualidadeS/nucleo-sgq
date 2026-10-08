@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-ro-modelo-visual',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-triagem-multissetores',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -4884,7 +4884,7 @@ function closeRoReport(){
   document.body.style.overflow='';
 }
 
-function openRoPdf(id){
+async function openRoPdf(id){
   const wanted=String(id??'').trim();
   const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===wanted);
 
@@ -4894,7 +4894,11 @@ function openRoPdf(id){
   }
 
   try{
-    const blob=createRoPdfBlob(ro);
+    let blob;
+    if(nucleoSystemFormat('ro',explicitRecordUnit(ro))?.design){
+      await showNucleoLoading('Gerando PDF com o modelo da unidade…','O logo, cabeçalho e rodapé serão aplicados pela base central.');
+      try{const result=await portalJsonp({acao:'portal_ro_model_pdf',ro:ro.numero||ro.id||ro.codigo,origin:ro.origem||ro.origin||''},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'});}finally{hideNucleoLoading(true);}
+    }else blob=createRoPdfBlob(ro);
 
     if(!(blob instanceof Blob) || blob.size===0){
       throw new Error('O arquivo PDF foi gerado vazio.');
@@ -7231,7 +7235,7 @@ function activeOperationalUsers(){
 function usersBySector(sector){
   const wanted=normalizeAnswer(sector||'');
   return activeOperationalUsers()
-    .filter(u=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo)===String(currentTriageRoId));const unit=ro?roUnit(ro):adminScopeUnit();return userHasUnitSector(u,unit,sector);})
+    .filter(u=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo)===String(currentTriageRoId));const unit=explicitPortalUnit(document.getElementById('triageRoUnit')?.value)||(ro?roUnit(ro):adminScopeUnit());return userHasUnitSector(u,unit,sector);})
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
 function getTriageAssignmentsFromUi(){
@@ -7266,7 +7270,9 @@ function addTriageAssignment(sector='',selectedEmail='',reason='',originalSector
   row.dataset.sector=chosen;
   row.dataset.originalSector=String(originalSector||chosen).trim();
   row.style.cssText='display:grid;grid-template-columns:minmax(140px,.7fr) minmax(200px,1fr) minmax(260px,1.35fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #edf1ef';
-  const sectorList=(typeof getConfiguredSectors==='function'?getConfiguredSectors(explicitRecordUnit(ro)||explicitPortalUnit(document.getElementById('triageRoUnit')?.value)):[])
+  const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'')===String(currentTriageRoId));
+  const unit=explicitPortalUnit(document.getElementById('triageRoUnit')?.value)||(ro?explicitRecordUnit(ro):'')||adminScopeUnit();
+  const sectorList=[...new Set((typeof getConfiguredSectors==='function'?getConfiguredSectors(unit):[]).concat(chosen))]
     .slice()
     .sort((a,b)=>String(a).localeCompare(String(b),'pt-BR'));
   const sectorOptions=sectorList.map(sec=>`<option value="${escapeHtml(sec)}" ${normalizeAnswer(sec)===normalizeAnswer(chosen)?'selected':''}>${escapeHtml(sec)}</option>`).join('');
@@ -16034,7 +16040,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-ro-modelo-visual',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-triagem-multissetores',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
