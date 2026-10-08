@@ -2358,6 +2358,11 @@ body.triage-wide main{max-width:none!important;width:100%!important;margin:0!imp
   #nucleoLoadingSpinner,
   #nucleoLoadingBar > span{animation-duration:2.5s}
 }
+
+/* Correção de sobreposição entre o feedback global e janelas <dialog>. */
+dialog[open]{outline:none}
+dialog[open]::backdrop{background:rgba(15,23,42,.58)}
+
 </style>
 
 
@@ -4237,7 +4242,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261008-editor-universal-final"></script>
+<script src="assets/nucleo-app.js?v=20261008-editor-universal-fix1"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">
@@ -4793,6 +4798,14 @@ window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>syncPublicPortalC
   }
   function begin(label){
     if(!userStartedThis())return false;
+    // Um <dialog> aberto fica na camada superior do navegador e sempre aparece
+    // acima de overlays comuns. Nos editores, isso fazia o carregamento global
+    // ficar atrás do diálogo e deixava uma faixa branca/contornada sobre a tela.
+    // Os diálogos já possuem feedback local de status, então não abrimos o
+    // overlay global enquanto houver um diálogo modal ativo.
+    try{
+      if(document.querySelector('dialog[open]'))return false;
+    }catch(e){}
     try{showNucleoLoading(label||'Processando sua solicitação...','Aguarde');return true}catch(e){return false}
   }
   function end(active){
