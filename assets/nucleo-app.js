@@ -1,3 +1,8 @@
+// Recuperação explícita: preserva cadastros, rascunhos e caches.
+if(new URLSearchParams(location.search).get('recuperar')==='1'){
+  try{localStorage.removeItem('ro-pdca-session-v63')}catch(e){}
+  try{sessionStorage.removeItem('ro-pdca-session-v63')}catch(e){}
+}
 const NUCLEO_DEFAULT_DECISIONS=[{"id":"directed","label":"Direcionar para tratativa","behavior":"directed","active":true,"requireSector":true,"requireReason":true,"pdcaRequired":true,"deadlineDays":null,"color":"#eef4ff"},{"id":"record","label":"Somente para registro","behavior":"record","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"},{"id":"cancelled","label":"Cancelar R.O.","behavior":"cancelled","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff0f0"},{"id":"obsolete","label":"Obsoleta","behavior":"obsolete","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#f0f1f3"},{"id":"falta_caixa","label":"Falta de caixa","behavior":"record","active":true,"requireSector":false,"requireReason":false,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"}];
 const NUCLEO_FEATURE_BUTTONS={"showList":["ros","consult"],"showAssignedRos":["ros","assigned"],"showMySubmittedRos":["ros","submitted"],"showTriage":["ros","triage"],"openTriageRecord":["ros","triage"],"saveTriageRecord":["ros","triage"],"showContestations":["ros","reviewContests"],"reviewContestation":["ros","reviewContests"],"submitContest":["ros","contest"],"openContest":["ros","contest"],"startPdcaFromList":["pdca","respond"],"openPDCA":["pdca","respond"],"finishPDCA":["pdca","respond"],"showSentPdcas":["pdca","received"],"showActionsDashboard":["pdca","actions"],"showPendingActions":["pdca","reviewActions"],"confirmActionCompletion":["pdca","reviewActions"],"markActionCompleted":["pdca","reviewActions"],"registerActionEvidence":["pdca","completeAction"],"presentPdca":["pdca","present"],"presentCurrentPdca":["pdca","present"],"savePdcaPresentationRecord":["pdca","present"],"finalizeAndSendSac":["sac","finalize"],"saveSacEditForm":["sac","edit"],"saveExternalRoControl":["sac","edit"],"saveSacDecisionLocally":["sac","edit"],"publishAnnouncement":["announcements","publish"],"openStandardDocumentCreate":["documents","standards"],"saveStandardDocument":["documents","standards"],"toggleStandardDocument":["documents","standards"],"deleteStandardDocument":["documents","standards"],"addOperationalUser":["users","create"],"approvePortalUser":["users","approve"],"rejectPortalUser":["users","approve"],"openUserRegistrationEditor":["users","edit"],"saveUserRegistrationEditor":["users","edit"],"removeOperationalUserByKey":["users","delete"],"saveSectorConfiguration":["sectors","edit"],"saveFixedEmailCopies":["sectors","emails"],"saveRncProcessTemplateFromForm":["processes","templates"],"deleteAssignedDirection":["ros","triage"],"openAssignedSectorEdit":["ros","triage"],"endAnnouncement":["announcements","publish"],"openUnitUserAccess":["users","permissions"],"showAnnouncementsAdmin":["announcements","publish"],"openAdminResetPassword":["users","edit"]};
 const NUCLEO_PERSON_FEATURES={"ros":{"consult":["Consultar R.O.s disponíveis",false,"view"],"submitted":["R.O.s cadastradas por mim",false,"view"],"assigned":["R.O.s atribuídas",false,"view"],"triage":["Triar, classificar e direcionar",true,"manage"],"contest":["Criar contestações",true,"view"],"reviewContests":["Analisar contestações",true,"manage"],"claimant":["Alterar e confirmar reclamante",true,"manage"]},"pdca":{"received":["Consultar PDCAs recebidos",false,"view"],"respond":["Responder e continuar PDCA",true,"view"],"actions":["Consultar ações",false,"view"],"completeAction":["Registrar conclusão e evidências",true,"view"],"reviewActions":["Conferir e aprovar ações",true,"manage"],"import":["Importar e vincular respostas",true,"manage"],"present":["Registrar apresentação",true,"manage"],"dispatch":["Despachar resposta ao reclamante",true,"manage"]},"sac":{"consult":["Consultar SACs",false,"view"],"edit":["Classificar e editar SACs",true,"manage"],"finalize":["Finalizar e enviar SAC",true,"manage"]},"documents":{"consult":["Consultar documentos e solicitações",false,"view"],"request":["Criar solicitação de documento",true,"view"],"standards":["Cadastrar e alterar documentos padrão",true,"manage"],"prepare":["Preencher e armazenar documento solicitado",true,"manage"],"deliver":["Enviar e entregar documentos",true,"manage"],"history":["Consultar histórico de entregas",false,"manage"]},"indicators":{"consult":["Consultar indicadores",false,"view"]},"announcements":{"consult":["Consultar comunicados",false,"view"],"publish":["Emitir, alterar e encerrar comunicados",true,"manage"]},"equipment":{"consult":["Consultar equipamentos",false,"view"],"pending":["Consultar calibrações pendentes",false,"view"],"history":["Consultar histórico metrológico",false,"view"],"edit":["Cadastrar e alterar equipamentos",true,"manage"],"delete":["Excluir equipamentos",true,"manage"]},"training":{"consult":["Consultar treinamentos",false,"view"],"pending":["Consultar reciclagens pendentes",false,"view"],"history":["Consultar histórico de competências",false,"view"],"edit":["Cadastrar e alterar treinamentos",true,"manage"],"delete":["Excluir treinamentos",true,"manage"]},"nc":{"consult":["Consultar RNCs e tratamento",false,"view"],"edit":["Cadastrar e alterar RNCs",true,"manage"],"send":["Enviar RNC e anexar fotos",true,"manage"],"delete":["Excluir RNCs",true,"manage"]},"processes":{"consult":["Consultar documentos vigentes",false,"view"],"review":["Consultar documentos em revisão",false,"view"],"history":["Consultar histórico documental",false,"view"],"edit":["Cadastrar e alterar documentos internos",true,"manage"],"templates":["Alterar modelos e estrutura dos formulários",true,"manage"],"delete":["Excluir documentos internos",true,"manage"]},"users":{"consult":["Consultar cadastros",false,"manage"],"create":["Cadastrar pessoas",true,"manage"],"edit":["Editar nomes, dados e setores",true,"manage"],"approve":["Aprovar e bloquear cadastros",true,"manage"],"permissions":["Definir permissões de outras pessoas",true,"manage"],"delete":["Excluir usuários",true,"manage"]},"sectors":{"decisions":["Editar decisões e regras de R.O.",true,"manage"],"consult":["Consultar configurações da unidade",false,"manage"],"edit":["Cadastrar e alterar setores",true,"manage"],"emails":["Alterar destinatários e cópias padrão",true,"manage"],"folders":["Alterar e validar pastas do Drive",true,"manage"],"documentTypes":["Editar tipos de documentos",true,"manage"]}};
@@ -9,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-laudo-excluir',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-abertura-central-v2',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -2585,14 +2590,21 @@ function ensurePreviewSession(){
 }
 
 let nucleoSessionMemory=null;
+let nucleoSessionLastRaw;
+function nucleoParseSession(raw){
+  if(raw===nucleoSessionLastRaw)return nucleoSessionMemory;
+  const parsed=JSON.parse(raw);
+  nucleoSessionLastRaw=raw;nucleoSessionMemory=parsed||null;
+  return nucleoSessionMemory;
+}
 function getSession(){
   try{
     const raw=localStorage.getItem(SESSION_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed){nucleoSessionMemory=parsed;return parsed;}}
+    if(raw){const parsed=nucleoParseSession(raw);if(parsed)return parsed;}
   }catch(e){}
   try{
     const raw=sessionStorage.getItem(SESSION_KEY);
-    if(raw){const parsed=JSON.parse(raw);if(parsed){nucleoSessionMemory=parsed;return parsed;}}
+    if(raw){const parsed=nucleoParseSession(raw);if(parsed)return parsed;}
   }catch(e){}
   return nucleoSessionMemory;
 }
@@ -2600,6 +2612,7 @@ function setSession(data){
   // A sessão de login nunca pode falhar só porque o localStorage está cheio/bloqueado.
   nucleoSessionMemory=data||null;
   const raw=JSON.stringify(data||null);
+  nucleoSessionLastRaw=raw;
   let saved=false;
   try{localStorage.setItem(SESSION_KEY,raw);saved=true}catch(e){console.warn('localStorage da sessão indisponível:',e)}
   try{sessionStorage.setItem(SESSION_KEY,raw);saved=true}catch(e){console.warn('sessionStorage da sessão indisponível:',e)}
@@ -11655,7 +11668,7 @@ async function refreshLegacyRoCacheFromApi(force=false){
   finally{nucleoRoCentralRefreshPromise=null}
 }
 async function refreshRosFromOfficialSheets(force=false){
-  const splitNow=readImportedRosByOrigin();
+  const splitNow=force?{internas:[],externas:[]}:readImportedRosByOrigin();
   const s=getSavedIntegrationSettings();
   const periodFiltered=String(s.roSyncPeriod||'all')!=='all';
   const missingOrigin=!periodFiltered && (!splitNow.internas.length || !splitNow.externas.length);
@@ -13920,7 +13933,7 @@ function goStage(idx){
 }
 
 const stages=[{"id": "plan", "number": "01", "name": "Planejar", "subtitle": "Entender antes de agir", "items": [["p1", "Qual é o problema?", "Descrever de forma clara, objetiva e baseada em fatos."], ["p2", "Qual é o impacto do problema?", "Registrar custos, tempo, qualidade, segurança, produtividade, atrasos ou retrabalho."], ["p3", "Onde o problema ocorre?", "Identificar o local ou processo da ocorrência."], ["p4", "Com que frequência o problema ocorre?", "Registrar a frequência observada para direcionar a análise."], ["p5", "Quais são as possíveis causas do problema?", "Analisar pelo 5M: método, máquina, mão de obra, material e meio ambiente."], ["p6", "Por que essas causas ocorrem?", "Aplicar a técnica dos 5 Porquês."], ["p7", "Qual é a causa raiz que deve ser bloqueada?", "Validar a causa com dados, evidências ou observação do processo."], ["p8", "Qual é a meta SMART?", "Definir o resultado esperado para resolver o problema."], ["p9", "Qual é o prazo para atingir a meta?", "Registrar o prazo previsto para a conclusão das ações."], ["p10", "Qual é o status atual da meta?", "Informe se está planejada, em andamento ou concluída."], ["p11", "Qual ação será executada?", "Descrever o que será feito para bloquear ou eliminar a causa raiz."], ["p12", "Qual é o prazo da ação?", "Registrar quando a ação deve ser executada."], ["p13", "Quais setores são responsáveis pela ação?", "Selecione um ou mais setores que executarão ou acompanharão a ação."], ["p14", "Existe algum risco na implantação da ação?", "Registrar possíveis efeitos colaterais da solução."]]}, {"id": "do", "number": "02", "name": "Fazer", "subtitle": "Colocar o plano em prática", "items": [["d1", "A equipe foi treinada?", "Registrar o treinamento da equipe."], ["d2", "A equipe compreendeu a nova forma de trabalho?", "Confirmar se todos sabem o que e como fazer."], ["d3", "Qual é o status do treinamento?", "Registrar o status da pergunta anterior."], ["d4", "Os recursos necessários estão disponíveis?", "Verificar se a execução pode acontecer sem interrupções."], ["d5", "Como a execução será registrada?", "Registrar também os desvios do plano."]]}, {"id": "check", "number": "03", "name": "Checar", "subtitle": "Olhar para o que aconteceu", "items": [["c1", "Os resultados estão conforme a meta SMART?", "Verificar se o objetivo foi alcançado."], ["c2", "A causa raiz foi eliminada?", "Usar os dados coletados para validar a eficácia da ação."], ["c3", "Houve algum efeito colateral?", "Identificar consequências não previstas na mudança."]]}, {"id": "act", "number": "04", "name": "Agir", "subtitle": "Consolidar o próximo passo", "items": [["a1", "A melhoria foi padronizada?", "Registrar instrução de trabalho, check list ou treinamento."], ["a2", "Como o novo padrão será acompanhado?", "Definir o acompanhamento periódico."], ["a3", "A meta foi atingida?", "Se não foi atingida, registre onde ocorreu a falha: P, D ou C."], ["a4", "Quais foram as lições aprendidas?", "Registrar problemas e aprendizados para o próximo ciclo."]]}];const ros=[];
-restoreImportedRos();
+// R.O.s carregadas pela base central após login, sem migração síncrona na abertura.
 let detailReturnView='ros';
 let selected=ros[0],activeStage=0;let answers={};
 
@@ -15779,71 +15792,20 @@ initLogin();
 if(getSession())render();
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
-  await showNucleoLoading('Recuperando R.O.s salvas...','Carregando NÚCLEO');
-  try{
-    await bootstrapRoData();
-
-    updateNucleoLoading('Conferindo bases Interna e Externa...');
-
-    // Se o IndexedDB/cache não tiver as duas origens, completa pela API.
-    const hasInterna=ros.some(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna');
-    const hasExterna=ros.some(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa');
-    const startupSyncSettings=getSavedIntegrationSettings();
-    const startupPeriodFiltered=String(startupSyncSettings.roSyncPeriod||'all')!=='all';
-    if(!startupPeriodFiltered && (!hasInterna || !hasExterna)){
-      importedRoCacheNeedsRefresh=true;
-      updateNucleoLoading('Completando dados pela planilha...');
-    }
-
-    const RO_DATE_CACHE_VERSION='ro-date-source-v4';
-    const needDateRepair=localStorage.getItem('portal-sgq-ro-date-cache-version')!==RO_DATE_CACHE_VERSION;
-
-    if(needDateRepair){
-      importedRoCacheNeedsRefresh=true;
-      updateNucleoLoading('Atualizando datas diretamente da planilha de R.O.s...');
-    }
-
-    const repaired=false; // Evita carregar todas as R.O.s durante a abertura; use Sincronizar após entrar.
-
-    if(needDateRepair && repaired){
-      localStorage.setItem('portal-sgq-ro-date-cache-version',RO_DATE_CACHE_VERSION);
-      // Substitui também as datas antigas guardadas nos cards de SAC.
-      try{saveExternalRoControlsLocal(getExternalRoControls())}catch(e){}
-    }
-
-    console.info('NÚCLEO R.O.s em memória',{
-      total:ros.length,
-      interna:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna').length,
-      externa:ros.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa').length
-    });
-    // O cache acelera a abertura, mas a fonte oficial é a planilha central.
-    // Faça uma leitura real mesmo quando o cache já contém as duas origens.
-    if(getSession()?.authToken)void refreshLegacyRoCacheFromApi(true);
-
-    if(repaired){
-      try{refreshRoSummary()}catch(e){}
-      try{renderCurrentOverview()}catch(e){}
-      const triageView=document.getElementById('triageView');
-      if(triageView && !triageView.classList.contains('hidden')){
-        try{renderTriage()}catch(e){}
-      }
-      const indicatorView=document.getElementById('sgqIndicatorsView');
-      if(indicatorView && !indicatorView.classList.contains('hidden')){
-        try{renderSgqIndicators()}catch(e){}
-      }
-    }
-  }catch(e){
-    console.warn('Falha ao completar carga de R.O.s.',e);
-  }finally{
-    hideNucleoLoading(true);
-  }
+  if(!getSession()?.authToken)return;
+  // Não restaurar o cache legado automaticamente: ele pode bloquear a aba
+  // antes de o usuário conseguir entrar ou consultar a base central.
+  await showNucleoLoading('Carregando R.O.s da base central...','Carregando NÚCLEO');
+  try{await refreshLegacyRoCacheFromApi(true);}
+  catch(e){console.warn('Falha ao carregar R.O.s da base central.',e);}
+  finally{hideNucleoLoading(true);}
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
 try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
 
 try{
   // Força a normalização imediata do cache de SACs antigos.
-  saveExternalRoControlsLocal(getExternalRoControls());
+  if(getSession()?.authToken)saveExternalRoControlsLocal(getExternalRoControls());
 }catch(e){console.warn('Falha ao normalizar cache de SAC.',e)}
 
 try{refreshDocumentRequestAccess()}catch(e){}
@@ -16064,7 +16026,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-laudo-excluir',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-abertura-central-v2',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16607,12 +16569,25 @@ async function nucleoEnsureInlineTeam(){
  document.getElementById('overviewTeamFilters').innerHTML='<label>Setor <select id="overviewTeamSector" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.sector))].map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('')+'</select></label><label>Unidade <select id="overviewTeamUnit" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.unit))].map(t=>'<option value="'+escapeHtml(t)+'">'+(t==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label>';nucleoRenderInlineTeam(false);
  }catch(e){if(key===nucleoInlineTeamKey)document.getElementById('overviewTeamPeople').textContent='Não foi possível carregar a equipe. Clique em Atualizar para tentar novamente.';}finally{if(nucleoInlineTeamPromise===request)nucleoInlineTeamPromise=null;}
 }
+function nucleoUniqueTeamPeople(teams,sector,unit){
+ const people=new Map();
+ teams.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit)).forEach(t=>{
+  (t.people||[]).forEach(p=>{
+   const key=p.personKey||p.personId||JSON.stringify([p.name,p.description||'']);
+   let person=people.get(key);
+   if(!person){person={...p,teamMemberships:[]};people.set(key,person);}
+   person.manager=person.manager||p.manager;person.self=person.self||p.self;
+   if(!person.teamMemberships.some(m=>m.sector===t.sector&&m.unit===t.unit))person.teamMemberships.push({sector:t.sector,unit:t.unit});
+  });
+ });
+ return [...people.values()];
+}
 function nucleoRenderInlineTeam(expanded){
  const host=document.getElementById('overviewTeamPeople');if(!host)return;
  const sector=document.getElementById('overviewTeamSector')?.value||'all',unit=document.getElementById('overviewTeamUnit')?.value||'all';
- const people=nucleoInlineTeamData.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit)).flatMap(t=>t.people.map(p=>({...p,teamSector:t.sector,teamUnit:t.unit})));
+ const people=nucleoUniqueTeamPeople(nucleoInlineTeamData,sector,unit);
  const width=host.clientWidth||window.innerWidth,columns=width<520?1:width<850?2:4,limit=columns*2;
- host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div class="inline-team-person" style="background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<div><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante'))+'</div><div class="small">'+escapeHtml(p.teamSector)+' · '+(p.teamUnit==='filial'?'Filial':'Matriz')+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div></div>';}).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
+ host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div class="inline-team-person" style="background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<div><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante'))+'</div><div class="small">'+escapeHtml(p.teamMemberships.map(m=>m.sector+' · '+(m.unit==='filial'?'Filial':'Matriz')).join(' / '))+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div></div>';}).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
  const grid=host.querySelector('.inline-team-grid');grid.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
 }
 window.addEventListener('resize',()=>{clearTimeout(window.nucleoTeamResizeTimer);window.nucleoTeamResizeTimer=setTimeout(()=>{if(document.getElementById('overviewTeamPeople'))nucleoRenderInlineTeam(false);},150);});
