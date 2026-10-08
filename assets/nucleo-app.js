@@ -9,7 +9,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261007-reclamante-legado',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-equipe-unica',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -16064,7 +16064,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261007-reclamante-legado',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261008-equipe-unica',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
@@ -16607,12 +16607,25 @@ async function nucleoEnsureInlineTeam(){
  document.getElementById('overviewTeamFilters').innerHTML='<label>Setor <select id="overviewTeamSector" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.sector))].map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('')+'</select></label><label>Unidade <select id="overviewTeamUnit" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.unit))].map(t=>'<option value="'+escapeHtml(t)+'">'+(t==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label>';nucleoRenderInlineTeam(false);
  }catch(e){if(key===nucleoInlineTeamKey)document.getElementById('overviewTeamPeople').textContent='Não foi possível carregar a equipe. Clique em Atualizar para tentar novamente.';}finally{if(nucleoInlineTeamPromise===request)nucleoInlineTeamPromise=null;}
 }
+function nucleoUniqueTeamPeople(teams,sector,unit){
+ const people=new Map();
+ teams.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit)).forEach(t=>{
+  (t.people||[]).forEach(p=>{
+   const key=p.personKey||p.personId||JSON.stringify([p.name,p.description||'']);
+   let person=people.get(key);
+   if(!person){person={...p,teamMemberships:[]};people.set(key,person);}
+   person.manager=person.manager||p.manager;person.self=person.self||p.self;
+   if(!person.teamMemberships.some(m=>m.sector===t.sector&&m.unit===t.unit))person.teamMemberships.push({sector:t.sector,unit:t.unit});
+  });
+ });
+ return [...people.values()];
+}
 function nucleoRenderInlineTeam(expanded){
  const host=document.getElementById('overviewTeamPeople');if(!host)return;
  const sector=document.getElementById('overviewTeamSector')?.value||'all',unit=document.getElementById('overviewTeamUnit')?.value||'all';
- const people=nucleoInlineTeamData.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit)).flatMap(t=>t.people.map(p=>({...p,teamSector:t.sector,teamUnit:t.unit})));
+ const people=nucleoUniqueTeamPeople(nucleoInlineTeamData,sector,unit);
  const width=host.clientWidth||window.innerWidth,columns=width<520?1:width<850?2:4,limit=columns*2;
- host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div class="inline-team-person" style="background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<div><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante'))+'</div><div class="small">'+escapeHtml(p.teamSector)+' · '+(p.teamUnit==='filial'?'Filial':'Matriz')+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div></div>';}).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
+ host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div class="inline-team-person" style="background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<div><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante'))+'</div><div class="small">'+escapeHtml(p.teamMemberships.map(m=>m.sector+' · '+(m.unit==='filial'?'Filial':'Matriz')).join(' / '))+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div></div>';}).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
  const grid=host.querySelector('.inline-team-grid');grid.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
 }
 window.addEventListener('resize',()=>{clearTimeout(window.nucleoTeamResizeTimer);window.nucleoTeamResizeTimer=setTimeout(()=>{if(document.getElementById('overviewTeamPeople'))nucleoRenderInlineTeam(false);},150);});
