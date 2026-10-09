@@ -15915,12 +15915,27 @@ async function syncNow(){
   syncMsg.className='statusline';
 
   try{
+    // A sincronização manual não pode ficar presa esperando a carga automática
+    // disparada na abertura do sistema. Aguarda só alguns segundos e, se ela
+    // ainda estiver pendente, executa uma leitura manual independente.
     if(nucleoRoCentralRefreshPromise){
-      const ok=await nucleoRoCentralRefreshPromise;
-      if(!ok)throw new Error(document.getElementById('syncMsg')?.textContent||'A leitura central falhou.');
-      syncMsg.textContent='R.O.s e SACs atualizados pela base central.';
-      syncMsg.className='statusline okline';
-      return;
+      syncMsg.textContent='Existe uma carga automática em andamento. Conferindo...';
+      let autoResult='timeout';
+      try{
+        autoResult=await Promise.race([
+          Promise.resolve(nucleoRoCentralRefreshPromise).then(v=>v===true?'ok':'failed').catch(()=> 'failed'),
+          new Promise(resolve=>setTimeout(()=>resolve('timeout'),8000))
+        ]);
+      }catch(e){autoResult='failed'}
+      if(autoResult==='ok'){
+        syncMsg.textContent='R.O.s e SACs atualizados pela base central.';
+        syncMsg.className='statusline okline';
+        return;
+      }
+      // Não cancela a leitura automática antiga; apenas deixa de bloquear o botão.
+      // O applyImportedRos já substitui os dados de forma atômica ao final da leitura.
+      syncMsg.textContent='Iniciando uma nova leitura manual da base central...';
+      updateNucleoLoading('Iniciando uma nova leitura manual da base central...');
     }
     const data=await loadOfficialRosPaged(s,(loaded,total,message)=>{
       updateNucleoLoading(message);
@@ -15940,8 +15955,10 @@ async function syncNow(){
     syncMsg.textContent='Sincronização concluída: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
     syncMsg.className='statusline okline';
   }catch(err){
-    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+(err?.message||err)+'. Confira a execução do doGet no Apps Script e tente um período menor na Integração.';
+    const detail=String(err?.message||err||'Erro não informado');
+    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+'.';
     syncMsg.className='statusline';
+    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err);
   }finally{
     hideNucleoLoading();
     syncNow.inProgress=false;
