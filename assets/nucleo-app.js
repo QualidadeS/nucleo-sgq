@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261008-unificado-rnc2',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-suppliers-v1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -61,7 +61,9 @@ const ADMIN_OPERATIONAL_MODULES={
     desc:'Central para registrar e acompanhar RNCs de fornecedor. Reclamações de cliente continuam exclusivamente no fluxo de SAC. CAPA fica apenas como informação/filtro neste momento.',
     cards:[
       ['Nova RNC de fornecedor','Registrar uma RNC de fornecedor. O vínculo com R.O. é opcional.','new_rnc'],
-      ['Em tratamento','Visualizar, filtrar, enviar, acompanhar e excluir RNCs de fornecedor.','active']
+      ['Em tratamento','Visualizar, filtrar, enviar, acompanhar e excluir RNCs de fornecedor.','active'],
+      ['Fornecedores','Cadastre a ficha completa de cada fornecedor, contatos, compras e acordos.','suppliers'],
+      ['Indicadores de fornecedores','Compare volume comprado, RNCs, reincidência e acordos pendentes.','supplier_indicators']
     ]
   },
   documents:{
@@ -12572,6 +12574,7 @@ function collectAdminModuleForm(key,existing){
     rncNumber:(existing?.rncNumber||''),
     ncOrigin:val('admModNcOrigin')||(existing?.ncOrigin||''),
     supplier:val('admModSupplier')||(existing?.supplier||''),
+    supplierId:(getSupplierProfiles().find(p=>supplierNamesMatch(p,val('admModSupplier')||(existing?.supplier||'')))?.id||(existing?.supplierId||'')),
     relatedRo:val('admModRelatedRo')||(existing?.relatedRo||''),
     rncReporter:val('admModRncReporter'), rncShift:val('admModRncShift'), rncSupervisor:val('admModRncSupervisor'), rncManager:val('admModRncManager'),
     rncBlockItems:blockItems,
@@ -16216,7 +16219,7 @@ function nucleoApplyFeatureAccess(){
 
 function nucleoWorkspaceFeature(key,mode){
  const module=key==='nccapa'?'nc':key;
- const maps={documents:{new:'request',mine:'consult',standards:'standards',deliveries:'history',doc_analysis:'prepare',doc_preparation:'prepare',doc_ready:'deliver',history:'consult'},processes:{new:'edit',published:'consult',review:'review',pending:'review',history:'history',templates:'templates'},equipment:{new:'edit',active:'consult',pending:'pending',history:'history'},training:{new:'edit',active:'consult',pending:'pending',history:'history'},nccapa:{new_rnc:'edit',new_internal:'edit',active:'consult',history:'consult'}};
+ const maps={documents:{new:'request',mine:'consult',standards:'standards',deliveries:'history',doc_analysis:'prepare',doc_preparation:'prepare',doc_ready:'deliver',history:'consult'},processes:{new:'edit',published:'consult',review:'review',pending:'review',history:'history',templates:'templates'},equipment:{new:'edit',active:'consult',pending:'pending',history:'history'},training:{new:'edit',active:'consult',pending:'pending',history:'history'},nccapa:{new_rnc:'edit',new_internal:'edit',active:'consult',history:'consult',suppliers:'edit',supplier_indicators:'consult'}};
  return [module,maps[key]?.[mode]||'consult'];
 }
 function nucleoWorkspaceAllowed(key,mode){const [module,feature]=nucleoWorkspaceFeature(key,mode);return nucleoPersonFeatureCan(module,feature);}
@@ -16663,4 +16666,141 @@ async function nucleoPdcaDownloadModelPdf(p,open){
  const tab=open?window.open('about:blank','_blank'):null;if(open&&!tab){alert('Permita abrir a aba do PDF neste navegador.');return;}if(tab){tab.opener=null;tab.document.body.textContent='Gerando PDF com o modelo da unidade…';}
  try{await showNucleoLoading('Gerando PDF do PDCA…','Aplicando o modelo salvo para esta unidade.');const result=await portalJsonp({acao:'portal_pdca_model_pdf',id:p.id},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');const blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'}),url=URL.createObjectURL(blob);if(tab){if(!tab.closed)tab.location.replace(url);}else{const a=document.createElement('a');a.href=url;a.download=result.fileName||'PDCA.pdf';document.body.appendChild(a);a.click();a.remove();}setTimeout(()=>URL.revokeObjectURL(url),300000);
  }catch(error){if(tab&&!tab.closed){tab.document.body.textContent=error.message;}else alert(error.message);}finally{hideNucleoLoading(true);}
+}
+
+
+/* ================================================================
+   CONTROLE DE FORNECEDORES — NÃO CONFORMIDADES
+   Perfis são armazenados na coleção admin_modules com recordType
+   supplier_profile para aproveitar sincronização, escopo e auditoria.
+   ================================================================ */
+function supplierMoney(v){
+  const n=Number(v||0);return Number.isFinite(n)?n:0;
+}
+function supplierMoneyBR(v){
+  try{return supplierMoney(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});}catch(e){return 'R$ '+supplierMoney(v).toFixed(2)}
+}
+function supplierNamesMatch(profile,name){
+  const q=normalizeAnswer(name||'');if(!q)return false;
+  return [profile?.supplier,profile?.title,profile?.legalName,profile?.tradeName].some(v=>normalizeAnswer(v||'')===q);
+}
+function getSupplierProfiles(){
+  return getAdminModuleRecords().filter(r=>r.module==='nccapa'&&r.recordType==='supplier_profile'&&nucleoManagerScopeAllows(r)).slice().sort((a,b)=>String(a.supplier||a.title||'').localeCompare(String(b.supplier||b.title||''),'pt-BR',{sensitivity:'base'}));
+}
+function supplierDatalistOptions(){return getSupplierProfiles().map(p=>`<option value="${escapeHtml(p.supplier||p.title||'')}">${escapeHtml(p.cnpj||p.category||'')}</option>`).join('')}
+function supplierRncs(profile){
+  if(!profile)return[];
+  return getAdminModuleRecords().filter(r=>r.module==='nccapa'&&r.recordType!=='supplier_profile'&&ncCapaTypeKey(r)==='supplier'&&(
+    (profile.id&&String(r.supplierId||'')===String(profile.id))||supplierNamesMatch(profile,r.supplier)
+  )).slice().sort((a,b)=>String(b.eventDate||b.createdAt||'').localeCompare(String(a.eventDate||a.createdAt||'')));
+}
+function supplierPurchasesTotal(profile,monthPrefix=''){
+  return (profile?.purchases||[]).filter(x=>!monthPrefix||String(x.month||'').startsWith(monthPrefix)).reduce((t,x)=>t+supplierMoney(x.amount),0);
+}
+function supplierOpenAgreements(profile){
+  const now=new Date().toISOString().slice(0,10);
+  return (profile?.agreements||[]).filter(a=>!['done','cancelled'].includes(String(a.status||''))).map(a=>({...a,overdue:!!a.dueDate&&a.dueDate<now}));
+}
+function supplierIndicator(profile){
+  const rncs=supplierRncs(profile), total=supplierPurchasesTotal(profile);
+  return total>0?(rncs.length/total*100000):null;
+}
+function supplierReincidenceCount(profile){
+  const counts={};supplierRncs(profile).forEach(r=>{const k=normalizeAnswer(r.rncProductCode||r.rncProduct||r.title||'geral');counts[k]=(counts[k]||0)+1});
+  return Object.values(counts).reduce((n,c)=>n+(c>1?c-1:0),0);
+}
+function supplierStatusLabel(v){return ({active:'Ativo',inactive:'Inativo',blocked:'Bloqueado',qualification:'Em homologação'})[v]||'Ativo'}
+function supplierAgreementStatusLabel(v){return ({open:'Aberto',progress:'Em andamento',done:'Cumprido',overdue:'Vencido',cancelled:'Cancelado'})[v]||'Aberto'}
+
+function renderSupplierWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;
+  const profiles=getSupplierProfiles();
+  host.innerHTML=`<div style="grid-column:1/-1">
+    <button class="btn secondary" type="button" onclick="showAdminOperationalModule('nccapa')">← Voltar ao módulo</button>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px">
+      <div><h3 style="margin:0">Fornecedores</h3><div class="small" style="margin-top:5px">Cada fornecedor tem sua própria ficha com contatos, compras, acordos, RNCs e indicadores.</div></div>
+      <button class="btn primary" type="button" onclick="openSupplierProfile()">＋ Novo fornecedor</button>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:16px">
+      <label style="grid-column:span 2"><span class="small">Buscar</span><input id="supplierSearch" placeholder="Fornecedor, CNPJ, categoria, produto..." oninput="renderSupplierList()"></label>
+      <label><span class="small">Situação</span><select id="supplierStatusFilter" onchange="renderSupplierList()"><option value="all">Todos</option><option value="active">Ativos</option><option value="qualification">Em homologação</option><option value="blocked">Bloqueados</option><option value="inactive">Inativos</option></select></label>
+    </div>
+    <div id="supplierList" style="margin-top:14px"></div>
+  </div>`;
+  renderSupplierList();
+}
+function renderSupplierList(){
+  const host=document.getElementById('supplierList');if(!host)return;
+  const q=normalizeAnswer(document.getElementById('supplierSearch')?.value||''),st=document.getElementById('supplierStatusFilter')?.value||'all';
+  const rows=getSupplierProfiles().filter(p=>{
+    if(st!=='all'&&String(p.supplierStatus||'active')!==st)return false;
+    if(q&&!normalizeAnswer([p.supplier,p.legalName,p.tradeName,p.cnpj,p.category,p.products,p.notes].join(' ')).includes(q))return false;
+    return true;
+  });
+  host.innerHTML=rows.length?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:12px">${rows.map(p=>{
+    const rncs=supplierRncs(p),purchase=supplierPurchasesTotal(p),idx=supplierIndicator(p),agreements=supplierOpenAgreements(p),over=agreements.filter(a=>a.overdue).length;
+    return `<button type="button" class="card" onclick="openSupplierProfile('${escapeHtml(p.id)}')" style="padding:16px;text-align:left;cursor:pointer;background:#fff">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><b style="font-size:15px">${escapeHtml(p.supplier||p.title||'Fornecedor')}</b><div class="small" style="margin-top:4px">${escapeHtml(p.category||p.cnpj||'Sem categoria')}</div></div><span class="pill">${escapeHtml(supplierStatusLabel(p.supplierStatus))}</span></div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px">
+        <div><span class="small">Comprado</span><b style="display:block;margin-top:3px">${supplierMoneyBR(purchase)}</b></div>
+        <div><span class="small">RNCs</span><b style="display:block;margin-top:3px">${rncs.length}</b></div>
+        <div><span class="small">Índice / R$ 100 mil</span><b style="display:block;margin-top:3px">${idx==null?'—':idx.toFixed(2)}</b></div>
+        <div><span class="small">Acordos pendentes</span><b style="display:block;margin-top:3px">${agreements.length}${over?` · ${over} venc.`:''}</b></div>
+      </div>
+      <span style="display:block;color:#1455ff;font-size:12px;margin-top:14px">Abrir ficha do fornecedor →</span>
+    </button>`}).join('')}</div>`:'<div class="card" style="padding:24px"><b>Nenhum fornecedor cadastrado.</b><div class="small" style="margin-top:5px">Cadastre o primeiro fornecedor para começar o histórico.</div></div>';
+}
+
+function supplierContactRow(x={}){return `<div class="supplier-contact-row" data-id="${escapeHtml(x.id||('CT-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)))}" style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><input data-f="name" placeholder="Nome" value="${escapeHtml(x.name||'')}"><input data-f="role" placeholder="Função / área" value="${escapeHtml(x.role||'')}"><input data-f="email" placeholder="E-mail" value="${escapeHtml(x.email||'')}"><input data-f="phone" placeholder="Telefone" value="${escapeHtml(x.phone||'')}"><input data-f="whatsapp" placeholder="WhatsApp" value="${escapeHtml(x.whatsapp||'')}"><button class="btn danger" type="button" onclick="this.closest('.supplier-contact-row').remove()">Remover</button></div>`}
+function supplierPurchaseRow(x={}){return `<div class="supplier-purchase-row" data-id="${escapeHtml(x.id||('CP-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)))}" style="border:1px solid #e3e8f1;border-radius:10px;padding:10px;display:grid;grid-template-columns:130px 150px 110px 120px 100px minmax(160px,1fr) auto;gap:8px;align-items:end"><label><span class="small">Mês</span><input data-f="month" type="month" value="${escapeHtml(x.month||'')}"></label><label><span class="small">Valor comprado (R$)</span><input data-f="amount" type="number" step="0.01" min="0" value="${escapeHtml(x.amount||'')}"></label><label><span class="small">Pedidos/NFs</span><input data-f="orders" type="number" min="0" value="${escapeHtml(x.orders||'')}"></label><label><span class="small">Qtd. recebida</span><input data-f="quantity" type="number" step="0.001" min="0" value="${escapeHtml(x.quantity||'')}"></label><label><span class="small">Unidade</span><input data-f="unit" placeholder="kg, un..." value="${escapeHtml(x.unit||'')}"></label><label><span class="small">Observação</span><input data-f="notes" value="${escapeHtml(x.notes||'')}"></label><button class="btn danger" type="button" onclick="this.closest('.supplier-purchase-row').remove()">×</button></div>`}
+function supplierAgreementRow(x={}){return `<div class="supplier-agreement-row" data-id="${escapeHtml(x.id||('AC-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)))}" style="border:1px solid #dfe6ef;border-radius:11px;padding:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px"><label><span class="small">Data</span><input data-f="date" type="date" value="${escapeHtml(x.date||'')}"></label><label style="grid-column:span 2"><span class="small">Assunto</span><input data-f="subject" placeholder="Ex.: alteração de embalagem" value="${escapeHtml(x.subject||'')}"></label><label style="grid-column:1/-1"><span class="small">Compromisso / acordo</span><textarea data-f="commitment" placeholder="O que ficou combinado">${escapeHtml(x.commitment||'')}</textarea></label><label><span class="small">Responsável</span><input data-f="responsible" value="${escapeHtml(x.responsible||'')}"></label><label><span class="small">Prazo</span><input data-f="dueDate" type="date" value="${escapeHtml(x.dueDate||'')}"></label><label><span class="small">Situação</span><select data-f="status"><option value="open" ${x.status==='open'||!x.status?'selected':''}>Aberto</option><option value="progress" ${x.status==='progress'?'selected':''}>Em andamento</option><option value="done" ${x.status==='done'?'selected':''}>Cumprido</option><option value="cancelled" ${x.status==='cancelled'?'selected':''}>Cancelado</option></select></label><label style="grid-column:span 2"><span class="small">Evidência / referência</span><input data-f="evidence" value="${escapeHtml(x.evidence||'')}"></label><div style="display:flex;align-items:end;justify-content:flex-end"><button class="btn danger" type="button" onclick="this.closest('.supplier-agreement-row').remove()">Remover acordo</button></div></div>`}
+function supplierReadRows(selector,fields){return [...document.querySelectorAll(selector)].map(row=>{const o={id:row.dataset.id||('X-'+Date.now())};fields.forEach(f=>o[f]=String(row.querySelector(`[data-f="${f}"]`)?.value||'').trim());return o}).filter(o=>fields.some(f=>o[f]))}
+function supplierAddContact(){document.getElementById('supplierContacts')?.insertAdjacentHTML('beforeend',supplierContactRow())}
+function supplierAddPurchase(){document.getElementById('supplierPurchases')?.insertAdjacentHTML('beforeend',supplierPurchaseRow({month:new Date().toISOString().slice(0,7)}))}
+function supplierAddAgreement(){document.getElementById('supplierAgreements')?.insertAdjacentHTML('beforeend',supplierAgreementRow({date:new Date().toISOString().slice(0,10),status:'open'}))}
+function supplierShowTab(tab){document.querySelectorAll('.supplier-tab-panel').forEach(x=>x.classList.add('hidden'));document.getElementById('supplierTab-'+tab)?.classList.remove('hidden');document.querySelectorAll('[data-supplier-tab]').forEach(b=>b.classList.toggle('primary',b.dataset.supplierTab===tab));}
+
+function openSupplierProfile(id=''){
+  const host=document.getElementById('adminModuleContent');if(!host)return;
+  const p=id?getSupplierProfiles().find(x=>String(x.id)===String(id)):null;
+  const rncs=p?supplierRncs(p):[],idx=p?supplierIndicator(p):null,purchase=p?supplierPurchasesTotal(p):0,agreements=p?supplierOpenAgreements(p):[];
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="renderSupplierWorkspace()">← Voltar aos fornecedores</button>
+    <div class="card" style="margin-top:14px;padding:20px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap"><div><div class="small" style="letter-spacing:.12em;color:#1455ff;font-weight:700">FICHA DO FORNECEDOR</div><h3 style="margin:5px 0 0">${escapeHtml(p?.supplier||'Novo fornecedor')}</h3></div><div style="display:flex;gap:8px"><button class="btn primary" type="button" onclick="saveSupplierProfile('${escapeHtml(p?.id||'')}')">Salvar fornecedor</button>${p?`<button class="btn danger" type="button" onclick="deleteSupplierProfile('${escapeHtml(p.id)}')">Excluir</button>`:''}</div></div>
+      ${p?`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;margin-top:16px"><div class="card" style="padding:12px"><span class="small">Comprado</span><b style="display:block;font-size:18px;margin-top:4px">${supplierMoneyBR(purchase)}</b></div><div class="card" style="padding:12px"><span class="small">RNCs</span><b style="display:block;font-size:18px;margin-top:4px">${rncs.length}</b></div><div class="card" style="padding:12px"><span class="small">Índice / R$ 100 mil</span><b style="display:block;font-size:18px;margin-top:4px">${idx==null?'—':idx.toFixed(2)}</b></div><div class="card" style="padding:12px"><span class="small">Reincidências</span><b style="display:block;font-size:18px;margin-top:4px">${supplierReincidenceCount(p)}</b></div><div class="card" style="padding:12px"><span class="small">Acordos pendentes</span><b style="display:block;font-size:18px;margin-top:4px">${agreements.length}</b></div></div>`:''}
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:18px;border-bottom:1px solid #e4e9f0;padding-bottom:10px"><button class="btn secondary primary" data-supplier-tab="general" onclick="supplierShowTab('general')">Visão geral</button><button class="btn secondary" data-supplier-tab="contacts" onclick="supplierShowTab('contacts')">Contatos</button><button class="btn secondary" data-supplier-tab="purchases" onclick="supplierShowTab('purchases')">Compras</button><button class="btn secondary" data-supplier-tab="agreements" onclick="supplierShowTab('agreements')">Acordos</button><button class="btn secondary" data-supplier-tab="rncs" onclick="supplierShowTab('rncs')">RNCs</button><button class="btn secondary" data-supplier-tab="indicators" onclick="supplierShowTab('indicators')">Indicadores</button></div>
+      <div id="supplierTab-general" class="supplier-tab-panel" style="margin-top:16px"><div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr));gap:10px"><label><span class="small">Nome do fornecedor *</span><input id="supplierName" value="${escapeHtml(p?.supplier||'')}"></label><label><span class="small">Razão social</span><input id="supplierLegalName" value="${escapeHtml(p?.legalName||'')}"></label><label><span class="small">CNPJ / identificação</span><input id="supplierCnpj" value="${escapeHtml(p?.cnpj||'')}"></label><label><span class="small">Código interno</span><input id="supplierCode" value="${escapeHtml(p?.supplierCode||'')}"></label><label><span class="small">Categoria</span><input id="supplierCategory" value="${escapeHtml(p?.category||'')}"></label><label><span class="small">Situação</span><select id="supplierStatus"><option value="active" ${!p||p?.supplierStatus==='active'?'selected':''}>Ativo</option><option value="qualification" ${p?.supplierStatus==='qualification'?'selected':''}>Em homologação</option><option value="blocked" ${p?.supplierStatus==='blocked'?'selected':''}>Bloqueado</option><option value="inactive" ${p?.supplierStatus==='inactive'?'selected':''}>Inativo</option></select></label><label><span class="small">Início do relacionamento</span><input id="supplierStartDate" type="date" value="${escapeHtml(p?.startDate||'')}"></label><label><span class="small">Comprador / responsável SETA</span><input id="supplierBuyer" value="${escapeHtml(p?.buyer||'')}"></label><label><span class="small">Condição de pagamento</span><input id="supplierPaymentTerms" value="${escapeHtml(p?.paymentTerms||'')}"></label><label style="grid-column:1/-1"><span class="small">Produtos / materiais / serviços fornecidos</span><textarea id="supplierProducts">${escapeHtml(p?.products||'')}</textarea></label><label style="grid-column:1/-1"><span class="small">Observações</span><textarea id="supplierNotes">${escapeHtml(p?.notes||'')}</textarea></label></div></div>
+      <div id="supplierTab-contacts" class="supplier-tab-panel hidden" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Meios de contato</b><div class="small">Cadastre quantas pessoas forem necessárias.</div></div><button class="btn secondary" type="button" onclick="supplierAddContact()">＋ Contato</button></div><div id="supplierContacts" style="display:grid;gap:9px;margin-top:12px">${(p?.contacts||[]).map(supplierContactRow).join('')}</div></div>
+      <div id="supplierTab-purchases" class="supplier-tab-panel hidden" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Compras por mês</b><div class="small">Use o valor comprado para comparar exposição e não conformidades.</div></div><button class="btn secondary" type="button" onclick="supplierAddPurchase()">＋ Mês</button></div><div id="supplierPurchases" style="display:grid;gap:9px;margin-top:12px;overflow:auto">${(p?.purchases||[]).map(supplierPurchaseRow).join('')}</div></div>
+      <div id="supplierTab-agreements" class="supplier-tab-panel hidden" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b>Acordos com o fornecedor</b><div class="small">Registre compromissos, prazo, responsável e evidência.</div></div><button class="btn secondary" type="button" onclick="supplierAddAgreement()">＋ Acordo</button></div><div id="supplierAgreements" style="display:grid;gap:10px;margin-top:12px">${(p?.agreements||[]).map(supplierAgreementRow).join('')}</div></div>
+      <div id="supplierTab-rncs" class="supplier-tab-panel hidden" style="margin-top:16px">${p?renderSupplierRncsHtml(p):'<div class="small">Salve o fornecedor primeiro para vincular RNCs.</div>'}</div>
+      <div id="supplierTab-indicators" class="supplier-tab-panel hidden" style="margin-top:16px">${p?renderSupplierIndicatorsHtml(p):'<div class="small">Os indicadores aparecem depois que o fornecedor for salvo.</div>'}</div>
+    </div></div>`;
+  if(!(p?.contacts||[]).length)supplierAddContact();
+  if(!(p?.purchases||[]).length)supplierAddPurchase();
+  if(!(p?.agreements||[]).length)supplierAddAgreement();
+}
+function renderSupplierRncsHtml(p){const rows=supplierRncs(p);return `<div><b>Não conformidades vinculadas</b><div class="small" style="margin-top:4px">O vínculo usa o cadastro escolhido na RNC e também reconhece o mesmo nome de fornecedor.</div></div><div style="overflow:auto;margin-top:12px">${rows.length?`<table style="width:100%"><thead><tr><th>RNC</th><th>Data</th><th>Desvio / item</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${escapeHtml(r.rncNumber||'—')}</b></td><td>${escapeHtml(adminModuleDate(r.eventDate||r.createdAt))}</td><td>${escapeHtml(r.rncProduct||r.title||r.rncSummary||'—')}</td><td><span class="pill">${escapeHtml(adminModuleStatusLabel(r.status))}</span></td><td><button class="btn secondary" type="button" onclick="editAdminOperationalRecord('${escapeHtml(r.id)}')">Abrir</button></td></tr>`).join('')}</tbody></table>`:'<div class="card" style="padding:18px">Nenhuma RNC vinculada ainda.</div>'}</div>`}
+function renderSupplierIndicatorsHtml(p){const rncs=supplierRncs(p),purchases=p.purchases||[],months=[...new Set([...purchases.map(x=>x.month).filter(Boolean),...rncs.map(r=>String(r.eventDate||r.createdAt||'').slice(0,7)).filter(Boolean)])].sort().reverse();return `<div><b>Indicadores</b><div class="small" style="margin-top:4px">Índice principal de teste: quantidade de RNC ÷ valor comprado × R$ 100.000.</div></div><div style="overflow:auto;margin-top:12px"><table style="width:100%"><thead><tr><th>Mês</th><th>Comprado</th><th>RNCs</th><th>Índice / R$ 100 mil</th></tr></thead><tbody>${months.length?months.map(m=>{const buy=supplierPurchasesTotal(p,m),n=rncs.filter(r=>String(r.eventDate||r.createdAt||'').slice(0,7)===m).length,idx=buy>0?n/buy*100000:null;return `<tr><td>${escapeHtml(m.split('-').reverse().join('/'))}</td><td>${supplierMoneyBR(buy)}</td><td>${n}</td><td><b>${idx==null?'—':idx.toFixed(2)}</b></td></tr>`}).join(''):'<tr><td colspan="4">Sem dados mensais.</td></tr>'}</tbody></table></div>`}
+function collectSupplierProfile(existing){
+  const v=id=>String(document.getElementById(id)?.value||'').trim(),now=new Date().toISOString();
+  return {...(existing||{}),id:existing?.id||('SUP-'+Date.now()),module:'nccapa',recordType:'supplier_profile',ncType:'supplier_profile',title:v('supplierName'),supplier:v('supplierName'),legalName:v('supplierLegalName'),cnpj:v('supplierCnpj'),supplierCode:v('supplierCode'),category:v('supplierCategory'),supplierStatus:v('supplierStatus')||'active',startDate:v('supplierStartDate'),buyer:v('supplierBuyer'),paymentTerms:v('supplierPaymentTerms'),products:v('supplierProducts'),notes:v('supplierNotes'),contacts:supplierReadRows('.supplier-contact-row',['name','role','email','phone','whatsapp']),purchases:supplierReadRows('.supplier-purchase-row',['month','amount','orders','quantity','unit','notes']),agreements:supplierReadRows('.supplier-agreement-row',['date','subject','commitment','responsible','dueDate','status','evidence']),unit:existing?.unit||explicitPortalUnit(getSession()?.unit)||'matriz',status:'active',createdAt:existing?.createdAt||now,createdBy:existing?.createdBy||getSession()?.name||'SGQ',updatedAt:now,updatedBy:getSession()?.name||'SGQ'};
+}
+async function saveSupplierProfile(id=''){
+  if(!nucleoFeatureRequire('nc','edit'))return;
+  const existing=id?getSupplierProfiles().find(x=>String(x.id)===String(id)):null,p=collectSupplierProfile(existing);
+  if(!p.supplier)return alert('Informe o nome do fornecedor.');
+  let all=getAdminModuleRecords(),i=all.findIndex(x=>String(x.id)===String(p.id));if(i>=0)all[i]=p;else all.push(p);saveAdminModuleRecords(all);
+  try{if(portalBackendEnabled())await portalBackendSaveConfirmedPost('admin_modules',p.id,p,90000);else portalBackendSave('admin_modules',p.id,p);}catch(e){alert('O fornecedor ficou salvo neste navegador, mas a base central não confirmou: '+(e.message||e));return}
+  openSupplierProfile(p.id);
+}
+async function deleteSupplierProfile(id){
+  if(!nucleoFeatureRequire('nc','delete'))return;if(!confirm('Excluir este fornecedor? As RNCs existentes não serão apagadas.'))return;
+  saveAdminModuleRecords(getAdminModuleRecords().filter(x=>String(x.id)!==String(id)));
+  try{if(portalBackendEnabled())await portalBackendDeleteConfirmed('admin_modules',id);else portalBackendDelete('admin_modules',id);}catch(e){alert('Não foi possível confirmar a exclusão na base central: '+(e.message||e));return}
+  renderSupplierWorkspace();
+}
+function renderSupplierIndicatorsWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;const rows=getSupplierProfiles().map(p=>({p,buy:supplierPurchasesTotal(p),rncs:supplierRncs(p).length,idx:supplierIndicator(p),reinc:supplierReincidenceCount(p),agreements:supplierOpenAgreements(p)})).sort((a,b)=>(b.idx??-1)-(a.idx??-1));
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('nccapa')">← Voltar ao módulo</button><div class="card" style="margin-top:14px;padding:20px"><div><h3 style="margin:0">Indicadores de fornecedores</h3><div class="small" style="margin-top:5px">Comparação entre volume comprado, RNCs, reincidências e acordos pendentes.</div></div><div style="overflow:auto;margin-top:16px">${rows.length?`<table style="width:100%"><thead><tr><th>Fornecedor</th><th>Comprado</th><th>RNCs</th><th>Índice / R$ 100 mil</th><th>Reincid.</th><th>Acordos pend.</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${escapeHtml(x.p.supplier||'Fornecedor')}</b><div class="small">${escapeHtml(x.p.category||'')}</div></td><td>${supplierMoneyBR(x.buy)}</td><td>${x.rncs}</td><td><b>${x.idx==null?'—':x.idx.toFixed(2)}</b></td><td>${x.reinc}</td><td>${x.agreements.length}</td><td><button class="btn secondary" onclick="openSupplierProfile('${escapeHtml(x.p.id)}')">Abrir</button></td></tr>`).join('')}</tbody></table>`:'<div>Nenhum fornecedor cadastrado.</div>'}</div></div></div>`;
 }
