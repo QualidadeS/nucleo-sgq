@@ -986,12 +986,31 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
      layout.repeatHeader=st.repeat!==false;const repeat=dialog.querySelector('#umRepeatHeader');if(repeat)repeat.checked=layout.repeatHeader;
      const ident=st.identity||{},set=(id,val)=>{const el=dialog.querySelector('#'+id);if(el&&val!==undefined&&val!==null)el.value=val;};
      set('ud_accent',ident.accent);set('ud_textColor',ident.textColor);set('ud_borderColor',ident.borderColor);set('ud_borderWidth',ident.borderWidth);set('ud_titleSize',ident.titleSize);set('ud_logoWidth',ident.logoWidth);set('ud_align',ident.align);
-     let appliedLogoId=String(ident.logoFileId||'');
-     if(!appliedLogoId&&ident.logoDataUrl&&/^data:image\/(png|jpeg);base64,/i.test(String(ident.logoDataUrl))){
+     const sourceLogoId=String(ident.logoFileId||'');
+     let appliedLogoId=sourceLogoId;
+     // A logo de um padrão pode ter sido salva pelo editor da RNC em outra pasta do Drive.
+     // Ao aplicar o padrão em R.O./SAC/PDCA, sempre clonamos a imagem para a pasta de logos
+     // da unidade/modelos operacionais. Assim o documento recebe uma cópia própria e editável
+     // e não falha na validação com “Logo não pertence aos modelos desta unidade”.
+     if(ident.logoDataUrl&&/^data:image\/(png|jpeg);base64,/i.test(String(ident.logoDataUrl))){
       const m=String(ident.logoDataUrl).match(/^data:(image\/(?:png|jpeg));base64,(.+)$/i);
-      if(m){const up=await nucleoAdminDriveMutation('nucleo_drive_process_formats',{unit,kind:'logo',modelKind:kind,fileData:m[2]});appliedLogoId=String(up.logoFileId||'');if(appliedLogoId){logoPreview=String(ident.logoDataUrl);imagePreviews[appliedLogoId]=logoPreview;standardImagePreviews[appliedLogoId]=logoPreview;}}
+      if(m){
+       const up=await nucleoAdminDriveMutation('nucleo_drive_process_formats',{unit,kind:'logo',modelKind:kind,fileData:m[2]});
+       const clonedId=String(up.logoFileId||'');
+       if(clonedId){appliedLogoId=clonedId;logoPreview=String(ident.logoDataUrl);imagePreviews[clonedId]=logoPreview;standardImagePreviews[clonedId]=logoPreview;}
+      }
      }
-     if(appliedLogoId){model.design={...(model.design||{}),logoFileId:appliedLogoId};if(standardImagePreviews[appliedLogoId])logoPreview=standardImagePreviews[appliedLogoId];for(const row of layout.headerGrid)for(const c of row.cells){if(c.__needsRncLogo||(!c.imageFileId&&c.type==='text'&&!c.source&&!c.text&&Number(c.width)<=30)){c.type='image';c.source='';c.imageFileId=appliedLogoId;c.text='';delete c.__needsRncLogo;break;}}}
+     if(appliedLogoId){
+      model.design={...(model.design||{}),logoFileId:appliedLogoId};
+      if(standardImagePreviews[appliedLogoId])logoPreview=standardImagePreviews[appliedLogoId];
+      let placed=false;
+      for(const row of layout.headerGrid)for(const c of row.cells){
+       if(c.__needsRncLogo||(sourceLogoId&&c.imageFileId===sourceLogoId)||(!c.imageFileId&&c.type==='text'&&!c.source&&!c.text&&Number(c.width)<=30)){
+        c.type='image';c.source='';c.imageFileId=appliedLogoId;c.text='';delete c.__needsRncLogo;placed=true;
+       }
+      }
+      if(!placed&&layout.headerGrid[0]?.cells?.[0]&&logoPreview){const c=layout.headerGrid[0].cells[0];c.type='image';c.source='';c.imageFileId=appliedLogoId;c.text='';}
+     }
      region='header';selectedId=layout.headerGrid[0]?.cells[0]?.id||'';renderAll();showStandardFeedback('Cabeçalho padrão aplicado como cópia editável. Você pode alterar textos, campos, bordas e medidas sem mudar o padrão salvo.','success');
      if(button){button.textContent='✓ Cabeçalho aplicado';setTimeout(()=>{button.textContent=original},1800);}
     }catch(err){showStandardFeedback('Não foi possível aplicar o cabeçalho padrão: '+(err?.message||err),'error');if(button)button.textContent=original;}finally{if(button)button.disabled=false;}
