@@ -815,24 +815,49 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
    ['umTitle','umFont','umMargin','umFooter','umEvidence','umRepeatHeader','umRepeatFooter','ud_header','ud_code','ud_before','ud_after','ud_orientation','ud_align','ud_titleSize','ud_logoWidth','ud_accent','ud_textColor','ud_borderColor','ud_borderWidth'].forEach(id=>{const el=dialog.querySelector('#'+id);if(el){el.oninput=()=>{layout.repeatHeader=dialog.querySelector('#umRepeatHeader').checked;layout.repeatFooter=dialog.querySelector('#umRepeatFooter').checked;renderPreview()};el.onchange=el.oninput;}});
    dialog.querySelector('#umLogo').onchange=async e=>{const f=e.target.files[0];if(!f)return;const status=dialog.querySelector('#umStatus');try{status.textContent='Enviando logo para a base central…';await ensureLogoUploaded(f);status.textContent='Logo carregada. Selecione uma célula e clique em “Colocar logo nesta célula”.';renderAll();}catch(err){status.textContent=err.message;}finally{e.target.value='';}};
    dialog.querySelector('#umRemoveLogo').onclick=()=>{const oldId=String(model.design?.logoFileId||'');pendingLogo=null;logoPreview='';model.design={...(model.design||{}),logoFileId:''};if(oldId)for(const r of ['header','body','footer'])for(const row of layout[r+'Grid'])for(const c of row.cells)if(c.imageFileId===oldId){c.type='text';c.source='';c.imageFileId='';c.text='';}renderAll();};
-   const applyHeaderStandard=()=>{
-    const st=standards.header;
-    layout.headerGrid=normalizeGrid(st?.grid?.length?st.grid:standardHeaderGrid());
-    if(st){layout.repeatHeader=st.repeat!==false;const repeat=dialog.querySelector('#umRepeatHeader');if(repeat)repeat.checked=layout.repeatHeader;const ident=st.identity||{};const set=(id,val)=>{const el=dialog.querySelector('#'+id);if(el&&val!==undefined&&val!==null)el.value=val;};set('ud_accent',ident.accent);set('ud_textColor',ident.textColor);set('ud_borderColor',ident.borderColor);set('ud_borderWidth',ident.borderWidth);set('ud_titleSize',ident.titleSize);set('ud_logoWidth',ident.logoWidth);set('ud_align',ident.align);if(ident.logoFileId){model.design={...(model.design||{}),logoFileId:ident.logoFileId};if(standardImagePreviews[ident.logoFileId])logoPreview=standardImagePreviews[ident.logoFileId];}}
-    region='header';selectedId=layout.headerGrid[0]?.cells[0]?.id||'';renderAll();dialog.querySelector('#umStatus').textContent=st?'Cabeçalho padrão da unidade aplicado. Salve o modelo para tornar esta cópia definitiva neste documento.':'Cabeçalho inicial aplicado. Ainda não existe padrão salvo para esta unidade.';
+   const reloadStandards=async()=>{
+    const check=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind},60000);
+    if(!check?.sucesso)throw new Error(check?.erro||'Não foi possível ler os padrões da base central.');
+    hydrateStandards(check.documentFormatStandards||{});
+    standardImagePreviews=check.standardImagePreviews||{};
+    Object.assign(imagePreviews,standardImagePreviews);
+    return standards;
    };
-   const applyFooterStandard=()=>{
-    const st=standards.footer;
-    layout.footerGrid=normalizeGrid(st?.grid?.length?st.grid:standardFooterGrid());
-    if(st){layout.repeatFooter=st.repeat!==false;const repeat=dialog.querySelector('#umRepeatFooter');if(repeat)repeat.checked=layout.repeatFooter;}
-    region='footer';selectedId=layout.footerGrid[0]?.cells[0]?.id||'';renderAll();dialog.querySelector('#umStatus').textContent=st?'Rodapé padrão da unidade aplicado. Salve o modelo para tornar esta cópia definitiva neste documento.':'Rodapé inicial aplicado. Ainda não existe padrão salvo para esta unidade.';
+   const applyHeaderStandard=async(button)=>{
+    const original=button?.textContent||'Aplicar cabeçalho padrão';
+    try{
+     if(button){button.disabled=true;button.textContent='Aplicando…';}
+     showStandardFeedback('Buscando cabeçalho padrão na base central…','info');
+     await reloadStandards();
+     const st=standards.header;if(!st||!Array.isArray(st.grid)||!st.grid.length)throw new Error('Ainda não existe cabeçalho padrão salvo para esta unidade.');
+     layout.headerGrid=normalizeGrid(JSON.parse(JSON.stringify(st.grid)));
+     layout.repeatHeader=st.repeat!==false;const repeat=dialog.querySelector('#umRepeatHeader');if(repeat)repeat.checked=layout.repeatHeader;
+     const ident=st.identity||{},set=(id,val)=>{const el=dialog.querySelector('#'+id);if(el&&val!==undefined&&val!==null)el.value=val;};
+     set('ud_accent',ident.accent);set('ud_textColor',ident.textColor);set('ud_borderColor',ident.borderColor);set('ud_borderWidth',ident.borderWidth);set('ud_titleSize',ident.titleSize);set('ud_logoWidth',ident.logoWidth);set('ud_align',ident.align);
+     if(ident.logoFileId){model.design={...(model.design||{}),logoFileId:ident.logoFileId};if(standardImagePreviews[ident.logoFileId])logoPreview=standardImagePreviews[ident.logoFileId];}
+     region='header';selectedId=layout.headerGrid[0]?.cells[0]?.id||'';renderAll();showStandardFeedback('Cabeçalho padrão aplicado nesta folha. Salve o modelo para manter a alteração.','success');
+     if(button){button.textContent='✓ Cabeçalho aplicado';setTimeout(()=>{button.textContent=original},1800);}
+    }catch(err){showStandardFeedback('Não foi possível aplicar o cabeçalho padrão: '+(err?.message||err),'error');if(button)button.textContent=original;}finally{if(button)button.disabled=false;}
+   };
+   const applyFooterStandard=async(button)=>{
+    const original=button?.textContent||'Aplicar rodapé padrão';
+    try{
+     if(button){button.disabled=true;button.textContent='Aplicando…';}
+     showStandardFeedback('Buscando rodapé padrão na base central…','info');
+     await reloadStandards();
+     const st=standards.footer;if(!st||!Array.isArray(st.grid)||!st.grid.length)throw new Error('Ainda não existe rodapé padrão salvo para esta unidade.');
+     layout.footerGrid=normalizeGrid(JSON.parse(JSON.stringify(st.grid)));
+     layout.repeatFooter=st.repeat!==false;const repeat=dialog.querySelector('#umRepeatFooter');if(repeat)repeat.checked=layout.repeatFooter;
+     region='footer';selectedId=layout.footerGrid[0]?.cells[0]?.id||'';renderAll();showStandardFeedback('Rodapé padrão aplicado nesta folha. Salve o modelo para manter a alteração.','success');
+     if(button){button.textContent='✓ Rodapé aplicado';setTimeout(()=>{button.textContent=original},1800);}
+    }catch(err){showStandardFeedback('Não foi possível aplicar o rodapé padrão: '+(err?.message||err),'error');if(button)button.textContent=original;}finally{if(button)button.disabled=false;}
    };
    dialog.querySelector('#umSaveHeaderStandard').onclick=async e=>{const btn=e.currentTarget;try{await saveStandard('header',btn)}catch(err){btn.disabled=false;btn.textContent='Fixar cabeçalho como padrão';showStandardFeedback('Não foi possível salvar o cabeçalho padrão: '+(err?.message||err),'error');}};
    dialog.querySelector('#umSaveFooterStandard').onclick=async e=>{const btn=e.currentTarget;try{await saveStandard('footer',btn)}catch(err){btn.disabled=false;btn.textContent='Fixar rodapé como padrão';showStandardFeedback('Não foi possível salvar o rodapé padrão: '+(err?.message||err),'error');}};
-   dialog.querySelector('#umHeaderStandard').onclick=applyHeaderStandard;
-   dialog.querySelector('#umFooterStandard').onclick=applyFooterStandard;
-   dialog.querySelector('#umHeaderStandardTop').onclick=applyHeaderStandard;
-   dialog.querySelector('#umFooterStandardTop').onclick=applyFooterStandard;
+   dialog.querySelector('#umHeaderStandard').onclick=e=>applyHeaderStandard(e.currentTarget);
+   dialog.querySelector('#umFooterStandard').onclick=e=>applyFooterStandard(e.currentTarget);
+   dialog.querySelector('#umHeaderStandardTop').onclick=e=>applyHeaderStandard(e.currentTarget);
+   dialog.querySelector('#umFooterStandardTop').onclick=e=>applyFooterStandard(e.currentTarget);
    dialog.querySelector('#umCellImage').onchange=async e=>{try{dialog.querySelector('#umStatus').textContent='Enviando imagem…';await uploadCellImage(e.target.files[0]);dialog.querySelector('#umStatus').textContent='Imagem incluída na célula. Salve o modelo para gravar o layout.';}catch(err){dialog.querySelector('#umStatus').textContent=err.message;}finally{e.target.value='';}};
    dialog.querySelector('#umRebuild').onclick=()=>{if(!confirm('Substituir o corpo atual pela grade gerada a partir dos campos?'))return;layout.bodyGrid=defaultBodyGrid();region='body';selectedId='';renderAll();};
    dialog.querySelector('#umSave').onclick=async e=>{const btn=e.currentTarget,status=dialog.querySelector('#umStatus');btn.disabled=true;try{if(!String(dialog.querySelector('#umTitle').value||'').trim())throw new Error('Informe o título.');if(!fields.length||fields.some(f=>!String(f.label||'').trim()))throw new Error('Confira os nomes dos campos.');if(!fields.some(f=>f.enabled!==false))throw new Error('Mantenha pelo menos um campo disponível.');const font=clamp(dialog.querySelector('#umFont').value,7,18,9),margin=clamp(dialog.querySelector('#umMargin').value,5,35,10),design=readDesign(true);if(pendingLogo){status.textContent='Enviando logo…';const up=await nucleoDriveMutation('nucleo_drive_process_formats',{unit,kind:'logo',modelKind:kind,...pendingLogo});design.logoFileId=up.logoFileId;model.design={...(model.design||{}),logoFileId:up.logoFileId};pendingLogo=null;}else design.logoFileId=model.design?.logoFileId||design.logoFileId||'';layout.repeatHeader=dialog.querySelector('#umRepeatHeader').checked;layout.repeatFooter=dialog.querySelector('#umRepeatFooter').checked;const format={title:dialog.querySelector('#umTitle').value.trim(),footer:dialog.querySelector('#umFooter').value,fontSize:font,labels:model.labels||[],fields:fields.map(f=>({...f,enabled:f.enabled!==false,label:String(f.label||'').trim(),section:String(f.section||'').trim()})),marginMm:margin,labelColor:model.labelColor||'#f1f4f3',showEvidence:dialog.querySelector('#umEvidence').checked,design,layoutGrid:layout.bodyGrid,universalLayout:{version:2,headerGrid:layout.headerGrid,bodyGrid:layout.bodyGrid,footerGrid:layout.footerGrid,repeatHeader:layout.repeatHeader,repeatFooter:layout.repeatFooter}};status.textContent='Salvando e aguardando confirmação da base central…';const saved=await nucleoDriveMutation('nucleo_drive_process_formats',{unit,kind,data:JSON.stringify(format)});model=saved.formats[kind];status.textContent='Modelo salvo e confirmado. A grade desta folha será usada nas próximas emissões de '+modelName+'.';}catch(err){status.textContent=err.message;}finally{btn.disabled=false;}};

@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-header-footer-feedback2',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-rnc-standard-template-state1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -13336,28 +13336,123 @@ function rncStandardFeedback(message,type='info'){
   clearTimeout(window.__nucleoStandardToastTimer);window.__nucleoStandardToastTimer=setTimeout(()=>{toast.style.display='none'},6500);
 }
 async function rncStandardMutation(payload){
-  const unit=rncStandardUnit(),eventoId='RNCSTD-'+Date.now()+'-'+Math.random().toString(36).slice(2);
-  if(!navigator.onLine)throw new Error('Sem conexão com a internet.');
-  if(!portalPostForm({acao:'nucleo_drive_process_formats',unit,eventoId,kind:'rnc_standards',data:JSON.stringify(payload)}))throw new Error('Não foi possível enviar a gravação para a base central.');
-  const until=Date.now()+90000;
-  while(Date.now()<until){await new Promise(r=>setTimeout(r,1200));const result=await portalJsonp({acao:'nucleo_drive_status',eventoId},30000);if(result?.pending)continue;if(!result?.sucesso)throw new Error(result?.erro||'A base central recusou a gravação.');break;}
-  const check=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'rnc_standards'},60000);if(!check?.sucesso)throw new Error(check?.erro||'Não foi possível confirmar o padrão salvo.');return check.rncTemplateStandards||{};
+  // Usa a mesma biblioteca central de modelos da RNC. Assim o padrão não depende
+  // de uma ação nova no Apps Script e funciona com a implantação que já salva a RNC.
+  const all=getProcessTemplates().map(x=>x&&typeof x==='object'?{...x}:x);
+  let ix=all.findIndex(x=>x?.kind==='RNC'&&x.status!=='obsolete');
+  if(ix<0){all.unshift(defaultRncProcessTemplate());ix=0;}
+  const current=normalizeRncTemplate(all[ix]);
+  if(payload?.header)current.headerStandard=JSON.parse(JSON.stringify(payload.header));
+  if(payload?.footer)current.footerStandard=JSON.parse(JSON.stringify(payload.footer));
+  current.standardUpdatedAt=new Date().toISOString();
+  all[ix]=current;
+  await saveProcessTemplates(all);
+  const confirmed=normalizeRncTemplate(getProcessTemplates().find(x=>x?.kind==='RNC'&&x.status!=='obsolete')||current);
+  return {header:confirmed.headerStandard||null,footer:confirmed.footerStandard||null};
 }
 async function saveRncHeaderAsStandard(button){
-  const original=button?.textContent||'Fixar cabeçalho como padrão';if(button){button.disabled=true;button.textContent='Salvando…';}rncStandardFeedback('Salvando cabeçalho padrão na base central…');
-  try{const t=collectRncTemplateForm();const header={version:2,headerLayout:t.headerLayout,logoDataUrl:t.logoDataUrl||'',logoFileId:t.logoFileId||'',logoText:t.logoText,layout:{logoWidth:t.layout.logoWidth,metaWidth:t.layout.metaWidth,headerHeight:t.layout.headerHeight},savedAt:new Date().toISOString()};const x=await rncStandardMutation({header});if(!x.header)throw new Error('O cabeçalho não apareceu na confirmação da base central.');safeStorageSet(RNC_HEADER_STANDARD_KEY,JSON.stringify(x.header));rncStandardFeedback('Cabeçalho padrão salvo e confirmado na base central.','success');if(button){button.textContent='✓ Cabeçalho salvo';setTimeout(()=>{button.textContent=original},1800);}}
-  catch(e){rncStandardFeedback('Erro ao salvar cabeçalho padrão: '+(e?.message||e),'error');if(button)button.textContent=original;}
-  finally{if(button)button.disabled=false;}
+  const original=button?.textContent||'Fixar cabeçalho como padrão';
+  if(button){button.disabled=true;button.textContent='Salvando…';}
+  rncStandardFeedback('Salvando cabeçalho padrão na base central…');
+  try{
+    const t=collectRncTemplateForm();
+    const header={version:2,headerLayout:t.headerLayout,logoDataUrl:t.logoDataUrl||'',logoFileId:t.logoFileId||'',logoText:t.logoText,layout:{logoWidth:t.layout.logoWidth,metaWidth:t.layout.metaWidth,headerHeight:t.layout.headerHeight},savedAt:new Date().toISOString()};
+    const x=await rncStandardMutation({header});
+    if(!x.header)throw new Error('A base central não devolveu o cabeçalho salvo.');
+    safeStorageSet(RNC_HEADER_STANDARD_KEY,JSON.stringify(x.header));
+    rncStandardFeedback('Cabeçalho padrão salvo e confirmado na base central.','success');
+    if(button){button.textContent='✓ Cabeçalho salvo';setTimeout(()=>{button.textContent=original},1800);}
+  }catch(e){
+    rncStandardFeedback('Erro ao salvar cabeçalho padrão: '+(e?.message||e),'error');
+    if(button)button.textContent=original;
+  }finally{if(button)button.disabled=false;}
 }
 async function saveRncFooterAsStandard(button){
-  const original=button?.textContent||'Fixar rodapé como padrão';if(button){button.disabled=true;button.textContent='Salvando…';}rncStandardFeedback('Salvando rodapé padrão na base central…');
-  try{const t=collectRncTemplateForm(),footerIds=(t.sections||[]).filter(x=>x.owner==='footer').map(x=>x.id);const footer={version:2,footerText:t.footerText,footerIds,footerSections:(t.sections||[]).filter(x=>footerIds.includes(x.id)),footerFields:(t.fieldLayout||[]).filter(x=>footerIds.includes(x.section)||x.owner==='footer'),savedAt:new Date().toISOString()};const x=await rncStandardMutation({footer});if(!x.footer)throw new Error('O rodapé não apareceu na confirmação da base central.');safeStorageSet(RNC_FOOTER_STANDARD_KEY,JSON.stringify(x.footer));rncStandardFeedback('Rodapé padrão salvo e confirmado na base central.','success');if(button){button.textContent='✓ Rodapé salvo';setTimeout(()=>{button.textContent=original},1800);}}
-  catch(e){rncStandardFeedback('Erro ao salvar rodapé padrão: '+(e?.message||e),'error');if(button)button.textContent=original;}
+  const original=button?.textContent||'Fixar rodapé como padrão';
+  if(button){button.disabled=true;button.textContent='Salvando…';}
+  rncStandardFeedback('Salvando rodapé padrão na base central…');
+  try{
+    const t=collectRncTemplateForm(),footerIds=(t.sections||[]).filter(x=>x.owner==='footer').map(x=>x.id);
+    const footer={version:2,footerText:t.footerText,footerIds,footerSections:(t.sections||[]).filter(x=>footerIds.includes(x.id)),footerFields:(t.fieldLayout||[]).filter(x=>footerIds.includes(x.section)||x.owner==='footer'),savedAt:new Date().toISOString()};
+    const x=await rncStandardMutation({footer});
+    if(!x.footer)throw new Error('A base central não devolveu o rodapé salvo.');
+    safeStorageSet(RNC_FOOTER_STANDARD_KEY,JSON.stringify(x.footer));
+    rncStandardFeedback('Rodapé padrão salvo e confirmado na base central.','success');
+    if(button){button.textContent='✓ Rodapé salvo';setTimeout(()=>{button.textContent=original},1800);}
+  }catch(e){
+    rncStandardFeedback('Erro ao salvar rodapé padrão: '+(e?.message||e),'error');
+    if(button)button.textContent=original;
+  }finally{if(button)button.disabled=false;}
+}
+async function rncLoadCentralStandards(){
+  // A biblioteca de modelos já é sincronizada pela base central durante a carga do Núcleo.
+  const current=normalizeRncTemplate(getProcessTemplates().find(x=>x?.kind==='RNC'&&x.status!=='obsolete')||defaultRncProcessTemplate());
+  return {header:current.headerStandard||null,footer:current.footerStandard||null};
+}
+async function applyRncHeaderStandard(button){
+  const original=button?.textContent||'Aplicar cabeçalho padrão';
+  try{
+    if(button){button.disabled=true;button.textContent='Aplicando…';}
+    rncStandardFeedback('Buscando cabeçalho padrão salvo…');
+    const standards=await rncLoadCentralStandards();
+    let x=standards.header;
+    if(!x){try{x=JSON.parse(localStorage.getItem(RNC_HEADER_STANDARD_KEY)||'null')}catch(_){x=null}}
+    if(!x)throw new Error('Ainda não existe cabeçalho padrão salvo para esta unidade.');
+
+    // Substitui de fato a estrutura que o editor usa e redesenha os controles.
+    const header=JSON.parse(JSON.stringify(Array.isArray(x.headerLayout)&&x.headerLayout.length?x.headerLayout:defaultRncHeaderLayout()));
+    saveRncHeaderFields(header);
+
+    const logoData=String(x.logoDataUrl||'');
+    const logoInput=document.getElementById('tplLogoData');if(logoInput)logoInput.value=logoData;
+    const logoText=document.getElementById('tplLogoText');if(logoText)logoText.value=x.logoText||'SETA';
+    const logoHost=document.getElementById('tplLogoCurrent');
+    if(logoHost)logoHost.innerHTML=logoData?`<img src="${logoData}" alt="Logo" style="max-width:150px;max-height:54px;object-fit:contain">`:`<b>${escapeHtml(x.logoText||'SETA')}</b>`;
+    window.__rncTemplateLogoChanged=!!logoData;
+
+    if(x.layout){
+      [['tplLogoWidth','logoWidth'],['tplMetaWidth','metaWidth'],['tplHeaderHeight','headerHeight']].forEach(([id,key])=>{const el=document.getElementById(id);if(el&&x.layout[key]!=null)el.value=x.layout[key];});
+    }
+    // Garante que lista lateral, célula selecionada e prévia reflitam imediatamente o padrão aplicado.
+    rncGridSelectedHeaderId='';
+    const list=document.getElementById('tplHeaderLayoutList');if(list)list.innerHTML=renderRncHeaderLayoutEditor({...collectRncTemplateForm(),headerLayout:header});
+    refreshRncTemplatePreview();
+    rncStandardFeedback('Cabeçalho padrão aplicado nesta folha. Clique em “Salvar modelo” para manter a alteração.','success');
+    if(button){button.textContent='✓ Cabeçalho aplicado';setTimeout(()=>{button.textContent=original},1800);}
+  }catch(e){rncStandardFeedback('Erro ao aplicar cabeçalho padrão: '+(e?.message||e),'error');if(button)button.textContent=original;}
   finally{if(button)button.disabled=false;}
 }
-async function rncLoadCentralStandards(){const r=await portalJsonp({acao:'nucleo_drive_process_formats',unit:rncStandardUnit(),kind:'rnc_standards'},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não foi possível consultar os padrões.');return r.rncTemplateStandards||{};}
-async function applyRncHeaderStandard(button){try{if(button){button.disabled=true;button.textContent='Aplicando…';}rncStandardFeedback('Buscando cabeçalho padrão…');const standards=await rncLoadCentralStandards();const x=standards.header||JSON.parse(localStorage.getItem(RNC_HEADER_STANDARD_KEY)||'null');if(!x)throw new Error('Ainda não existe cabeçalho padrão salvo para esta unidade.');const h=document.getElementById('tplHeaderLayoutData');if(h)h.value=JSON.stringify(x.headerLayout||defaultRncHeaderLayout());const l=document.getElementById('tplLogoData');if(l)l.value=x.logoDataUrl||'';const lt=document.getElementById('tplLogoText');if(lt)lt.value=x.logoText||'SETA';if(x.layout){['LogoWidth','MetaWidth','HeaderHeight'].forEach(k=>{const el=document.getElementById('tpl'+k),key=k.charAt(0).toLowerCase()+k.slice(1);if(el&&x.layout[key]!=null)el.value=x.layout[key];});}refreshRncTemplatePreview();rncStandardFeedback('Cabeçalho padrão aplicado. Salve o modelo para manter esta cópia.','success');}catch(e){rncStandardFeedback('Erro ao aplicar cabeçalho padrão: '+(e?.message||e),'error');}finally{if(button){button.disabled=false;button.textContent='Aplicar cabeçalho padrão';}}}
-async function applyRncFooterStandard(button){try{if(button){button.disabled=true;button.textContent='Aplicando…';}rncStandardFeedback('Buscando rodapé padrão…');const standards=await rncLoadCentralStandards();const x=standards.footer||JSON.parse(localStorage.getItem(RNC_FOOTER_STANDARD_KEY)||'null');if(!x)throw new Error('Ainda não existe rodapé padrão salvo para esta unidade.');const f=document.getElementById('tplFooterText');if(f)f.value=x.footerText||'';const base=collectRncTemplateForm(),ids=new Set(x.footerIds||[]);(base.sections||[]).forEach((s,i)=>{const el=document.getElementById('tplSecOwner'+i);if(el&&ids.has(s.id))el.value='footer';});if(Array.isArray(x.footerFields)&&x.footerFields.length){const a=getTplJson('tplFieldLayoutData',defaultRncFieldLayout());x.footerFields.forEach(ff=>{const i=a.findIndex(z=>z.id===ff.id);if(i>=0)a[i]={...a[i],...ff};else a.push({...ff});});setTplJson('tplFieldLayoutData',a);const list=document.getElementById('tplFieldLayoutList');if(list)list.innerHTML=renderRncFieldLayoutEditor(collectRncTemplateForm());}refreshRncTemplatePreview();rncStandardFeedback('Rodapé padrão aplicado. Salve o modelo para manter esta cópia.','success');}catch(e){rncStandardFeedback('Erro ao aplicar rodapé padrão: '+(e?.message||e),'error');}finally{if(button){button.disabled=false;button.textContent='Aplicar rodapé padrão';}}}
+async function applyRncFooterStandard(button){
+  const original=button?.textContent||'Aplicar rodapé padrão';
+  try{
+    if(button){button.disabled=true;button.textContent='Aplicando…';}
+    rncStandardFeedback('Buscando rodapé padrão salvo…');
+    const standards=await rncLoadCentralStandards();
+    let x=standards.footer;
+    if(!x){try{x=JSON.parse(localStorage.getItem(RNC_FOOTER_STANDARD_KEY)||'null')}catch(_){x=null}}
+    if(!x)throw new Error('Ainda não existe rodapé padrão salvo para esta unidade.');
+
+    const f=document.getElementById('tplFooterText');if(f)f.value=x.footerText||'';
+    const base=collectRncTemplateForm(),ids=new Set(x.footerIds||[]);
+    (base.sections||[]).forEach((s,i)=>{const el=document.getElementById('tplSecOwner'+i);if(el)el.value=ids.has(s.id)?'footer':(el.value==='footer'?'sgq':el.value);});
+
+    if(Array.isArray(x.footerSections)&&x.footerSections.length){
+      x.footerSections.forEach(fs=>{const i=(base.sections||[]).findIndex(s=>s.id===fs.id);if(i<0)return;const lab=document.getElementById('tplSecLabel'+i);if(lab&&fs.label!=null)lab.value=fs.label;const al=document.getElementById('tplSecAlign'+i);if(al&&fs.align)al.value=fs.align;const ow=document.getElementById('tplSecOwner'+i);if(ow)ow.value='footer';});
+    }
+    if(Array.isArray(x.footerFields)&&x.footerFields.length){
+      const a=getTplJson('tplFieldLayoutData',defaultRncFieldLayout());
+      // Remove da região de rodapé as versões atuais dos mesmos campos e aplica o snapshot salvo.
+      x.footerFields.forEach(ff=>{const i=a.findIndex(z=>z.id===ff.id);if(i>=0)a[i]={...a[i],...JSON.parse(JSON.stringify(ff))};else a.push(JSON.parse(JSON.stringify(ff)));});
+      setTplJson('tplFieldLayoutData',a);
+      const list=document.getElementById('tplFieldLayoutList');if(list)list.innerHTML=renderRncFieldLayoutEditor({...collectRncTemplateForm(),fieldLayout:a});
+    }
+    rncGridSelectedFieldId='';
+    refreshRncTemplatePreview();
+    rncStandardFeedback('Rodapé padrão aplicado nesta folha. Clique em “Salvar modelo” para manter a alteração.','success');
+    if(button){button.textContent='✓ Rodapé aplicado';setTimeout(()=>{button.textContent=original},1800);}
+  }catch(e){rncStandardFeedback('Erro ao aplicar rodapé padrão: '+(e?.message||e),'error');if(button)button.textContent=original;}
+  finally{if(button)button.disabled=false;}
+}
 async function saveRncProcessTemplateFromForm(){
   if(!nucleoFeatureRequire('processes','templates'))return;
   const t=collectRncTemplateForm(),all=getProcessTemplates(),ix=all.findIndex(x=>x.id===t.id);if(ix>=0)all[ix]=t;else all.unshift(t);
