@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-rnc-footer-native-fix1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-sync-fallback2',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -11638,6 +11638,21 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
+async function loadOfficialRosFullFallback(settings,onProgress,reason){
+  const s=settings||getSavedIntegrationSettings();
+  const period=roSyncPeriodParams(s);
+  if(onProgress)onProgress(0,null,'A leitura por páginas não respondeu. Tentando a leitura completa da base...');
+  console.warn('[NÚCLEO SYNC] fallback para leitura completa',reason||'');
+  const data=await portalJsonp({...period},150000);
+  if(data?.sucesso===false)throw new Error(data.erro||'A planilha recusou a leitura completa.');
+  if(!Array.isArray(data?.dados))throw new Error('A leitura completa não devolveu a lista de R.O.s.');
+  const total=Number.isFinite(Number(data.quantidade))?Number(data.quantidade):data.dados.length;
+  const internas=Number.isFinite(Number(data.quantidadeInterna))?Number(data.quantidadeInterna):null;
+  const externas=Number.isFinite(Number(data.quantidadeExterna))?Number(data.quantidadeExterna):null;
+  if(total!==data.dados.length)throw new Error('A leitura completa devolveu quantidade incompatível com os registros recebidos.');
+  if(onProgress)onProgress(total,total,'Leitura completa concluída: '+total+' R.O.s e SACs.');
+  return {...data,quantidade:total,quantidadeInterna:internas,quantidadeExterna:externas,dados:data.dados,__syncMode:'full'};
+}
 async function loadOfficialRosPaged(settings,onProgress){
   const s=settings||getSavedIntegrationSettings();
   const period=roSyncPeriodParams(s);
@@ -11648,23 +11663,37 @@ async function loadOfficialRosPaged(settings,onProgress){
   for(let offset=0;offset===0||offset<total;offset+=pageSize){
     if(Date.now()-started>240000)throw new Error('A leitura central ultrapassou 4 minutos. A carga foi interrompida sem substituir os dados exibidos.');
     if(offset>20000)throw new Error('A base ultrapassou o limite de leitura por páginas.');
-    let page;
+    let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
         page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
         break;
       }catch(e){
-        if(attempt===2)throw new Error('A página '+(Math.floor(offset/pageSize)+1)+' falhou após 2 tentativas: '+(e?.message||e));
-        if(onProgress)onProgress(all.length,total,'Repetindo página '+(Math.floor(offset/pageSize)+1)+'...');
-        await new Promise(resolve=>setTimeout(resolve,1000*attempt));
+        lastError=e;
+        if(attempt<2){
+          if(onProgress)onProgress(all.length,total,'Repetindo página '+(Math.floor(offset/pageSize)+1)+'...');
+          await new Promise(resolve=>setTimeout(resolve,1000*attempt));
+        }
       }
     }
-    if(page?.sucesso===false)throw new Error(page.erro||'A planilha recusou a leitura.');
-    if(!page?.paginado||!Array.isArray(page.dados))
-      throw new Error('A implantação do Apps Script ainda não contém a leitura por páginas. Publique o script atualizado na mesma URL /exec.');
+    // Se nem a primeira página respondeu, usa a rota completa que continua
+    // disponível no mesmo doGet. Isso mantém compatibilidade com implantações
+    // que ainda não responderam corretamente ao portal_ro_page.
+    if(!page && offset===0)return loadOfficialRosFullFallback(s,onProgress,lastError);
+    if(!page)throw new Error('A página '+(Math.floor(offset/pageSize)+1)+' falhou após 2 tentativas: '+(lastError?.message||lastError||'sem resposta'));
+    if(page?.sucesso===false){
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,page.erro||'portal_ro_page recusado');
+      throw new Error(page.erro||'A planilha recusou a leitura.');
+    }
+    if(!page?.paginado||!Array.isArray(page.dados)){
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'resposta paginada incompatível');
+      throw new Error('A leitura por páginas deixou de responder no meio da sincronização.');
+    }
     const expected=Number(page.quantidade);
-    if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset)
+    if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset){
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'primeira página inválida');
       throw new Error('A planilha devolveu uma página inválida.');
+    }
     if(total===null){total=expected;internas=Number(page.quantidadeInterna);externas=Number(page.quantidadeExterna);meta=page}
     if(total!==expected||internas!==Number(page.quantidadeInterna)||externas!==Number(page.quantidadeExterna))
       throw new Error('A planilha mudou durante a leitura. Execute Sincronizar novamente.');
@@ -11672,11 +11701,10 @@ async function loadOfficialRosPaged(settings,onProgress){
       throw new Error('A planilha devolveu uma página incompleta.');
     all.push(...page.dados);
     if(onProgress)onProgress(Math.min(all.length,total),total,'Lendo R.O.s e SACs: '+Math.min(all.length,total)+' de '+total+'...');
-    // Deixa a interface responder entre as páginas.
     await new Promise(resolve=>setTimeout(resolve,0));
   }
   if(all.length!==total)throw new Error('A leitura terminou com registros faltando. Tente sincronizar novamente.');
-  return {...meta,quantidade:total,quantidadeInterna:internas,quantidadeExterna:externas,dados:all};
+  return {...meta,quantidade:total,quantidadeInterna:internas,quantidadeExterna:externas,dados:all,__syncMode:'paged'};
 }
 async function refreshLegacyRoCacheFromApi(force=false){
   if(syncNow.inProgress)return false;
@@ -15915,27 +15943,23 @@ async function syncNow(){
   syncMsg.className='statusline';
 
   try{
-    // A sincronização manual não pode ficar presa esperando a carga automática
-    // disparada na abertura do sistema. Aguarda só alguns segundos e, se ela
-    // ainda estiver pendente, executa uma leitura manual independente.
+    // Se a carga automática estiver em andamento, aguarda pouco tempo. Se ela
+    // travou, libera apenas a referência do front e executa uma leitura manual.
+    // O backend continua seguro porque a leitura não grava na planilha.
     if(nucleoRoCentralRefreshPromise){
-      syncMsg.textContent='Existe uma carga automática em andamento. Conferindo...';
-      let autoResult='timeout';
-      try{
-        autoResult=await Promise.race([
-          Promise.resolve(nucleoRoCentralRefreshPromise).then(v=>v===true?'ok':'failed').catch(()=> 'failed'),
-          new Promise(resolve=>setTimeout(()=>resolve('timeout'),8000))
-        ]);
-      }catch(e){autoResult='failed'}
+      syncMsg.textContent='Conferindo a carga automática em andamento...';
+      const autoResult=await Promise.race([
+        Promise.resolve(nucleoRoCentralRefreshPromise).then(v=>v===true?'ok':'failed').catch(()=> 'failed'),
+        new Promise(resolve=>setTimeout(()=>resolve('timeout'),5000))
+      ]);
       if(autoResult==='ok'){
         syncMsg.textContent='R.O.s e SACs atualizados pela base central.';
         syncMsg.className='statusline okline';
         return;
       }
-      // Não cancela a leitura automática antiga; apenas deixa de bloquear o botão.
-      // O applyImportedRos já substitui os dados de forma atômica ao final da leitura.
-      syncMsg.textContent='Iniciando uma nova leitura manual da base central...';
-      updateNucleoLoading('Iniciando uma nova leitura manual da base central...');
+      if(autoResult==='timeout')nucleoRoCentralRefreshPromise=null;
+      syncMsg.textContent='Executando uma leitura manual da base central...';
+      updateNucleoLoading('Executando uma leitura manual da base central...');
     }
     const data=await loadOfficialRosPaged(s,(loaded,total,message)=>{
       updateNucleoLoading(message);
