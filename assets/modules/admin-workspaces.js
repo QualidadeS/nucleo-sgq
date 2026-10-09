@@ -827,20 +827,69 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
    ['umTitle','umFont','umMargin','umFooter','umEvidence','umRepeatHeader','umRepeatFooter','ud_header','ud_code','ud_before','ud_after','ud_orientation','ud_align','ud_titleSize','ud_logoWidth','ud_accent','ud_textColor','ud_borderColor','ud_borderWidth'].forEach(id=>{const el=dialog.querySelector('#'+id);if(el){el.oninput=()=>{layout.repeatHeader=dialog.querySelector('#umRepeatHeader').checked;layout.repeatFooter=dialog.querySelector('#umRepeatFooter').checked;renderPreview()};el.onchange=el.oninput;}});
    dialog.querySelector('#umLogo').onchange=async e=>{const f=e.target.files[0];if(!f)return;const status=dialog.querySelector('#umStatus');try{status.textContent='Enviando logo para a base central…';await ensureLogoUploaded(f);status.textContent='Logo carregada. Selecione uma célula e clique em “Colocar logo nesta célula”.';renderAll();}catch(err){status.textContent=err.message;}finally{e.target.value='';}};
    dialog.querySelector('#umRemoveLogo').onclick=()=>{const oldId=String(model.design?.logoFileId||'');pendingLogo=null;logoPreview='';model.design={...(model.design||{}),logoFileId:''};if(oldId)for(const r of ['header','body','footer'])for(const row of layout[r+'Grid'])for(const c of row.cells)if(c.imageFileId===oldId){c.type='text';c.source='';c.imageFileId='';c.text='';}renderAll();};
+   function universalStandardsFromRncTemplate(){
+    try{
+     if(typeof getProcessTemplates!=='function')return {};
+     const rnc=(getProcessTemplates()||[]).find(x=>x&&x.kind==='RNC'&&x.status!=='obsolete');
+     if(!rnc)return {};
+     const out={};
+     const hs=rnc.headerStandard;
+     if(hs&&Array.isArray(hs.headerLayout)&&hs.headerLayout.length){
+      const byRow=new Map();
+      hs.headerLayout.forEach((x,i)=>{const rr=Math.max(1,Number(x.row)||1);if(!byRow.has(rr))byRow.set(rr,[]);byRow.get(rr).push({...x,__i:i});});
+      const logoId=String(hs.logoFileId||rnc.logoFileId||'');
+      const logoData=String(hs.logoDataUrl||rnc.logoDataUrl||'');
+      const grid=[...byRow.keys()].sort((a,b)=>a-b).map(rr=>newRow(byRow.get(rr).map(x=>{
+       const src=String(x.source||'');
+       let over={width:clamp(x.width,5,100,25),height:clamp(x.height,3,120,7),rowSpan:clamp(x.rowSpan,1,20,1),align:['left','center','right'].includes(x.align)?x.align:'left',bold:!!x.bold,fontSize:9};
+       if(src==='@logo'){
+        if(logoId)over={...over,type:'image',source:'',imageFileId:logoId,text:''};
+        else over={...over,type:'text',source:'',text:x.label||hs.logoText||rnc.logoText||'SETA',bold:true};
+       }else if(src==='title'){over={...over,type:'special',source:'#TITLE',text:''};}
+       else if(src==='code'){over={...over,type:'special',source:'#CODE',text:''};}
+       else if(src==='revision'){over={...over,type:'text',source:'',text:x.label?`${x.label}: revisão`:'Revisão',bold:!!x.bold};}
+       else if(src.startsWith('@')){const literal=src.slice(1);over={...over,type:'text',source:'',text:[x.label,literal].filter(Boolean).join(x.label&&literal?' · ':'')};}
+       else{over={...over,type:'text',source:'',text:x.label||x.value||''};}
+       return newCell(over);
+      })));
+      out.header={version:3,grid,repeat:rnc.repeatHeaderOnPages!==false,identity:{logoFileId:logoId,logoWidth:Number(hs.layout?.logoWidth||rnc.layout?.logoWidth)||30,align:'center'}};
+      if(logoId&&logoData){standardImagePreviews[logoId]=logoData;imagePreviews[logoId]=logoData;}
+      else if(logoId&&rnc.logoDataUrl){standardImagePreviews[logoId]=String(rnc.logoDataUrl);imagePreviews[logoId]=String(rnc.logoDataUrl);}
+     }
+     const fs=rnc.footerStandard;
+     if(fs){
+      const text=String(fs.footerText||rnc.footerText||'');
+      if(text||Array.isArray(fs.footerFields)){
+       const cells=[];
+       if(text)cells.push(newCell({type:'text',source:'',text,width:70,fontSize:8,height:8,borderTop:true,borderRight:false,borderBottom:false,borderLeft:false}));
+       else cells.push(newCell({type:'special',source:'#FOOTER',width:70,fontSize:8,height:8,borderTop:true,borderRight:false,borderBottom:false,borderLeft:false}));
+       cells.push(newCell({type:'special',source:'#GENERATED',width:30,fontSize:7,align:'right',height:8,borderTop:true,borderRight:false,borderBottom:false,borderLeft:false}));
+       out.footer={version:3,grid:[newRow(cells)],repeat:rnc.repeatFooterOnPages!==false};
+      }
+     }
+     return out;
+    }catch(_){return {};}
+   }
    const reloadStandards=async()=>{
     let check=null,centralError=null;
     try{check=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind},60000);}catch(e){centralError=e;}
     if(check?.sucesso){
-     // Se a leitura central vier completa, ela vence o cache. Se vier momentaneamente
-     // vazia, hydrateStandards preserva a última confirmação válida desta unidade.
      hydrateStandards(check.documentFormatStandards||{}, {allowCache:true});
      standardImagePreviews=check.standardImagePreviews||{};
      Object.assign(imagePreviews,standardImagePreviews);
+     // A RNC e o editor universal historicamente salvaram padrões em coleções diferentes.
+     // Se o padrão universal não existir, usa diretamente o padrão confirmado da RNC.
+     const rncFallback=universalStandardsFromRncTemplate();
+     if(!standards.header&&rncFallback.header)standards.header=rncFallback.header;
+     if(!standards.footer&&rncFallback.footer)standards.footer=rncFallback.footer;
      if(standards.header||standards.footer)writeStandardsCache();
      return standards;
     }
     hydrateStandards({}, {allowCache:true});
-    if(standards.header||standards.footer)return standards;
+    const rncFallback=universalStandardsFromRncTemplate();
+    if(!standards.header&&rncFallback.header)standards.header=rncFallback.header;
+    if(!standards.footer&&rncFallback.footer)standards.footer=rncFallback.footer;
+    if(standards.header||standards.footer){writeStandardsCache();return standards;}
     throw new Error(check?.erro||centralError?.message||'Não foi possível ler os padrões da base central.');
    };
    const applyHeaderStandard=async(button)=>{
