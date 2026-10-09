@@ -706,10 +706,18 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
  async function uploadCellImage(file){if(!file)return;if(file.size>150*1024)throw new Error('A imagem deve ter até 150 KB.');const sel=findSelected();if(!sel)throw new Error('Selecione uma célula primeiro.');const data=await fileToBase64(file),res=await nucleoDriveMutation('nucleo_drive_process_formats',{unit,kind:'logo',modelKind:kind,fileData:data});sel.cell.type='image';sel.cell.source='';sel.cell.imageFileId=res.logoFileId;sel.cell.text='';imagePreviews[res.logoFileId]='data:'+(file.type||'image/png')+';base64,'+data;renderAll();}
  async function ensureLogoUploaded(file){if(!file)return '';if(file.size>150*1024)throw new Error('A logo deve ter até 150 KB.');const data=await fileToBase64(file),res=await nucleoDriveMutation('nucleo_drive_process_formats',{unit,kind:'logo',modelKind:kind,fileData:data});const id=res.logoFileId;if(!id)throw new Error('A base central não confirmou a logo.');logoPreview='data:'+(file.type||'image/png')+';base64,'+data;imagePreviews[id]=logoPreview;model.design={...(model.design||{}),logoFileId:id};pendingLogo=null;return id;}
  function placeCurrentLogo(){const sel=findSelected();if(!sel)throw new Error('Selecione a célula onde a logo deve ficar.');const id=String(model.design?.logoFileId||'');if(!id||!logoPreview)throw new Error('Escolha a logo primeiro.');for(const r of ['header','body','footer'])for(const row of layout[r+'Grid'])for(const c of row.cells){if(c.imageFileId===id){c.type='text';c.source='';c.imageFileId='';c.text='';}}sel.cell.type='image';sel.cell.source='';sel.cell.imageFileId=id;sel.cell.text='';renderAll();}
- function hydrateStandards(raw){
+ function standardCacheKey(){return 'nucleo_document_format_standards_v3_'+String(unit||'matriz');}
+ function readStandardsCache(){
+  try{const x=JSON.parse(localStorage.getItem(standardCacheKey())||'null');return x&&typeof x==='object'?x:{};}catch(_){return {};}
+ }
+ function writeStandardsCache(){
+  try{localStorage.setItem(standardCacheKey(),JSON.stringify({header:standards.header||null,footer:standards.footer||null,confirmedAt:new Date().toISOString()}));}catch(_){ }
+ }
+ function hydrateStandards(raw,{allowCache=true}={}){
   raw=raw&&typeof raw==='object'?raw:{};
-  const headerRaw=raw.header&&typeof raw.header==='object'?raw.header:(raw.headerGrid?{grid:raw.headerGrid,repeat:true}:null);
-  const footerRaw=raw.footer&&typeof raw.footer==='object'?raw.footer:(raw.footerGrid?{grid:raw.footerGrid,repeat:true}:null);
+  const cached=allowCache?readStandardsCache():{};
+  const headerRaw=(raw.header&&typeof raw.header==='object'?raw.header:(raw.headerGrid?{grid:raw.headerGrid,repeat:true}:null)) || (cached.header&&typeof cached.header==='object'?cached.header:null);
+  const footerRaw=(raw.footer&&typeof raw.footer==='object'?raw.footer:(raw.footerGrid?{grid:raw.footerGrid,repeat:true}:null)) || (cached.footer&&typeof cached.footer==='object'?cached.footer:null);
   standards={
    header:headerRaw?{...headerRaw,grid:normalizeGrid(headerRaw.grid||headerRaw.headerGrid||[])}:null,
    footer:footerRaw?{...footerRaw,grid:normalizeGrid(footerRaw.grid||footerRaw.footerGrid||[])}:null
@@ -742,6 +750,10 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
   Object.assign(imagePreviews,standardImagePreviews);
   const saved=part==='header'?standards.header:standards.footer;
   if(!saved||!Array.isArray(saved.grid)||!saved.grid.length)throw new Error('O padrão não foi encontrado depois do salvamento. Tente novamente.');
+  // Mantém uma cópia da última confirmação bem-sucedida por unidade. A base central
+  // continua sendo a fonte principal, mas uma leitura imediatamente posterior não
+  // pode apagar a confirmação que acabou de ser devolvida pelo servidor.
+  writeStandardsCache();
   showStandardFeedback((part==='header'?'Cabeçalho':'Rodapé')+' padrão salvo e confirmado na base central.','success');
   if(button){button.disabled=false;button.textContent='✓ Padrão salvo';setTimeout(()=>{button.textContent=original;},1800);}
   return true;
@@ -816,12 +828,20 @@ async function nucleoEditRoModelVisual(kind='ro',inlineRender=false){
    dialog.querySelector('#umLogo').onchange=async e=>{const f=e.target.files[0];if(!f)return;const status=dialog.querySelector('#umStatus');try{status.textContent='Enviando logo para a base central…';await ensureLogoUploaded(f);status.textContent='Logo carregada. Selecione uma célula e clique em “Colocar logo nesta célula”.';renderAll();}catch(err){status.textContent=err.message;}finally{e.target.value='';}};
    dialog.querySelector('#umRemoveLogo').onclick=()=>{const oldId=String(model.design?.logoFileId||'');pendingLogo=null;logoPreview='';model.design={...(model.design||{}),logoFileId:''};if(oldId)for(const r of ['header','body','footer'])for(const row of layout[r+'Grid'])for(const c of row.cells)if(c.imageFileId===oldId){c.type='text';c.source='';c.imageFileId='';c.text='';}renderAll();};
    const reloadStandards=async()=>{
-    const check=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind},60000);
-    if(!check?.sucesso)throw new Error(check?.erro||'Não foi possível ler os padrões da base central.');
-    hydrateStandards(check.documentFormatStandards||{});
-    standardImagePreviews=check.standardImagePreviews||{};
-    Object.assign(imagePreviews,standardImagePreviews);
-    return standards;
+    let check=null,centralError=null;
+    try{check=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind},60000);}catch(e){centralError=e;}
+    if(check?.sucesso){
+     // Se a leitura central vier completa, ela vence o cache. Se vier momentaneamente
+     // vazia, hydrateStandards preserva a última confirmação válida desta unidade.
+     hydrateStandards(check.documentFormatStandards||{}, {allowCache:true});
+     standardImagePreviews=check.standardImagePreviews||{};
+     Object.assign(imagePreviews,standardImagePreviews);
+     if(standards.header||standards.footer)writeStandardsCache();
+     return standards;
+    }
+    hydrateStandards({}, {allowCache:true});
+    if(standards.header||standards.footer)return standards;
+    throw new Error(check?.erro||centralError?.message||'Não foi possível ler os padrões da base central.');
    };
    const applyHeaderStandard=async(button)=>{
     const original=button?.textContent||'Aplicar cabeçalho padrão';
