@@ -1,3 +1,4 @@
+window.NUCLEO_SUPPLIER_ROUTER_BUILD='2026-10-09-integrated-v3';
 function renderStandardDocumentsWorkspace(){
   if(!isAdmin())return;
   const host=document.getElementById('adminModuleContent');if(!host)return;
@@ -249,8 +250,8 @@ function openAdminOperationalWorkspace(key,index){
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
   if(key==='processes'&&mode==='templates'){window.nucleoRncTemplateEditorOpen=false;window.nucleoProcessTemplateEditor='';renderProcessTemplatesWorkspace();return}
   if(key==='nccapa'&&mode==='active'){renderNcCapaTreatmentWorkspace();return}
-  if(key==='nccapa'&&mode==='suppliers'){renderSupplierWorkspace();return}
-  if(key==='nccapa'&&mode==='supplier_indicators'){renderSupplierIndicatorsWorkspace();return}
+  if(key==='nccapa'&&mode==='suppliers'){if(typeof window.renderSupplierWorkspace!=='function'){alert('O módulo de fornecedores não foi carregado. Atualize os arquivos do Núcleo.');return;}window.renderSupplierWorkspace();return}
+  if(key==='nccapa'&&mode==='supplier_indicators'){if(typeof window.renderSupplierIndicatorsWorkspace!=='function'){alert('O módulo de indicadores de fornecedores não foi carregado. Atualize os arquivos do Núcleo.');return;}window.renderSupplierIndicatorsWorkspace();return}
   if(mode==='new'||mode==='new_internal'||mode==='new_rnc'){
     list.innerHTML=`<div style="grid-column:1/-1">${back}
       <div class="card" style="margin-top:14px;padding:20px">
