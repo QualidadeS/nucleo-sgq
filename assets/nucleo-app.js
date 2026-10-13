@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-metrology-control1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-metrology-alerts1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -1180,6 +1180,7 @@ async function syncPortalBackend(showMessage=false,options={}){
     try{
       refreshSectorSelectors();
       refreshExternalRoSidebarBadge();
+      try{nucleoRefreshMetrologyAlertsForCurrentUser()}catch(e){console.warn('Falha ao atualizar alertas metrológicos.',e)}
       refreshNotificationBell();
       refreshContestPendingBadge();
       refreshPdcaSidebarBadge();
@@ -1510,6 +1511,9 @@ function notificationMenuId(n){
   if(n?.type==='announcement'){
     return admin?'navAnnouncements':'navPendingHub';
   }
+  if(n?.type==='equipment'){
+    return 'navEquipment';
+  }
 
   // Avisos gerais ficam na central de pendências do usuário.
   return 'navPendingHub';
@@ -1659,6 +1663,10 @@ function openNotification(id){
     showMySacs();
     return;
   }
+  if(n.type==='equipment'){
+    showAdminOperationalModule('equipment');
+    return;
+  }
 
   if(n.ro){
     if(n.audience==='complainant'){
@@ -1710,6 +1718,7 @@ function notificationChannel(n){
   else if(n?.type==='pdca'&&n?.audience==='admin')value=c.channelPdcaAdmin||'Ambos';
   else if(n?.type==='action'||n?.type==='deadline')value=c.channelAction||'Portal';
   else if(n?.type==='announcement')value=c.channelAnnouncement||'Portal';
+  else if(n?.type==='equipment')value='Ambos';
   return value;
 }
 function channelAllowsPortal(n){const x=notificationChannel(n);return x==='Portal'||x==='Ambos'}
@@ -1723,7 +1732,7 @@ function isPriorityEmailNotification(n){
   if(n.audience==='sector'&&n.type==='contest')return getRuleYes('ruleEmailContestSector');
   if(n.audience==='admin'&&n.type==='contest')return getRuleYes('ruleEmailContestAdmin');
   if(n.audience==='admin'&&n.type==='pdca')return getRuleYes('ruleEmailPdcaAdmin');
-  if(n.type==='action'||n.type==='deadline'||n.type==='announcement')return true;
+  if(n.type==='action'||n.type==='deadline'||n.type==='announcement'||n.type==='equipment')return true;
   return false;
 }
 function emailForNotification(n){
@@ -1797,7 +1806,7 @@ function isInAppNotificationEnabled(data){
 }
 function createNotification(data){
   const n={
-    id:'NOT-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    id:data.id||('NOT-'+Date.now()+'-'+Math.random().toString(36).slice(2,7)),
     createdAt:new Date().toISOString(),
     type:data.type||'general',
     title:data.title||'Nova atualização',
@@ -1820,6 +1829,68 @@ function createNotification(data){
   saveNotifications(list);
   refreshNotificationBell();
   return n;
+}
+
+function nucleoCurrentUserRecord(){
+  const sess=getSession()||{};
+  return (users||[]).find(u=>
+    (sess.personId&&String(u.personId||'')===String(sess.personId))||
+    (sess.email&&String(u.email||'').trim().toLowerCase()===String(sess.email||'').trim().toLowerCase())
+  )||null;
+}
+function nucleoMetrologyEmailEnabled(){return nucleoCurrentUserRecord()?.metrologyEmailAlerts===true}
+async function nucleoOpenMetrologyAlertPreferences(){
+  if(!isAdmin())return alert('Esta preferência é destinada às pessoas do SGQ.');
+  let ov=document.getElementById('metrologyAlertPreferencesOverlay');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='metrologyAlertPreferencesOverlay';ov.className='modal';ov.style.zIndex='100500';
+  ov.innerHTML=`<div class="modal-box" style="width:min(620px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Meus alertas de calibração</h3><div class="small" style="margin-top:5px">Os avisos continuam aparecendo no Núcleo. Você decide se também quer recebê-los por e-mail.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('metrologyAlertPreferencesOverlay')?.remove()">Fechar</button></div><label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px;border:1px solid #e4e7ec;border-radius:10px"><input id="metrologyEmailAlertsEnabled" type="checkbox" ${nucleoMetrologyEmailEnabled()?'checked':''} style="width:20px;height:20px;margin-top:1px"><span><b>Receber alertas de calibração por e-mail</b><div class="small" style="margin-top:4px">Você receberá e-mail quando houver necessidade de calibração e, se já estiver agendada, somente no dia agendado para lembrar de concluir e atualizar o cadastro.</div></span></label><div id="metrologyAlertPrefStatus" class="small" style="margin-top:10px"></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" type="button" onclick="nucleoSaveMetrologyAlertPreferences()">Salvar preferência</button></div></div>`;
+  document.body.appendChild(ov);
+}
+async function nucleoSaveMetrologyAlertPreferences(){
+  const enabled=!!document.getElementById('metrologyEmailAlertsEnabled')?.checked,status=document.getElementById('metrologyAlertPrefStatus');
+  if(status)status.textContent='Salvando...';
+  try{
+    const res=await portalJsonp({acao:'portal_metrology_email_preferences',enabled:enabled?'1':'0'},30000);
+    if(res?.sucesso===false)throw new Error(res.erro||'Não foi possível salvar a preferência.');
+    const rec=nucleoCurrentUserRecord();if(rec)rec.metrologyEmailAlerts=enabled;
+    if(status)status.textContent=enabled?'Preferência salva: e-mails de calibração ativados.':'Preferência salva: somente notificações no Núcleo.';
+  }catch(e){if(status)status.textContent='Erro: '+(e?.message||e)}
+}
+function nucleoMetrologyDaysUntil(dateStr){
+  if(!dateStr)return null;const d=new Date(String(dateStr)+'T12:00:00'),n=new Date();if(Number.isNaN(d.getTime()))return null;
+  const a=new Date(n.getFullYear(),n.getMonth(),n.getDate()),b=new Date(d.getFullYear(),d.getMonth(),d.getDate());return Math.round((b-a)/86400000);
+}
+function nucleoMetrologyAlertDescriptor(r){
+  if(!r||r.module!=='equipment'||r.calibrationRequired===false)return null;
+  if(r.calibrationScheduled){
+    const d=nucleoMetrologyDaysUntil(r.scheduledCalibrationDate);
+    if(d===0)return {kind:'scheduled_today',title:'Calibração agendada para hoje',message:`${r.title||'Equipamento'}${r.code?' · '+r.code:''}: a calibração está agendada para hoje. Após a execução, marque como concluída e atualize a próxima calibração.`,date:r.scheduledCalibrationDate};
+    return null;
+  }
+  const d=nucleoMetrologyDaysUntil(r.dueDate);if(d===null)return null;const alertDays=Math.max(0,Number(r.alertDays??30)||0);
+  if(d<0)return {kind:'overdue',title:'Calibração vencida',message:`${r.title||'Equipamento'}${r.code?' · '+r.code:''}: a calibração venceu em ${r.dueDate}. Agende a calibração ou atualize o cadastro.`,date:r.dueDate};
+  if(d===0)return {kind:'due_today',title:'Calibração vence hoje',message:`${r.title||'Equipamento'}${r.code?' · '+r.code:''}: a calibração vence hoje. Agende a calibração ou registre a conclusão.`,date:r.dueDate};
+  if(d<=alertDays)return {kind:'due_window',title:'Calibração próxima',message:`${r.title||'Equipamento'}${r.code?' · '+r.code:''}: faltam ${d} dia${d===1?'':'s'} para a calibração. Quando agendar, marque o agendamento no cadastro para interromper este alerta.`,date:r.dueDate};
+  return null;
+}
+function nucleoClearEquipmentNotifications(equipmentId){
+  const id=String(equipmentId||'');if(!id)return;
+  const list=getNotifications().filter(n=>!(n?.type==='equipment'&&String(n.equipmentId||'')===id));
+  saveNotifications(list);refreshNotificationBell();try{renderPendingHubNotifications()}catch(e){}
+}
+function nucleoRefreshMetrologyAlertsForCurrentUser(){
+  if(!isAdmin())return;
+  const sess=getSession()||{},unit=normalizePortalUnit(sess.unit||'');
+  const list=getNotifications();let changed=false;
+  getAdminModuleRecords().filter(r=>r.module==='equipment').forEach(r=>{
+    const ru=normalizePortalUnit(r.unit||r.unidade||'');if(unit&&ru&&unit!==ru&&!(sess.accessUnits||[]).includes(ru))return;
+    const a=nucleoMetrologyAlertDescriptor(r);if(!a)return;
+    const id=`METRO-${r.id}-${a.kind}-${a.date||'nodate'}-${notificationUserKey()}`;
+    if(list.some(n=>String(n.id)===id))return;
+    const n={id,createdAt:new Date().toISOString(),type:'equipment',title:a.title,message:a.message,audience:'user',userKey:notificationUserKey(),unidade:r.unit||r.unidade||'',equipmentId:r.id};
+    list.unshift(n);changed=true;
+  });
+  if(changed){saveNotifications(list);refreshNotificationBell();try{renderPendingHubNotifications()}catch(e){}}
 }
 
 let emailHistoryVisibleLimit=5;
@@ -12641,13 +12712,18 @@ function collectAdminModuleForm(key,existing){
     revision:val('admModRevision'),
     ...(key==='equipment'?{
       equipmentType:val('admModEquipmentType'),
-      manufacturer:val('admModManufacturer'),
-      model:val('admModModel'),
+      manufacturer:existing?.manufacturer||'',
+      model:existing?.model||'',
       serialNumber:val('admModSerialNumber'),
       lastCalibration:val('admModLastCalibration'),
+      lastCalibrationCompany:val('admModLastCalibrationCompany')||(existing?.lastCalibrationCompany||''),
       calibrationIntervalMonths:Number(val('admModCalibrationInterval')||0),
       alertDays:Number(val('admModAlertDays')||30),
       calibrationRequired:val('admModCalibrationRequired')!=='no',
+      calibrationScheduled:val('admModCalibrationScheduled')==='yes',
+      scheduledCalibrationDate:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationDate'):'',
+      scheduledCalibrationCompany:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationCompany'):'',
+      scheduledCalibrationNotes:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationNotes'):'',
       metrologyHistory:Array.isArray(existing?.metrologyHistory)?existing.metrologyHistory:[]
     }:{}),
     createdAt:existing?.createdAt||now,
