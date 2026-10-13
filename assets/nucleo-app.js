@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-metrology-email-test1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-process-master1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -82,16 +82,16 @@ const ADMIN_OPERATIONAL_MODULES={
     ]
   },
   processes:{
-    eyebrow:'DOCUMENTOS INTERNOS DO SGQ',
+    eyebrow:'GESTÃO DE PROCESSOS E DOCUMENTOS',
     title:'Gestão de processos',
-    desc:'Biblioteca controlada dos documentos internos do SGQ: IT, GSP, POP, LPP e outros documentos de processo.',
+    desc:'Lista Mestra digital dos documentos controlados, nomenclaturas, modelos e histórico documental do SGQ.',
     cards:[
-      ['Novo documento interno','Cadastrar IT, GSP, POP, LPP ou outro documento interno.','new'],
-      ['Documentos vigentes','Consultar documentos internos publicados e em uso.','published'],
-      ['Em revisão','Acompanhar documentos internos em revisão.','review'],
-      ['Revisões pendentes','Ver documentos com revisão próxima ou pendente.','pending'],
-      ['Histórico documental','Consultar versões, revisões e documentos substituídos.','history'],
-      ['Modelos de formulários','Configurar perguntas, revisão e aparência dos formulários gerados pelo Núcleo.','templates']
+      ['Lista Mestra','Consultar todos os documentos controlados, situação, revisão e vínculo com o arquivo vigente.','master'],
+      ['Adicionar documento existente','Adotar um documento que já existe e trazê-lo para o controle do Núcleo sem recriar o arquivo.','adopt'],
+      ['Importar documentos existentes','Colar uma tabela do Excel/Sheets ou importar CSV/TSV para migrar a Lista Mestra atual.','import'],
+      ['Nomenclaturas','Controlar siglas de tipos, unidades e áreas usadas na codificação documental.','nomenclature'],
+      ['Modelos','Gerenciar os modelos visuais e formulários usados pelo Núcleo.','templates'],
+      ['Histórico / obsoletos','Consultar documentos substituídos, cancelados, vencidos e versões anteriores.','history']
     ]
   }
 };

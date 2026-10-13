@@ -255,6 +255,140 @@ function adminModuleFields(key){
   return map[key]||'';
 }
 
+
+// ============================================================
+// GESTÃO DE PROCESSOS — LISTA MESTRA / NOMENCLATURAS
+// Primeira versão de migração dos documentos já existentes.
+// ============================================================
+const NUCLEO_PROCESS_DOC_TYPES_DEFAULT=[
+  ['POL','Política'],['MAN','Manual'],['POP','Procedimento'],['IT','Instrução de Trabalho'],
+  ['LPP','Lição Ponto a Ponto'],['GSP','Guia de Solução de Problemas'],['TAB','Tabela'],
+  ['ESP','Especificação'],['FOR','Formulário'],['DOE','Documento Externo']
+];
+const NUCLEO_PROCESS_DOC_UNITS_DEFAULT=[
+  ['ES','Linhares'],['SC','São Bento do Sul'],['RL','RL'],['PR','Paraná (Piên)'],
+  ['COR','Corporativo'],['TES','TASSE Linhares'],['TSC','TASSE São Bento do Sul']
+];
+const NUCLEO_PROCESS_DOC_AREAS_DEFAULT=[
+  ['ADM','Administrativo'],['ALM','Almoxarifado'],['AMB','Ambulatório'],['CML','Comercial'],
+  ['COM','Comunicação'],['CON','Contabilidade'],['COP','Compras'],['CTS','Custos'],
+  ['DHO','Desenvolvimento Humano Organizacional'],['ENG','Engenharia de Produtos'],
+  ['ETE','Estação de Tratamento de Efluentes'],['EXP','Expedição'],['FAC','Facilities'],
+  ['LOG','Logística'],['MAN','Manutenção'],['MEA','Meio Ambiente'],['PCM','Planejamento e Controle de Manutenção'],
+  ['PCP','Planejamento e Controle de Produção'],['PES','Planejamento Estratégico'],['PRC','Processo'],
+  ['PRD','Produção - Geral'],['QUA','Qualidade'],['SGQ','Sistema de Gestão da Qualidade'],
+  ['REH','Recursos Humanos'],['SAC','Serviço de Atendimento ao Consumidor'],['SSO','Segurança e Saúde Ocupacional'],
+  ['SUP','Suprimentos'],['UTI','Utilidades'],['VEN','Vendas']
+];
+function nucleoProcessCurrentSystemUnit(){return getSession()?.role==='quality'?'filial':(explicitPortalUnit(getSession()?.unit)||'matriz')}
+function nucleoProcessNomenclatureId(){return 'PROC-NOMEN-'+nucleoProcessCurrentSystemUnit()}
+function nucleoProcessNomenclature(){
+  const rec=getAdminModuleRecords().find(r=>r.module==='processes'&&r.recordType==='nomenclature'&&String(r.id)===nucleoProcessNomenclatureId());
+  return {
+    types:Array.isArray(rec?.types)&&rec.types.length?rec.types:NUCLEO_PROCESS_DOC_TYPES_DEFAULT.map(x=>({code:x[0],name:x[1]})),
+    units:Array.isArray(rec?.documentUnits)&&rec.documentUnits.length?rec.documentUnits:NUCLEO_PROCESS_DOC_UNITS_DEFAULT.map(x=>({code:x[0],name:x[1]})),
+    areas:Array.isArray(rec?.areas)&&rec.areas.length?rec.areas:NUCLEO_PROCESS_DOC_AREAS_DEFAULT.map(x=>({code:x[0],name:x[1]}))
+  };
+}
+function nucleoProcessControlledDocuments(){
+  return getAdminModuleRecords().filter(r=>r.module==='processes'&&r.recordType!=='nomenclature'&&r.recordType!=='process_template'&&nucleoManagerScopeAllows(r));
+}
+function nucleoProcessStatusLabel(status){return ({published:'Vigente',review:'Em revisão',approval:'Aguardando aprovação',expired:'Vencido',provisional:'Provisório',obsolete:'Obsoleto',cancelled:'Cancelado'}[status]||status||'Vigente')}
+function nucleoProcessParseCode(code){
+  const raw=String(code||'').trim().toUpperCase();const parts=raw.split('-').map(x=>x.trim()).filter(Boolean);
+  return {raw,type:parts[0]||'',unitCode:parts[1]||'',areaCode:parts[2]||'',sequence:parts.slice(3).join('-')||''};
+}
+function nucleoProcessEscapeAttr(v){return escapeHtml(String(v??'')).replace(/"/g,'&quot;')}
+function nucleoProcessSelectOptions(items,selected){return items.map(x=>`<option value="${nucleoProcessEscapeAttr(x.code)}" ${String(x.code)===String(selected||'')?'selected':''}>${escapeHtml(x.code)} — ${escapeHtml(x.name)}</option>`).join('')}
+function nucleoProcessNextCode(type,unitCode,areaCode){
+  const prefix=[type,unitCode,areaCode].map(x=>String(x||'').trim().toUpperCase()).filter(Boolean).join('-');if(!prefix)return '';
+  let max=0;nucleoProcessControlledDocuments().forEach(r=>{const c=String(r.code||'').toUpperCase();if(!c.startsWith(prefix+'-'))return;const tail=c.slice(prefix.length+1);const m=tail.match(/^(\d+)/);if(m)max=Math.max(max,Number(m[1])||0)});
+  return prefix+'-'+String(max+1).padStart(4,'0');
+}
+function nucleoProcessGenerateCode(){
+  const type=document.getElementById('procAdoptType')?.value||'';const unit=document.getElementById('procAdoptUnitCode')?.value||'';const area=document.getElementById('procAdoptAreaCode')?.value||'';
+  const code=nucleoProcessNextCode(type,unit,area);const el=document.getElementById('procAdoptCode');if(el&&code)el.value=code;
+}
+function renderProcessMasterWorkspace(historyOnly=false){
+  const host=document.getElementById('adminModuleContent');if(!host)return;const docs=nucleoProcessControlledDocuments();
+  const q=normalizeAnswer(document.getElementById('processMasterSearch')?.value||'');const type=document.getElementById('processMasterType')?.value||'all';const status=document.getElementById('processMasterStatus')?.value||'all';
+  let rows=docs.filter(r=>historyOnly?['obsolete','cancelled','expired'].includes(r.status):true);
+  if(q)rows=rows.filter(r=>normalizeAnswer([r.code,r.title,r.docType,r.documentUnitCode,r.areaCode,r.sector,r.responsible].join(' ')).includes(q));
+  if(type!=='all')rows=rows.filter(r=>String(r.docType||nucleoProcessParseCode(r.code).type)===type);
+  if(status!=='all')rows=rows.filter(r=>String(r.status||'published')===status);
+  rows.sort((a,b)=>String(a.code||a.title||'').localeCompare(String(b.code||b.title||''),'pt-BR'));
+  const counts={total:docs.length,published:docs.filter(r=>(r.status||'published')==='published').length,review:docs.filter(r=>['review','approval'].includes(r.status)).length,expired:docs.filter(r=>r.status==='expired').length,obsolete:docs.filter(r=>['obsolete','cancelled'].includes(r.status)).length};
+  const nom=nucleoProcessNomenclature();
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button>
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px"><div><h3 style="margin:0">${historyOnly?'Histórico / obsoletos':'Lista Mestra'}</h3><div class="small" style="margin-top:4px">${historyOnly?'Versões retiradas, canceladas e vencidas.':'Controle central dos documentos já existentes e dos novos documentos do SGQ.'}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn secondary" onclick="renderProcessImportWorkspace()">Importar existentes</button><button class="btn primary" onclick="renderProcessAdoptWorkspace()">＋ Adicionar documento existente</button></div></div>
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-top:14px"><div class="card" style="padding:12px"><span class="small">TOTAL</span><b style="font-size:22px;display:block">${counts.total}</b></div><div class="card" style="padding:12px"><span class="small">VIGENTES</span><b style="font-size:22px;display:block">${counts.published}</b></div><div class="card" style="padding:12px"><span class="small">EM FLUXO</span><b style="font-size:22px;display:block">${counts.review}</b></div><div class="card" style="padding:12px"><span class="small">VENCIDOS</span><b style="font-size:22px;display:block">${counts.expired}</b></div><div class="card" style="padding:12px"><span class="small">OBSOLETOS</span><b style="font-size:22px;display:block">${counts.obsolete}</b></div></div>
+    <div class="card" style="padding:14px;margin-top:12px"><div style="display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(2,minmax(150px,.6fr));gap:10px"><input id="processMasterSearch" placeholder="Pesquisar código, título, área..." value="${nucleoProcessEscapeAttr(document.getElementById('processMasterSearch')?.value||'')}" oninput="renderProcessMasterWorkspace(${historyOnly?'true':'false'})"><select id="processMasterType" onchange="renderProcessMasterWorkspace(${historyOnly?'true':'false'})"><option value="all">Todos os tipos</option>${nom.types.map(x=>`<option value="${escapeHtml(x.code)}" ${type===x.code?'selected':''}>${escapeHtml(x.code)}</option>`).join('')}</select><select id="processMasterStatus" onchange="renderProcessMasterWorkspace(${historyOnly?'true':'false'})"><option value="all">Todas as situações</option>${['published','review','approval','expired','provisional','obsolete','cancelled'].map(x=>`<option value="${x}" ${status===x?'selected':''}>${nucleoProcessStatusLabel(x)}</option>`).join('')}</select></div></div>
+    <div class="card" style="padding:0;overflow:auto;margin-top:12px"><table style="width:100%;min-width:1120px"><thead><tr><th>Código</th><th>Documento</th><th>Tipo</th><th>Unidade / área</th><th>Revisão</th><th>Data</th><th>Situação</th><th>Arquivo</th><th>Ações</th></tr></thead><tbody>${rows.length?rows.map(r=>{const pc=nucleoProcessParseCode(r.code);return `<tr><td><b>${escapeHtml(r.code||'—')}</b></td><td><b>${escapeHtml(r.title||'Sem título')}</b><div class="small">${escapeHtml(r.description||'')}</div></td><td>${escapeHtml(r.docType||pc.type||'—')}</td><td>${escapeHtml(r.documentUnitCode||pc.unitCode||'—')} · ${escapeHtml(r.areaCode||pc.areaCode||r.sector||'—')}</td><td>${escapeHtml(r.revision||'—')}</td><td>${escapeHtml(adminModuleDate(r.eventDate)||'—')}</td><td><span class="pill">${escapeHtml(nucleoProcessStatusLabel(r.status||'published'))}</span></td><td>${r.link?`<a class="btn secondary" href="${nucleoProcessEscapeAttr(r.link)}" target="_blank" rel="noopener">Abrir arquivo</a>`:'<span class="small">Sem link</span>'}</td><td><button class="btn secondary" onclick="renderProcessAdoptWorkspace('${nucleoProcessEscapeAttr(r.id)}')">Editar controle</button></td></tr>`}).join(''):`<tr><td colspan="9" style="padding:28px;text-align:center"><b>Nenhum documento encontrado.</b><div class="small" style="margin-top:5px">Você pode adotar um documento existente ou importar sua Lista Mestra atual.</div></td></tr>`}</tbody></table></div>
+  </div>`;
+}
+function renderProcessAdoptWorkspace(id=''){
+  const host=document.getElementById('adminModuleContent');if(!host)return;const existing=id?adminModuleRecord(id):null;const nom=nucleoProcessNomenclature();const pc=nucleoProcessParseCode(existing?.code||'');
+  const sysUnit=explicitRecordUnit(existing)||nucleoProcessCurrentSystemUnit();
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" onclick="renderProcessMasterWorkspace(false)">← Voltar à Lista Mestra</button><div class="card" style="padding:20px;margin-top:14px"><div><h3 style="margin:0">${existing?'Editar controle documental':'Adotar documento existente'}</h3><div class="small" style="margin-top:4px">O arquivo não será recriado. O Núcleo passa a controlar código, revisão, situação e o link do documento que já existe.</div></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px">
+    <label><span class="small">Unidade do Núcleo *</span><select id="procAdoptSystemUnit"><option value="matriz" ${sysUnit==='matriz'?'selected':''}>SETA SC — Matriz</option><option value="filial" ${sysUnit==='filial'?'selected':''}>SETA ES — Linhares</option></select></label>
+    <label><span class="small">Tipo *</span><select id="procAdoptType" onchange="nucleoProcessGenerateCode()">${nucleoProcessSelectOptions(nom.types,existing?.docType||pc.type||'POP')}</select></label>
+    <label><span class="small">Sigla da unidade no código *</span><select id="procAdoptUnitCode" onchange="nucleoProcessGenerateCode()">${nucleoProcessSelectOptions(nom.units,existing?.documentUnitCode||pc.unitCode||(sysUnit==='filial'?'ES':'SC'))}</select></label>
+    <label><span class="small">Área responsável *</span><select id="procAdoptAreaCode" onchange="nucleoProcessGenerateCode()">${nucleoProcessSelectOptions(nom.areas,existing?.areaCode||pc.areaCode||'SGQ')}</select></label>
+    <label style="grid-column:1/-1"><span class="small">Código do documento *</span><div style="display:flex;gap:8px"><input id="procAdoptCode" value="${nucleoProcessEscapeAttr(existing?.code||'')}" placeholder="Ex.: POP-COR-SGQ-0001"><button class="btn secondary" type="button" onclick="nucleoProcessGenerateCode()">Sugerir próximo</button></div></label>
+    <label style="grid-column:1/-1"><span class="small">Título *</span><input id="procAdoptTitle" value="${nucleoProcessEscapeAttr(existing?.title||'')}" placeholder="Título vigente do documento"></label>
+    <label><span class="small">Revisão</span><input id="procAdoptRevision" value="${nucleoProcessEscapeAttr(existing?.revision||'')}" placeholder="Ex.: 01"></label>
+    <label><span class="small">Data de emissão / revisão</span><input id="procAdoptDate" type="date" value="${nucleoProcessEscapeAttr(existing?.eventDate||'')}"></label>
+    <label><span class="small">Próxima análise crítica</span><input id="procAdoptDue" type="date" value="${nucleoProcessEscapeAttr(existing?.dueDate||'')}"></label>
+    <label><span class="small">Situação</span><select id="procAdoptStatus">${['published','review','approval','expired','provisional','obsolete','cancelled'].map(x=>`<option value="${x}" ${(existing?.status||'published')===x?'selected':''}>${nucleoProcessStatusLabel(x)}</option>`).join('')}</select></label>
+    <label><span class="small">Responsável pelo documento</span><input id="procAdoptResponsible" value="${nucleoProcessEscapeAttr(existing?.responsible||'')}"></label>
+    <label><span class="small">Elaborador</span><input id="procAdoptAuthor" value="${nucleoProcessEscapeAttr(existing?.author||existing?.elaborator||'')}"></label>
+    <label><span class="small">Verificador</span><input id="procAdoptVerifier" value="${nucleoProcessEscapeAttr(existing?.verifier||'')}"></label>
+    <label><span class="small">Aprovador</span><input id="procAdoptApprover" value="${nucleoProcessEscapeAttr(existing?.approver||'')}"></label>
+    <label><span class="small">Exige treinamento?</span><select id="procAdoptTraining"><option value="no" ${existing?.trainingRequired?'':'selected'}>Não</option><option value="yes" ${existing?.trainingRequired?'selected':''}>Sim</option></select></label>
+    <label style="grid-column:1/-1"><span class="small">Link do arquivo mestre no Drive / repositório *</span><input id="procAdoptLink" value="${nucleoProcessEscapeAttr(existing?.link||'')}" placeholder="https://drive.google.com/..."></label>
+    <label style="grid-column:1/-1"><span class="small">Observações / finalidade</span><textarea id="procAdoptDescription">${escapeHtml(existing?.description||'')}</textarea></label>
+  </div><div id="procAdoptStatusMsg" class="small" style="margin-top:10px"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button class="btn secondary" onclick="renderProcessMasterWorkspace(false)">Cancelar</button><button class="btn primary" onclick="nucleoProcessSaveAdopt('${nucleoProcessEscapeAttr(existing?.id||'')}')">Salvar na Lista Mestra</button></div></div></div>`;
+}
+async function nucleoProcessSaveAdopt(existingId=''){
+  const val=id=>String(document.getElementById(id)?.value||'').trim();const code=val('procAdoptCode').toUpperCase(),title=val('procAdoptTitle'),link=val('procAdoptLink');if(!code)return alert('Informe o código do documento.');if(!title)return alert('Informe o título.');if(!link)return alert('Informe o link do arquivo que já existe.');
+  const duplicate=nucleoProcessControlledDocuments().find(r=>String(r.code||'').toUpperCase()===code&&String(r.id)!==String(existingId));if(duplicate&&!confirm('Já existe um documento com este código na Lista Mestra. Deseja salvar mesmo assim?'))return;
+  const existing=existingId?adminModuleRecord(existingId):null,now=new Date().toISOString(),id=existing?.id||('PROC-'+Date.now()+'-'+Math.random().toString(36).slice(2,7));
+  const rec={...(existing||{}),id,module:'processes',recordType:'controlled_document',unit:val('procAdoptSystemUnit')||nucleoProcessCurrentSystemUnit(),docType:val('procAdoptType'),documentUnitCode:val('procAdoptUnitCode'),areaCode:val('procAdoptAreaCode'),code,title,revision:val('procAdoptRevision'),eventDate:val('procAdoptDate'),dueDate:val('procAdoptDue'),status:val('procAdoptStatus')||'published',responsible:val('procAdoptResponsible'),author:val('procAdoptAuthor'),verifier:val('procAdoptVerifier'),approver:val('procAdoptApprover'),trainingRequired:val('procAdoptTraining')==='yes',link,description:val('procAdoptDescription'),createdAt:existing?.createdAt||now,createdBy:existing?.createdBy||getSession()?.name||'SGQ',updatedAt:now,updatedBy:getSession()?.name||'SGQ'};
+  const msg=document.getElementById('procAdoptStatusMsg');if(msg)msg.textContent='Salvando na base central...';
+  try{let all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===String(id));if(ix>=0)all[ix]=rec;else all.unshift(rec);saveAdminModuleRecords(all);await portalBackendSaveConfirmedPost('admin_modules',id,rec,90000);if(msg)msg.textContent='✓ Documento confirmado na Lista Mestra.';setTimeout(()=>renderProcessMasterWorkspace(false),350)}catch(e){if(msg)msg.textContent='Erro ao salvar: '+(e?.message||e)}
+}
+function renderProcessImportWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" onclick="renderProcessMasterWorkspace(false)">← Voltar à Lista Mestra</button><div class="card" style="padding:20px;margin-top:14px"><h3 style="margin:0">Importar documentos existentes</h3><p class="small">Copie da sua planilha e cole abaixo. O Excel e o Google Sheets colam em colunas separadas por TAB. Também é possível escolher um CSV/TSV.</p><div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0"><input id="processImportFile" type="file" accept=".csv,.tsv,.txt" onchange="nucleoProcessReadImportFile(this)"><select id="processImportSystemUnit"><option value="matriz">Salvar na unidade Matriz</option><option value="filial">Salvar na unidade Linhares</option></select></div><div class="small" style="margin-bottom:6px"><b>Cabeçalhos reconhecidos:</b> Código, Título/Tema, Revisão, Data, Situação/Status, Link/Arquivo, Responsável, Treinamento.</div><textarea id="processImportText" style="min-height:220px;font-family:ui-monospace,Consolas,monospace" placeholder="Código\tTítulo\tRevisão\tData\tSituação\tLink\nPOP-COR-SGQ-0001\tCONTROLE DE DOCUMENTOS E REGISTROS\t1\t20/01/2025\tVigente\thttps://..."></textarea><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn secondary" onclick="nucleoProcessPreviewImport()">Analisar importação</button></div><div id="processImportPreview" style="margin-top:14px"></div></div></div>`;
+}
+function nucleoProcessReadImportFile(input){const f=input?.files?.[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{const el=document.getElementById('processImportText');if(el)el.value=String(rd.result||'')};rd.readAsText(f,'UTF-8')}
+function nucleoProcessImportHeaderKey(v){const n=normalizeAnswer(v).replace(/[^a-z0-9]+/g,'');if(['codigo','cod','id'].includes(n))return'code';if(['titulo','tema','documento','nome'].includes(n))return'title';if(['revisao','rev'].includes(n))return'revision';if(['data','atual','datarevisao','atualizacao'].includes(n))return'eventDate';if(['status','situacao'].includes(n))return'status';if(['link','arquivo','caminho','url'].includes(n))return'link';if(['responsavel','responsavelpelodocumento'].includes(n))return'responsible';if(['treinamento','exigetreinamento'].includes(n))return'training';return''}
+function nucleoProcessImportDate(v){const x=String(v||'').trim();if(/^\d{4}-\d{2}-\d{2}$/.test(x))return x;const m=x.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);if(!m)return'';const y=m[3].length===2?'20'+m[3]:m[3];return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')}
+function nucleoProcessImportStatus(v){const n=normalizeAnswer(v);if(n.includes('obsolet'))return'obsolete';if(n.includes('cancel'))return'cancelled';if(n.includes('venc'))return'expired';if(n.includes('revis'))return'review';if(n.includes('aprov'))return'approval';if(n.includes('provis'))return'provisional';return'published'}
+window.__processImportRows=[];
+function nucleoProcessParseImportText(){
+  const text=String(document.getElementById('processImportText')?.value||'').trim();if(!text)return[];const lines=text.split(/\r?\n/).filter(x=>x.trim());if(lines.length<2)return[];const delim=lines[0].includes('\t')?'\t':lines[0].includes(';')?';':',';const heads=lines[0].split(delim).map(nucleoProcessImportHeaderKey);if(!heads.includes('code')||!heads.includes('title'))throw new Error('A primeira linha precisa ter pelo menos as colunas Código e Título/Tema.');
+  return lines.slice(1).map((line,i)=>{const vals=line.split(delim),o={_line:i+2};heads.forEach((h,j)=>{if(h)o[h]=String(vals[j]||'').trim()});const pc=nucleoProcessParseCode(o.code);return {...o,code:String(o.code||'').toUpperCase(),docType:pc.type,documentUnitCode:pc.unitCode,areaCode:pc.areaCode,eventDate:nucleoProcessImportDate(o.eventDate),status:nucleoProcessImportStatus(o.status),trainingRequired:['sim','yes','1','true','x'].includes(normalizeAnswer(o.training))}}).filter(x=>x.code||x.title);
+}
+function nucleoProcessPreviewImport(){
+  const host=document.getElementById('processImportPreview');if(!host)return;try{const rows=nucleoProcessParseImportText();window.__processImportRows=rows;const knownTypes=new Set(nucleoProcessNomenclature().types.map(x=>x.code));const existing=new Set(nucleoProcessControlledDocuments().map(x=>String(x.code||'').toUpperCase()));const issues=rows.filter(x=>!x.code||!x.title||!knownTypes.has(x.docType)||existing.has(x.code));host.innerHTML=`<div class="card" style="padding:14px;background:#f8fafc"><b>${rows.length} registro(s) encontrado(s)</b><div class="small" style="margin-top:4px">${rows.length-issues.length} sem alerta · ${issues.length} precisam de conferência.</div><div style="overflow:auto;margin-top:12px;max-height:360px"><table style="width:100%;min-width:850px"><thead><tr><th>Linha</th><th>Código</th><th>Título</th><th>Tipo</th><th>Unidade / área</th><th>Revisão</th><th>Situação</th><th>Conferência</th></tr></thead><tbody>${rows.map(r=>{const warnings=[];if(!r.code)warnings.push('sem código');if(!r.title)warnings.push('sem título');if(!knownTypes.has(r.docType))warnings.push('tipo não cadastrado');if(existing.has(r.code))warnings.push('código já existe');return `<tr><td>${r._line}</td><td><b>${escapeHtml(r.code||'—')}</b></td><td>${escapeHtml(r.title||'—')}</td><td>${escapeHtml(r.docType||'—')}</td><td>${escapeHtml(r.documentUnitCode||'—')} · ${escapeHtml(r.areaCode||'—')}</td><td>${escapeHtml(r.revision||'—')}</td><td>${escapeHtml(nucleoProcessStatusLabel(r.status))}</td><td>${warnings.length?`<span style="color:#b42318">${escapeHtml(warnings.join(', '))}</span>`:'✓'}</td></tr>`}).join('')}</tbody></table></div><div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn primary" ${rows.length?'':'disabled'} onclick="nucleoProcessConfirmImport()">Importar para Lista Mestra</button></div></div>`}catch(e){host.innerHTML=`<div style="padding:12px;border:1px solid #fda29b;background:#fff1f0;border-radius:10px;color:#b42318">${escapeHtml(e?.message||e)}</div>`}
+}
+async function nucleoProcessConfirmImport(){
+  const rows=Array.isArray(window.__processImportRows)?window.__processImportRows:[];if(!rows.length)return;const existingCodes=new Set(nucleoProcessControlledDocuments().map(x=>String(x.code||'').toUpperCase()));const unit=String(document.getElementById('processImportSystemUnit')?.value||nucleoProcessCurrentSystemUnit());const valid=rows.filter(r=>r.code&&r.title&&!existingCodes.has(r.code));if(!valid.length)return alert('Nenhum registro novo válido para importar.');if(!confirm(`Importar ${valid.length} documento(s) para a Lista Mestra? Linhas com código já existente serão ignoradas.`))return;
+  const now=new Date().toISOString(),all=getAdminModuleRecords();valid.forEach((r,i)=>all.unshift({id:'PROC-IMP-'+Date.now()+'-'+i,module:'processes',recordType:'controlled_document',unit,docType:r.docType,documentUnitCode:r.documentUnitCode,areaCode:r.areaCode,code:r.code,title:r.title,revision:r.revision||'',eventDate:r.eventDate||'',status:r.status||'published',responsible:r.responsible||'',trainingRequired:!!r.trainingRequired,link:r.link||'',createdAt:now,createdBy:getSession()?.name||'SGQ',updatedAt:now,updatedBy:getSession()?.name||'SGQ',imported:true}));saveAdminModuleRecords(all);
+  const imported=all.slice(0,valid.length);for(const rec of imported){try{await portalBackendSave('admin_modules',rec.id,rec)}catch(e){console.warn('Falha ao enviar documento importado',rec.id,e)}}alert(`${valid.length} documento(s) importado(s).`);renderProcessMasterWorkspace(false);
+}
+function renderProcessNomenclatureWorkspace(){
+  const host=document.getElementById('adminModuleContent');if(!host)return;const n=nucleoProcessNomenclature();
+  const group=(title,key,items)=>`<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>${title}</b><div class="small">${items.length} item(ns)</div></div><button class="btn secondary" onclick="nucleoProcessAddNomenclature('${key}')">＋ Adicionar</button></div><div style="display:grid;gap:6px;margin-top:12px">${items.map(x=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #eaecf0;border-radius:9px"><span><b>${escapeHtml(x.code)}</b> — ${escapeHtml(x.name)}</span><button class="btn secondary" style="padding:4px 8px" onclick="nucleoProcessRemoveNomenclature('${key}','${nucleoProcessEscapeAttr(x.code)}')">Retirar</button></div>`).join('')}</div></div>`;
+  host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" onclick="showAdminOperationalModule('processes')">← Voltar ao módulo</button><div style="margin-top:14px"><h3 style="margin:0">Nomenclaturas</h3><div class="small" style="margin-top:4px">Padrão de codificação: TIPO – UNIDADE – ÁREA – NÚMERO SEQUENCIAL. As listas abaixo podem ser ampliadas pelo SGQ.</div></div><div style="display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:12px;margin-top:14px">${group('Tipos de documento','types',n.types)}${group('Unidades documentais','units',n.units)}${group('Áreas','areas',n.areas)}</div><div id="processNomenStatus" class="small" style="margin-top:10px"></div></div>`;
+}
+async function nucleoProcessSaveNomenclature(n){
+  const id=nucleoProcessNomenclatureId(),existing=adminModuleRecord(id)||{},now=new Date().toISOString(),rec={...existing,id,module:'processes',recordType:'nomenclature',unit:nucleoProcessCurrentSystemUnit(),title:'Nomenclaturas documentais',types:n.types,documentUnits:n.units,areas:n.areas,status:'published',updatedAt:now,updatedBy:getSession()?.name||'SGQ',createdAt:existing.createdAt||now,createdBy:existing.createdBy||getSession()?.name||'SGQ'};let all=getAdminModuleRecords(),ix=all.findIndex(x=>String(x.id)===id);if(ix>=0)all[ix]=rec;else all.unshift(rec);saveAdminModuleRecords(all);await portalBackendSaveConfirmedPost('admin_modules',id,rec,90000);return rec;
+}
+async function nucleoProcessAddNomenclature(key){const labels={types:'tipo de documento',units:'unidade documental',areas:'área'};const code=String(prompt('Sigla da '+labels[key]+':','')||'').trim().toUpperCase();if(!code)return;const name=String(prompt('Nome da '+labels[key]+':','')||'').trim();if(!name)return;const n=nucleoProcessNomenclature();const prop=key==='units'?'units':key;if(n[prop].some(x=>x.code===code))return alert('Essa sigla já existe.');n[prop].push({code,name});try{await nucleoProcessSaveNomenclature(n);renderProcessNomenclatureWorkspace()}catch(e){alert('Não foi possível salvar a nomenclatura: '+(e?.message||e))}}
+async function nucleoProcessRemoveNomenclature(key,code){if(!confirm('Retirar esta nomenclatura da lista? Documentos já cadastrados não serão alterados.'))return;const n=nucleoProcessNomenclature(),prop=key==='units'?'units':key;n[prop]=n[prop].filter(x=>x.code!==code);try{await nucleoProcessSaveNomenclature(n);renderProcessNomenclatureWorkspace()}catch(e){alert('Não foi possível salvar a nomenclatura: '+(e?.message||e))}}
+
 function showAdminOperationalModule(key){
   const permissionModule={nc_capa:'nc',nccapa:'nc',documents:'documents',equipment:'equipment',training:'training',processes:'processes'}[key]||key;if(getSession()?.permissions&&!nucleoPersonCan(permissionModule)){alert('Seu cadastro não tem acesso a esta área.');return;}
 
@@ -271,7 +405,7 @@ function showAdminOperationalModule(key){
   if(title)title.textContent=m.title; if(sub)sub.textContent=m.desc; if(eyebrow)eyebrow.textContent=m.eyebrow; if(!list)return;
   if(list&&key==='documents'){}
   window.nucleoManagerModuleKey=key;
-  const allModuleRecords=getAdminModuleRecords().filter(r=>r.module===key&&nucleoManagerScopeAllows(r)&&!(key==='nccapa'&&r.recordType==='supplier_profile'));
+  const allModuleRecords=getAdminModuleRecords().filter(r=>r.module===key&&nucleoManagerScopeAllows(r)&&!(key==='nccapa'&&r.recordType==='supplier_profile')&&!(key==='processes'&&r.recordType==='nomenclature'));
   const records=(key==='documents'&&!isAdmin())
     ? allModuleRecords.filter(r=>normalizeAnswer(r.createdBy||'')===normalizeAnswer(getSession()?.name||''))
     : allModuleRecords;
@@ -323,7 +457,12 @@ function openAdminOperationalWorkspace(key,index){
   const back=`<button class="btn secondary" type="button" onclick="showAdminOperationalModule('${key}')">← Voltar ao módulo</button>`;
   if(key==='documents'&&mode==='standards'){renderStandardDocumentsWorkspace();return}
   if(key==='documents'&&mode==='deliveries'){renderDocumentDeliveriesWorkspace();return}
+  if(key==='processes'&&mode==='master'){renderProcessMasterWorkspace(false);return}
+  if(key==='processes'&&mode==='adopt'){renderProcessAdoptWorkspace();return}
+  if(key==='processes'&&mode==='import'){renderProcessImportWorkspace();return}
+  if(key==='processes'&&mode==='nomenclature'){renderProcessNomenclatureWorkspace();return}
   if(key==='processes'&&mode==='templates'){window.nucleoRncTemplateEditorOpen=false;window.nucleoProcessTemplateEditor='';renderProcessTemplatesWorkspace();return}
+  if(key==='processes'&&mode==='history'){renderProcessMasterWorkspace(true);return}
   if(key==='nccapa'&&mode==='active'){renderNcCapaTreatmentWorkspace();return}
   if(key==='nccapa'&&mode==='suppliers'){if(typeof window.renderSupplierWorkspace!=='function'){alert('O módulo de fornecedores não foi carregado. Atualize os arquivos do Núcleo.');return;}window.renderSupplierWorkspace();return}
   if(key==='nccapa'&&mode==='supplier_indicators'){if(typeof window.renderSupplierIndicatorsWorkspace!=='function'){alert('O módulo de indicadores de fornecedores não foi carregado. Atualize os arquivos do Núcleo.');return;}window.renderSupplierIndicatorsWorkspace();return}
@@ -642,7 +781,7 @@ function editAdminOperationalRecord(id){
 }
 
 const ndOriginalShowAdmin=showAdminOperationalModule;
-showAdminOperationalModule=function(key){const result=ndOriginalShowAdmin(key);const host=document.getElementById('adminModuleContent');if(host&&['documents','processes'].includes(key)){const btn=document.createElement('button');btn.className='btn primary';btn.style.margin='12px 0';btn.textContent=key==='processes'?'Modelos de documentos solicitados':'Preencher e gerar documento solicitado';btn.onclick=()=>nucleoDriveOpen(key==='processes'?'templates':'requests');host.prepend(btn);}return result;};
+showAdminOperationalModule=function(key){const result=ndOriginalShowAdmin(key);const host=document.getElementById('adminModuleContent');if(host&&['documents','processes'].includes(key)){const btn=document.createElement('button');btn.className='btn primary';btn.style.margin='12px 0';btn.textContent=key==='processes'?'Lista Mestra':'Preencher e gerar documento solicitado';btn.onclick=()=>key==='processes'?renderProcessMasterWorkspace(false):nucleoDriveOpen('requests');host.prepend(btn);}return result;};
 const ndOriginalAdminFields=adminModuleFields;
 adminModuleFields=function(key){let html=ndOriginalAdminFields(key);if(key==='documents'){const unit=getSession()?.role==='quality'?'filial':explicitPortalUnit(getSession()?.unit)||'matriz';html='<label>Unidade da solicitação<select id="ndRequestUnit" onchange="document.getElementById(\'admModCode\').innerHTML=documentTypeOptions(this.value)" '+(getSession()?.role==='quality'?'disabled':'')+'><option value="matriz" '+(unit==='matriz'?'selected':'')+'>SETA SC — Matriz</option><option value="filial" '+(unit==='filial'?'selected':'')+'>SETA ES — Unidade Linhares</option></select></label>'+html;}return html;};
 
