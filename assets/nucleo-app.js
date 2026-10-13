@@ -2953,6 +2953,38 @@ function enableMobileLoginKeyboard(){
 
 let loginAttemptNonce=0;
 
+function renderLoginMessage(message, type='info'){
+  const msg=document.getElementById('loginMessage');
+  if(!msg)return;
+  const palette={
+    error:{bg:'#fff1f2',border:'#fecdd3',color:'#b42318'},
+    success:{bg:'#ecfdf3',border:'#abefc6',color:'#067647'},
+    info:{bg:'#eff8ff',border:'#b2ddff',color:'#175cd3'}
+  };
+  const c=palette[type]||palette.info;
+  msg.textContent=String(message||'');
+  msg.classList.toggle('hidden',!message);
+  msg.style.background=c.bg;
+  msg.style.border='1px solid '+c.border;
+  msg.style.color=c.color;
+}
+
+function loginReasonMessage(remote){
+  const code=String(remote?.errorCode||remote?.codigoErro||'').toUpperCase();
+  const server=String(remote?.erro||remote?.message||'').trim();
+  const byCode={
+    USER_NOT_FOUND:'Cadastro não encontrado. Confira seu nome ou use “Cadastrar-se” se ainda não tiver acesso.',
+    UNIT_MISMATCH:'A unidade selecionada não corresponde ao seu cadastro. Confira Matriz/Filial.',
+    SECTOR_MISMATCH:'O setor selecionado não corresponde ao seu cadastro.',
+    WRONG_PASSWORD:'Senha incorreta. Confira a senha e tente novamente.',
+    PENDING:'Seu cadastro existe, mas ainda está aguardando aprovação do SGQ.',
+    DISABLED:'Seu acesso está desativado. Procure o SGQ.',
+    REJECTED:'Seu cadastro não foi aprovado pelo SGQ.',
+    DUPLICATE:'Existe mais de um cadastro compatível. O SGQ precisa revisar os cadastros.'
+  };
+  return byCode[code]||server||'Não foi possível validar seu acesso.';
+}
+
 async function loginUser(){
   const name=(document.getElementById('loginName')?.value||'').trim();
   const unit=(document.getElementById('loginUnit')?.value||'').trim();
@@ -2962,22 +2994,22 @@ async function loginUser(){
   const enterBtn=document.getElementById('loginEnterBtn');
   if(msg)msg.classList.remove('hidden');
   if(!name||!unit||!sector||!password){
-    if(msg)msg.textContent='Informe seu nome, selecione a unidade e o setor e digite sua senha.';
+    renderLoginMessage('Preencha nome, unidade, setor e senha antes de entrar.','error');
     return;
   }
   if(enterBtn)enterBtn.disabled=true;
-  if(msg)msg.textContent='Confirmando configuração central...';
+  renderLoginMessage('Confirmando configuração central...','info');
   try{
     if(!nucleoPublicConfigReady){
       const publicOk=await syncPublicPortalConfig();
       if(!publicOk)throw new Error('Não foi possível confirmar a configuração central do Núcleo. Tente novamente.');
     }
-    if(msg)msg.textContent='Validando acesso...';
+    renderLoginMessage('Validando acesso...','info');
     const remote=await portalJsonp({
       acao:'portal_login_jsonp', nome:name, unidade:unit, setor:sector, senha:password
     },60000);
     if(!remote || remote.sucesso!==true){
-      if(msg)msg.textContent=(remote&&remote.erro)||'Login não autorizado.';
+      renderLoginMessage(loginReasonMessage(remote),'error');
       return;
     }
 
@@ -3018,7 +3050,7 @@ async function loginUser(){
     const appShell=document.getElementById('appShell');
     if(appShell){appShell.classList.remove('hidden');appShell.style.removeProperty('display');}
 
-    if(msg)msg.textContent='';
+    renderLoginMessage('','info');
     try{document.activeElement?.blur()}catch(e){}
     try{setSession(session)}catch(e){nucleoSessionMemory=session;console.warn('Sessão mantida em memória:',e)}
 
@@ -3039,7 +3071,7 @@ async function loginUser(){
     }
   }catch(e){
     console.error('Falha no login do Núcleo:',e);
-    if(msg)msg.textContent='Erro ao entrar: '+(e?.message||e);
+    renderLoginMessage('Erro ao entrar: '+(e?.message||e),'error');
   }finally{
     if(enterBtn){enterBtn.disabled=false;enterBtn.textContent='Entrar';}
   }
