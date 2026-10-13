@@ -1831,30 +1831,54 @@ function createNotification(data){
   return n;
 }
 
+let nucleoMetrologyEmailPreferenceCache=null;
 function nucleoCurrentUserRecord(){
-  const sess=getSession()||{};
+  const sess=getSession()||{},mail=String(sess.email||'').trim().toLowerCase(),name=String(sess.name||'').trim().toLowerCase();
   return (users||[]).find(u=>
     (sess.personId&&String(u.personId||'')===String(sess.personId))||
-    (sess.email&&String(u.email||'').trim().toLowerCase()===String(sess.email||'').trim().toLowerCase())
+    (mail&&String(u.email||'').trim().toLowerCase()===mail)||
+    (name&&String(u.name||'').trim().toLowerCase()===name&&String(u.role||'').toLowerCase()===String(sess.role||'').toLowerCase())
   )||null;
 }
-function nucleoMetrologyEmailEnabled(){return nucleoCurrentUserRecord()?.metrologyEmailAlerts===true}
+function nucleoMetrologyEmailEnabled(){
+  if(typeof nucleoMetrologyEmailPreferenceCache==='boolean')return nucleoMetrologyEmailPreferenceCache;
+  return nucleoCurrentUserRecord()?.metrologyEmailAlerts===true;
+}
+async function nucleoLoadMetrologyAlertPreferences(){
+  const res=await portalJsonp({acao:'portal_metrology_email_preferences',mode:'get'},30000);
+  if(res?.sucesso===false)throw new Error(res.erro||'Não foi possível consultar sua preferência.');
+  nucleoMetrologyEmailPreferenceCache=!!res.enabled;
+  const rec=nucleoCurrentUserRecord();if(rec)rec.metrologyEmailAlerts=!!res.enabled;
+  return res;
+}
 async function nucleoOpenMetrologyAlertPreferences(){
   if(!isAdmin())return alert('Esta preferência é destinada às pessoas do SGQ.');
   let ov=document.getElementById('metrologyAlertPreferencesOverlay');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='metrologyAlertPreferencesOverlay';ov.className='modal';ov.style.zIndex='100500';
-  ov.innerHTML=`<div class="modal-box" style="width:min(620px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Meus alertas de calibração</h3><div class="small" style="margin-top:5px">Os avisos continuam aparecendo no Núcleo. Você decide se também quer recebê-los por e-mail.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('metrologyAlertPreferencesOverlay')?.remove()">Fechar</button></div><label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px;border:1px solid #e4e7ec;border-radius:10px"><input id="metrologyEmailAlertsEnabled" type="checkbox" ${nucleoMetrologyEmailEnabled()?'checked':''} style="width:20px;height:20px;margin-top:1px"><span><b>Receber alertas de calibração por e-mail</b><div class="small" style="margin-top:4px">Você receberá e-mail quando houver necessidade de calibração e, se já estiver agendada, somente no dia agendado para lembrar de concluir e atualizar o cadastro.</div></span></label><div id="metrologyAlertPrefStatus" class="small" style="margin-top:10px"></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" type="button" onclick="nucleoSaveMetrologyAlertPreferences()">Salvar preferência</button></div></div>`;
+  ov.innerHTML=`<div class="modal-box" style="width:min(620px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Meus alertas de calibração</h3><div class="small" style="margin-top:5px">Os avisos continuam aparecendo no Núcleo. Você decide se também quer recebê-los por e-mail.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('metrologyAlertPreferencesOverlay')?.remove()">Fechar</button></div><label style="display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px;border:1px solid #e4e7ec;border-radius:10px"><input id="metrologyEmailAlertsEnabled" type="checkbox" disabled style="width:20px;height:20px;margin-top:1px"><span><b>Receber alertas de calibração por e-mail</b><div class="small" style="margin-top:4px">Você receberá e-mail quando houver necessidade de calibração e, se já estiver agendada, somente no dia agendado para lembrar de concluir e atualizar o cadastro.</div></span></label><div id="metrologyAlertPrefStatus" class="small" style="margin-top:10px">Carregando sua preferência da base central...</div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px"><button id="metrologyAlertPrefReload" class="btn secondary" type="button" onclick="nucleoReloadMetrologyAlertPreferences()">Recarregar</button><button id="metrologyAlertPrefSave" class="btn primary" type="button" disabled onclick="nucleoSaveMetrologyAlertPreferences()">Salvar preferência</button></div></div>`;
   document.body.appendChild(ov);
+  await nucleoReloadMetrologyAlertPreferences();
+}
+async function nucleoReloadMetrologyAlertPreferences(){
+  const check=document.getElementById('metrologyEmailAlertsEnabled'),status=document.getElementById('metrologyAlertPrefStatus'),save=document.getElementById('metrologyAlertPrefSave');
+  if(status)status.textContent='Carregando sua preferência da base central...';if(check)check.disabled=true;if(save)save.disabled=true;
+  try{
+    const res=await nucleoLoadMetrologyAlertPreferences();
+    if(check){check.checked=!!res.enabled;check.disabled=false}if(save)save.disabled=false;
+    if(status)status.textContent=res.enabled?'E-mails de calibração estão ativados para você.':'E-mails de calibração estão desativados para você.';
+  }catch(e){if(status)status.textContent='Erro ao carregar: '+(e?.message||e)}
 }
 async function nucleoSaveMetrologyAlertPreferences(){
-  const enabled=!!document.getElementById('metrologyEmailAlertsEnabled')?.checked,status=document.getElementById('metrologyAlertPrefStatus');
-  if(status)status.textContent='Salvando...';
+  const check=document.getElementById('metrologyEmailAlertsEnabled'),enabled=!!check?.checked,status=document.getElementById('metrologyAlertPrefStatus'),save=document.getElementById('metrologyAlertPrefSave');
+  if(status)status.textContent='Salvando na base central...';if(check)check.disabled=true;if(save)save.disabled=true;
   try{
-    const res=await portalJsonp({acao:'portal_metrology_email_preferences',enabled:enabled?'1':'0'},30000);
+    const res=await portalJsonp({acao:'portal_metrology_email_preferences',mode:'set',enabled:enabled?'1':'0'},30000);
     if(res?.sucesso===false)throw new Error(res.erro||'Não foi possível salvar a preferência.');
-    const rec=nucleoCurrentUserRecord();if(rec)rec.metrologyEmailAlerts=enabled;
-    if(status)status.textContent=enabled?'Preferência salva: e-mails de calibração ativados.':'Preferência salva: somente notificações no Núcleo.';
-  }catch(e){if(status)status.textContent='Erro: '+(e?.message||e)}
+    nucleoMetrologyEmailPreferenceCache=!!res.enabled;
+    const rec=nucleoCurrentUserRecord();if(rec)rec.metrologyEmailAlerts=!!res.enabled;
+    if(check){check.checked=!!res.enabled;check.disabled=false}if(save)save.disabled=false;
+    if(status)status.textContent=(res.enabled?'✓ E-mails de calibração ativados para você.':'✓ E-mails de calibração desativados para você.')+(res.triggerWarning?' Aviso: '+res.triggerWarning:'');
+  }catch(e){if(check)check.disabled=false;if(save)save.disabled=false;if(status)status.textContent='Erro ao salvar: '+(e?.message||e)}
 }
 function nucleoMetrologyDaysUntil(dateStr){
   if(!dateStr)return null;const d=new Date(String(dateStr)+'T12:00:00'),n=new Date();if(Number.isNaN(d.getTime()))return null;
@@ -16323,10 +16347,11 @@ function nucleoDriveSettingsShortcut(){
  if(document.getElementById('nucleoDriveFolders'))return;
  const section=document.createElement('section');section.id='nucleoDriveFolders';section.className='unit-settings-section';section.style.margin='16px 0';
  const labels={ros:'R.O.s',pdcas:'Respostas de PDCA',standard:'Documentos padrão',requested:'Documentos solicitados',templates:'Modelos editáveis'};
- section.innerHTML='<h4>Pastas do Drive desta unidade</h4><p class="small">Selecione a unidade acima e cole os links das pastas. Depois salve a configuração desta unidade.</p>'+Object.entries(labels).map(([k,label])=>'<label style="display:block;margin:10px 0"><span>'+label+'</span><div style="display:flex;gap:8px"><input id="ndFolder_'+k+'" type="url" style="flex:1;min-width:0" placeholder="https://drive.google.com/drive/folders/…"><button class="btn secondary" type="button" data-folder="'+k+'">Validar acesso</button></div><span id="ndFolderStatus_'+k+'" class="small" role="status"></span></label>').join('');
+ section.innerHTML='<h4>Pastas do Drive desta unidade</h4><p class="small">Selecione a unidade acima e cole os links das pastas. Depois salve a configuração desta unidade.</p>'+Object.entries(labels).map(([k,label])=>'<label style="display:block;margin:10px 0"><span>'+label+'</span><div style="display:flex;gap:8px"><input id="ndFolder_'+k+'" type="url" style="flex:1;min-width:0" placeholder="https://drive.google.com/drive/folders/…"><button class="btn secondary" type="button" data-folder="'+k+'">Validar acesso</button></div><span id="ndFolderStatus_'+k+'" class="small" role="status"></span></label>').join('')+'<div class="settings-block sgq-only" id="avatarGalleryConfig" style="margin-top:16px"><h4 style="margin:0 0 6px">Galeria de avatares</h4><p class="small">Pasta do Drive com as imagens aprovadas (JPG, PNG ou WebP). As pessoas escolhem a imagem em Meu perfil.</p><div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"><label style="flex:1;min-width:260px"><span>Pasta da galeria</span><input id="avatarGalleryFolder" type="url" placeholder="https://drive.google.com/drive/folders/…"></label><button type="button" class="btn primary" onclick="nucleoConfigureAvatarGallery(this)">Salvar pasta da galeria</button></div><p id="avatarGalleryConfigStatus" class="small" role="status"></p></div>';
  box.querySelector('.unit-settings-footer').before(section);
  section.querySelectorAll('button[data-folder]').forEach(btn=>btn.onclick=async()=>{const kind=btn.dataset.folder,status=document.getElementById('ndFolderStatus_'+kind);btn.disabled=true;status.textContent='Validando…';try{const r=await portalJsonp({acao:'nucleo_drive_validate',unit:document.getElementById('qualityConfigUnit').value,kind,link:document.getElementById('ndFolder_'+kind).value},60000);if(!r?.sucesso)throw new Error(r?.erro||'Acesso não confirmado.');status.textContent='Acesso confirmado: '+r.name;}catch(e){status.textContent=e.message;}finally{btn.disabled=false;}});
  const unit=document.getElementById('qualityConfigUnit').value,c=unitConfiguration(unit)||{};Object.keys(labels).forEach(k=>document.getElementById('ndFolder_'+k).value=c.driveFolders?.[k]||'');
+ if(nucleoPersonPermissions(getSession()).sgq)nucleoReadAvatarGalleryConfig();
 }
 
 const nucleoOriginalEnsureUnitSettings=ensureUnitQualitySettings;
@@ -16805,7 +16830,7 @@ async function nucleoSaveAvatar(button){const status=document.getElementById('pr
 var nucleoAvatarGalleryPreviews={};
 async function nucleoLoadAvatarGallery(offset=0){const host=document.getElementById('profileAvatarGallery');if(!host)return;host.textContent='Carregando galeria…';try{const r=await portalJsonp({acao:'portal_avatar_gallery',offset},60000);if(!r?.sucesso)throw new Error(r?.erro||'Galeria indisponível.');host.innerHTML='';if(!r.items.length){host.textContent='O SGQ ainda não disponibilizou imagens na galeria.';return;}const grid=document.createElement('div');grid.style.cssText='display:flex;flex-wrap:wrap;gap:12px;margin:12px 0';r.items.forEach(item=>{nucleoAvatarGalleryPreviews[item.value]=item.preview;const button=document.createElement('button');button.type='button';button.className='btn secondary';button.title=item.name;button.setAttribute('aria-label','Escolher '+item.name);button.innerHTML=nucleoAvatarHtml(item.preview);const label=document.createElement('span');label.textContent=item.name;label.style.cssText='display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis';button.appendChild(label);button.onclick=()=>{nucleoAvatarDraft=item.value;nucleoAvatarPreview();document.getElementById('profileAvatarStatus').textContent='Avatar selecionado. Clique em Salvar foto ou ícone.';};grid.appendChild(button);});host.appendChild(grid);for(const [label,page] of [['Anterior',offset>=20?offset-20:null],['Próximas imagens',r.next]])if(page!==null){const btn=document.createElement('button');btn.type='button';btn.className='btn secondary';btn.textContent=label;btn.onclick=()=>nucleoLoadAvatarGallery(page);host.appendChild(btn);}}catch(e){host.textContent=e.message;}}
 async function nucleoConfigureAvatarGallery(button){const status=document.getElementById('avatarGalleryConfigStatus');button.disabled=true;status.textContent='Salvando e conferindo a pasta…';try{const r=await portalJsonp({acao:'portal_avatar_gallery',folder:document.getElementById('avatarGalleryFolder').value.trim()},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não confirmado.');status.textContent=r.folder?'Galeria salva. As imagens estão disponíveis em Meu perfil.':'Galeria desativada.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}}
-async function nucleoReadAvatarGalleryConfig(){const box=document.getElementById('avatarGalleryConfig');if(box)box.hidden=!nucleoPersonPermissions(getSession()).sgq;if(box?.hidden)return;try{const r=await portalJsonp({acao:'portal_avatar_gallery'},60000);if(r?.sucesso)document.getElementById('avatarGalleryFolder').value=r.folder?'https://drive.google.com/drive/folders/'+r.folder:'';}catch(e){document.getElementById('avatarGalleryConfigStatus').textContent=e.message;}}
+async function nucleoReadAvatarGalleryConfig(){const box=document.getElementById('avatarGalleryConfig');if(!box)return;box.hidden=!nucleoPersonPermissions(getSession()).sgq;if(box.hidden)return;const field=document.getElementById('avatarGalleryFolder'),status=document.getElementById('avatarGalleryConfigStatus');try{const r=await portalJsonp({acao:'portal_avatar_gallery'},60000);if(r?.sucesso&&field)field.value=r.folder?'https://drive.google.com/drive/folders/'+r.folder:'';}catch(e){if(status)status.textContent=e.message;}}
 
 function nucleoSacDraftKey(){const u=getSession();return 'nucleo-sac-pending-v1:'+String(u?.personId||u?.email||u?.name||'');}
 function nucleoSacDrafts(){try{return JSON.parse(localStorage.getItem(nucleoSacDraftKey())||'[]');}catch(e){return [];}}
@@ -16818,7 +16843,7 @@ function nucleoPublicLoginSectors(unit){
   try{const lists=JSON.parse(localStorage.getItem('nucleo-unit-public-sectors')||'{}');if(Object.prototype.hasOwnProperty.call(lists,unit)){const sectors=normalizeSectorList(lists[unit]);if(unit==='matriz'&&!sectors.some(s=>normalizeAnswer(s)==='sgq'))sectors.push('SGQ');return sectors;}}catch(_){}
   const own=unitConfiguration(unit);return own?normalizeSectorList(own.sectorList):[];
 }
-function nucleoOpenAvatarGalleryConfig(){if(!nucleoPersonPermissions(getSession()).sgq)return;const box=document.getElementById('avatarGalleryConfig');if(!box)return;box.hidden=false;box.style.removeProperty('display');box.closest('.config-section')?.classList.add('active');box.scrollIntoView({behavior:'smooth',block:'center'});nucleoReadAvatarGalleryConfig();}
+function nucleoOpenAvatarGalleryConfig(){if(!nucleoPersonPermissions(getSession()).sgq)return;openUnitDriveSettings();setTimeout(()=>{const box=document.getElementById('avatarGalleryConfig');if(!box)return;box.hidden=false;box.style.removeProperty('display');box.scrollIntoView({behavior:'smooth',block:'center'});nucleoReadAvatarGalleryConfig();},0);}
 function nucleoRenderSacEmailSettings(){
  const unit=document.getElementById('qualityConfigUnit')?.value||'matriz',parent=document.getElementById('unitQualitySettings');if(!parent)return;
  let box=document.getElementById('sacEmailSettings');if(!box){box=document.createElement('section');box.id='sacEmailSettings';box.className='settings-block';parent.appendChild(box);}box.hidden=!nucleoPersonFeatureCan('sectors','emails');if(box.hidden)return;
