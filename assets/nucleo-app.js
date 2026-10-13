@@ -14,7 +14,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261009-cell-vertical-move1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-metrology-control1',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -12639,6 +12639,17 @@ function collectAdminModuleForm(key,existing){
     recipientEmail:val('admModRecipientEmail'),
     docType:val('admModDocType'),
     revision:val('admModRevision'),
+    ...(key==='equipment'?{
+      equipmentType:val('admModEquipmentType'),
+      manufacturer:val('admModManufacturer'),
+      model:val('admModModel'),
+      serialNumber:val('admModSerialNumber'),
+      lastCalibration:val('admModLastCalibration'),
+      calibrationIntervalMonths:Number(val('admModCalibrationInterval')||0),
+      alertDays:Number(val('admModAlertDays')||30),
+      calibrationRequired:val('admModCalibrationRequired')!=='no',
+      metrologyHistory:Array.isArray(existing?.metrologyHistory)?existing.metrologyHistory:[]
+    }:{}),
     createdAt:existing?.createdAt||now,
     createdBy:existing?.createdBy||getSession()?.name||'SGQ',
     updatedAt:now,
