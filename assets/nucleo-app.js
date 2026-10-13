@@ -1834,7 +1834,9 @@ function createNotification(data){
 let nucleoMetrologyEmailPreferenceCache=null;
 function nucleoCurrentUserRecord(){
   const sess=getSession()||{},mail=String(sess.email||'').trim().toLowerCase(),name=String(sess.name||'').trim().toLowerCase();
-  return (users||[]).find(u=>
+  let list=[];
+  try{ list=typeof getOperationalUsers==='function'?(getOperationalUsers()||[]):[]; }catch(e){ console.warn('Núcleo: não foi possível ler usuários locais para a preferência de metrologia.',e); }
+  return list.find(u=>
     (sess.personId&&String(u.personId||'')===String(sess.personId))||
     (mail&&String(u.email||'').trim().toLowerCase()===mail)||
     (name&&String(u.name||'').trim().toLowerCase()===name&&String(u.role||'').toLowerCase()===String(sess.role||'').toLowerCase())
