@@ -1197,6 +1197,13 @@ body.external-ro-denied #navNewExternalRo{
 .pdca-quality-item.ok{border-color:#cfe2da;background:#f4faf7}
 .offline-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#eef3f2}
 .offline-pill.offline{background:#fff0ee}
+.offline-pill.central-synced{background:#e8f7ee;color:#176b3a;border:1px solid #b9e3c8}
+.offline-pill.central-syncing{background:#fff7d6;color:#765800;border:1px solid #ecd87b}
+.offline-pill.central-stale{background:#fff0ee;color:#9d241b;border:1px solid #efc0bb}
+.central-sync-banner{margin:0;padding:9px 18px;font-size:12px;font-weight:700;border-bottom:1px solid transparent}
+.central-sync-banner.pending{background:#fff8dc;color:#6d5700;border-color:#e7d78f}
+.central-sync-banner.error{background:#fff0ee;color:#92271f;border-color:#efc0bb}
+.central-sync-banner.hidden{display:none!important}
 .presentation-summary{padding:14px;border:1px solid #d9e2ec;border-radius:12px;background:#fff;margin-bottom:14px}
 .presentation-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 @media(max-width:760px){.presentation-summary-grid{grid-template-columns:1fr}}
@@ -2689,6 +2696,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <button class="top-btn primary-top" onclick="alert('Rascunho salvo nesta demonstração.')">Salvar</button>
     </div>
   </header>
+  <div id="centralSyncBanner" class="central-sync-banner pending">Dados locais temporários. Atualizando com a base central…</div>
   <div id="notificationPanel" class="notification-panel hidden">
     <div class="notification-panel-head">
       <div>
@@ -4240,7 +4248,7 @@ Cancelada</textarea></label>
 </main>
 </div>
 </div><div id="contestModal" class="modal hidden"><div class="modal-box"><h3>Contestar R.O.</h3><div class="label">Motivo da contestação</div><textarea id="contestText" placeholder="Explique por que a R.O. deve ser revista, cancelada ou redirecionada."></textarea><div class="label" style="margin-top:10px">Setor que considera correto (opcional)</div><input id="contestSector" placeholder="Ex.: Expedição"><div class="modal-actions"><button class="btn secondary" type="button" onclick="closeContest()">Cancelar</button><button class="btn danger" type="button" onclick="submitContest()">Enviar contestação</button></div></div></div>
-<script src="assets/nucleo-app.js?v=20261013-process-master1"></script>
+<script src="assets/nucleo-app.js?v=20261013-central-truth1"></script>
 
 <div id="presentationModal" class="presentation-modal">
   <div class="presentation-card">

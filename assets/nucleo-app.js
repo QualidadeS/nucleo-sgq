@@ -679,6 +679,70 @@ const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
 window.addEventListener('online',()=>setTimeout(retryPendingRncDeletes,300));
 
+// ===== NÚCLEO: estado de confirmação da base central =====
+// O navegador pode exibir cache para abrir rápido, mas cache nunca é considerado dado oficial.
+// Somente uma resposta válida de portal_load muda o estado para "synced".
+let nucleoPublicConfigReady=false;
+let nucleoCentralSyncState={status:'cache',message:'Dados locais temporários. Atualizando com a base central…',confirmedAt:'',serverAt:''};
+function nucleoCentralDataConfirmed(){return nucleoCentralSyncState.status==='synced';}
+function nucleoCentralStatusText(){
+  const st=nucleoCentralSyncState.status;
+  if(st==='synced')return '● Dados atualizados';
+  if(st==='syncing')return '● Atualizando base central…';
+  if(st==='error')return '● Dados locais — atualização falhou';
+  return '● Dados locais — aguardando confirmação';
+}
+function nucleoRenderCentralSyncState(){
+  const pill=document.getElementById('networkStatePill');
+  if(pill){
+    pill.textContent=nucleoCentralStatusText();
+    pill.classList.remove('central-synced','central-syncing','central-stale','offline');
+    pill.classList.add(nucleoCentralSyncState.status==='synced'?'central-synced':(nucleoCentralSyncState.status==='syncing'?'central-syncing':'central-stale'));
+    pill.title=nucleoCentralSyncState.message||'';
+    pill.onclick=()=>{
+      const when=nucleoCentralSyncState.confirmedAt?('\nÚltima confirmação: '+nucleoCentralSyncState.confirmedAt):'';
+      alert((nucleoCentralSyncState.message||nucleoCentralStatusText())+when+'\n\nFonte oficial: base central do Núcleo. O cache deste dispositivo nunca substitui a base central.');
+    };
+  }
+  const banner=document.getElementById('centralSyncBanner');
+  if(banner){
+    if(nucleoCentralSyncState.status==='synced'){
+      banner.classList.add('hidden');
+      banner.textContent='';
+    }else{
+      banner.classList.remove('hidden');
+      banner.className='central-sync-banner '+(nucleoCentralSyncState.status==='error'?'error':'pending');
+      banner.textContent=nucleoCentralSyncState.status==='error'
+        ? 'Dados apenas locais/cache. A base central ainda não confirmou estas informações. Não realize operações críticas até a conexão ser restabelecida.'
+        : 'Dados locais temporários. O Núcleo está atualizando com a base central; até a confirmação, estas informações não devem ser tratadas como dados atuais.';
+    }
+  }
+}
+function nucleoSetCentralSyncState(status,message='',serverAt=''){
+  nucleoCentralSyncState={
+    status:status||'cache',
+    message:message||'',
+    serverAt:serverAt||nucleoCentralSyncState.serverAt||'',
+    confirmedAt:status==='synced'?new Date().toLocaleString('pt-BR'):(nucleoCentralSyncState.confirmedAt||'')
+  };
+  nucleoRenderCentralSyncState();
+}
+function nucleoRequireCentralData(action='continuar'){
+  if(nucleoCentralDataConfirmed())return true;
+  const msg='A base central ainda não confirmou os dados deste dispositivo. Aguarde o indicador ficar verde antes de '+action+'.';
+  nucleoSetCentralSyncState(nucleoCentralSyncState.status==='error'?'error':'syncing',nucleoCentralSyncState.message||msg);
+  try{nucleoAutoSyncIfDue(true)}catch(e){}
+  alert(msg+'\n\nO que está na tela pode ser somente cache local e não será usado para uma operação crítica.');
+  return false;
+}
+function nucleoActionNeedsCentralConfirmation(action){
+  action=String(action||'').toLowerCase();
+  if(!action)return false;
+  if(['portal_login','portal_login_jsonp','portal_auth_v2','portal_register_user','portal_public_config','portal_load','portal_ro_page','portal_get_record','portal_save_status','portal_delete_status'].includes(action))return false;
+  if(/(?:^|_)(load|get|read|list|overview|status|search|public|diagnostic|pdf)(?:_|$)/.test(action))return false;
+  return /(?:^|_)(save|delete|update|create|upload|finalize|present|approve|reject|confirm|send|schedule|cancel|archive|remove|set|change)(?:_|$)/.test(action);
+}
+
 let nucleoConfirmedApiUrl='';
 function nucleoValidApiUrl(value){return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(String(value||'').trim());}
 function portalApiBase(){
@@ -729,6 +793,11 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
     const sessionToken=String(getSession()?.authToken||'').trim();
+    if(sessionToken && nucleoActionNeedsCentralConfirmation(actionName) && !nucleoCentralDataConfirmed()){
+      cleanup();
+      reject(new Error('Dados ainda não confirmados pela base central. Aguarde o indicador ficar verde e tente novamente.'));
+      return;
+    }
     if(sessionToken && !requestParams.token && actionName!=='portal_public_config' && !['portal_login','portal_login_jsonp','portal_register_user'].includes(actionName)){
       requestParams.token=sessionToken;
     }
@@ -749,6 +818,7 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
 function portalPostForm(params){
   params={...(params||{})};if(params.acao==='portal_upload_standard_document'){const metadata=JSON.parse(params.metadata||'{}');if(!metadata.unit&&!metadata.unidade)metadata.unit=getSession()?.role==='quality'?'filial':document.getElementById('ndStandardUnit')?.value||document.getElementById('qualityConfigUnit')?.value||explicitPortalUnit(getSession()?.unit);params.metadata=JSON.stringify(metadata);}
   const authToken=getSession()?.authToken;if(authToken&&!params.token)params.token=authToken;
+  if(authToken && nucleoActionNeedsCentralConfirmation(params.acao) && !nucleoCentralDataConfirmed())return false;
   const base=portalApiBase();
   if(!base)return false;
   try{
@@ -784,14 +854,12 @@ function portalPostForm(params){
 }
 function portalBackendSave(collection,id,data){
   if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
-  if(!portalBackendEnabled())return false;
+  if(!portalBackendEnabled()||!navigator.onLine||!nucleoCentralDataConfirmed())return false;
   const params={acao:'portal_save',colecao:collection,id:String(id||''),dados:JSON.stringify(data||{}),ator:getSession()?.name||'Sistema'};
-  if(!navigator.onLine){queueOfflineOperation({kind:'save',params});return true}
-  const ok=portalPostForm(params);
-  if(!ok)queueOfflineOperation({kind:'save',params});
-  return ok;
+  return portalPostForm(params);
 }
 async function portalBackendSaveConfirmed(collection,id,data){
+  if(!nucleoRequireCentralData('salvar esta alteração'))throw new Error('A base central ainda não confirmou os dados.');
   if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
   const res=await portalJsonp({
@@ -806,6 +874,7 @@ async function portalBackendSaveConfirmed(collection,id,data){
 }
 
 async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=150000){
+  if(!nucleoRequireCentralData('salvar esta alteração'))throw new Error('A base central ainda não confirmou os dados.');
   if(getSession()?.role==='quality'&&data&&!data.unit&&!data.unidade)data={...data,unit:'Filial'};
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
 
@@ -904,6 +973,7 @@ async function portalBackendSaveConfirmedPost(collection,id,data,timeoutMs=15000
 }
 
 async function portalBackendDeleteConfirmed(collection,id){
+  if(!nucleoRequireCentralData('excluir este registro'))throw new Error('A base central ainda não confirmou os dados.');
   const colecaoKey=String(collection||'').trim();
   const idKey=String(id||'').trim();
   if(colecaoKey==='triage')return nucleoDeleteTriageConfirmed(idKey);
@@ -912,28 +982,20 @@ async function portalBackendDeleteConfirmed(collection,id){
     throw new Error('RNC inválida para exclusão.');
   }
 
-  // A exclusão no Apps Script é idempotente. O clique não precisa depender
-  // de uma resposta JSONP que pode falhar por cache/sessão do navegador.
-  // Marca como excluída localmente primeiro e envia o POST em seguida.
+  if(!portalBackendEnabled()||!navigator.onLine)throw new Error('Base central indisponível. A exclusão não foi realizada.');
+  const res=await portalJsonp({acao:'portal_delete',colecao:colecaoKey,id:idKey,ator:getSession()?.name||'Sistema'},60000);
+  if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a exclusão.');
   markRncDeletedLocally(idKey);
-
-  if(portalBackendEnabled()&&navigator.onLine){
-    portalSendPendingRncDelete(idKey);
-  }
-
-  return {sucesso:true,excluido:true,pendenteCentral:true};
+  return {sucesso:true,excluido:true,pendenteCentral:false};
 }
 
 function portalBackendDelete(collection,id){
-  if(!portalBackendEnabled())return false;
+  if(!portalBackendEnabled()||!navigator.onLine||!nucleoCentralDataConfirmed())return false;
   const params={acao:'portal_delete',colecao:collection,id:String(id||''),ator:getSession()?.name||'Sistema'};
-  if(!navigator.onLine){queueOfflineOperation({kind:'delete',params});return true}
-  const ok=portalPostForm(params);
-  if(!ok)queueOfflineOperation({kind:'delete',params});
-  return ok;
+  return portalPostForm(params);
 }
 function portalUpdateRoSheet(ro,campos){
-  if(!portalBackendEnabled()||!ro)return false;
+  if(!portalBackendEnabled()||!ro||!navigator.onLine||!nucleoCentralDataConfirmed())return false;
   const params={
     acao:'portal_update_ro_sheet',
     ro:String(ro||''),
@@ -941,16 +1003,11 @@ function portalUpdateRoSheet(ro,campos){
     campos:JSON.stringify(campos||{}),
     ator:getSession()?.name||'Portal SGQ'
   };
-  if(!navigator.onLine){
-    queueOfflineOperation({kind:'ro_sheet_update',params});
-    return true;
-  }
-  const ok=portalPostForm(params);
-  if(!ok)queueOfflineOperation({kind:'ro_sheet_update',params});
-  return ok;
+  return portalPostForm(params);
 }
 
 async function portalUpdateRoSheetConfirmed(ro,campos){
+  if(!nucleoRequireCentralData('atualizar a R.O.'))throw new Error('A base central ainda não confirmou os dados.');
   if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
   const res=await portalJsonp({
     acao:'portal_update_ro_sheet',
@@ -1033,30 +1090,29 @@ function applyPortalBackendSnapshot(snapshot){
   if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
   nucleoApplySharedState(data.sharedState);
-  if(Array.isArray(data.processTemplates)&&data.processTemplates.length){
+  if(Array.isArray(data.processTemplates)){
     try{nucleoNativeStorageSetItem.call(localStorage,'nucleo_process_templates_v1',JSON.stringify(data.processTemplates));}catch(e){console.warn('Falha ao aplicar modelos centrais:',e)}
   }
   if(data.config && typeof data.config==='object'){
-    const localIntegration=getSavedIntegrationSettings();
+    // Configuração administrativa vem integralmente da base central.
     const mergedConfig={
       ...data.config,
       apiUrl:portalApiBase(),
-      apiKey:localIntegration.apiKey||data.config.apiKey||'',
-      autoSync:data.config.autoSync??localIntegration.autoSync??'0',
-      roSyncPeriod:data.config.roSyncPeriod??localIntegration.roSyncPeriod??'all',
-      roSyncDateFrom:data.config.roSyncDateFrom??localIntegration.roSyncDateFrom??'',
-      roSyncDateTo:data.config.roSyncDateTo??localIntegration.roSyncDateTo??''
+      autoSync:String(data.config.autoSync??'0'),
+      roSyncPeriod:String(data.config.roSyncPeriod??'all'),
+      roSyncDateFrom:String(data.config.roSyncDateFrom??''),
+      roSyncDateTo:String(data.config.roSyncDateTo??'')
     };
     localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(mergedConfig));
-
+    // Mantém somente uma cópia de cache, nunca usada para escolher a API.
     const persistedIntegration={
-      apiUrl:mergedConfig.apiUrl,
-      apiKey:mergedConfig.apiKey,
+      apiUrl:portalApiBase(),
+      apiKey:String(data.config.apiKey||''),
       autoSync:mergedConfig.autoSync,
       roSyncPeriod:mergedConfig.roSyncPeriod,
       roSyncDateFrom:mergedConfig.roSyncDateFrom,
       roSyncDateTo:mergedConfig.roSyncDateTo,
-      savedAt:localIntegration.savedAt||new Date().toISOString()
+      savedAt:String(data.config.__savedAt||snapshot.atualizadoEm||new Date().toISOString())
     };
     try{
       localStorage.setItem(INTEGRATION_PERSIST_KEY,JSON.stringify(persistedIntegration));
@@ -1079,30 +1135,10 @@ function applyPortalBackendSnapshot(snapshot){
   if(Array.isArray(data.standardDocuments))localStorage.setItem(STANDARD_DOCUMENTS_KEY,JSON.stringify(data.standardDocuments));
   if(Array.isArray(data.documentDeliveries))localStorage.setItem(DOCUMENT_DELIVERIES_KEY,JSON.stringify(data.documentDeliveries));
   if(Array.isArray(data.contestations)){
-    // Não deixa uma sincronização central atrasada apagar uma contestação
-    // que acabou de ser criada neste navegador.
-    const localContestations=getContestations();
-    const byId=new Map();
-
-    [...data.contestations,...localContestations].forEach(c=>{
-      if(!c?.id)return;
-      const key=String(c.id);
-      const prev=byId.get(key);
-      if(!prev){
-        byId.set(key,c);
-        return;
-      }
-
-      const prevTime=Date.parse(prev.reviewedAt||prev.updatedAt||prev.createdAt||0)||0;
-      const curTime=Date.parse(c.reviewedAt||c.updatedAt||c.createdAt||0)||0;
-      if(curTime>=prevTime)byId.set(key,c);
-    });
-
-    const merged=[...byId.values()]
-      .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-    localStorage.setItem(CONTEST_KEY,JSON.stringify(merged));
+    // A base central é a fonte oficial. A cópia local é apenas cache e é substituída integralmente.
+    localStorage.setItem(CONTEST_KEY,JSON.stringify(data.contestations));
   }
-  if(Array.isArray(data.users) && data.users.length){
+  if(Array.isArray(data.users)){
     const filteredUsers=data.users.filter(u=>!isDeletedUserRecord(u));
     localStorage.setItem(USERS_KEY,JSON.stringify(filteredUsers));
   }
@@ -1167,12 +1203,14 @@ async function syncPortalBackend(showMessage=false,options={}){
   }
   const foreground=!!(showMessage||options.foreground);
   portalBackendSyncInProgress=true;
+  nucleoSetCentralSyncState('syncing','Atualizando com a base central. Os dados exibidos até a confirmação são apenas cache local.');
   updateBackendStatus(null,'Sincronizando...');
   if(foreground)await showNucleoLoading(options.loadingMessage||'Carregando dados da base central...','Carregando NÚCLEO');
   try{
     const res=await portalJsonp({acao:'portal_load'});
     if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
     applyPortalBackendSnapshot(res);
+    nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',res?.atualizadoEm||'');
     updateBackendStatus(true,'Base central conectada.');
 
     // Atualizações leves acontecem imediatamente. Renderizações grandes ficam fora
@@ -1207,6 +1245,7 @@ async function syncPortalBackend(showMessage=false,options={}){
     if(showMessage)alert('Base central sincronizada.');
     return true;
   }catch(e){
+    nucleoSetCentralSyncState('error','Falha ao confirmar a base central: '+(e.message||String(e)));
     updateBackendStatus(false,e.message||String(e));
     if(showMessage)alert('Não foi possível sincronizar: '+(e.message||e));
     return false;
@@ -2834,23 +2873,26 @@ async function saveSectorConfiguration(){
 }
 
 async function syncPublicPortalConfig(){
+  nucleoPublicConfigReady=false;
   try{
     let res=await portalJsonp({acao:'portal_public_config'},20000,NUCLEO_DEFAULT_API_URL);
+    if(!res?.sucesso||!res.config)throw new Error(res?.erro||'A configuração central não respondeu.');
     const target=String(res?.config?.apiUrl||'').trim();
     if(target && target!==portalApiBase()){
-      try{res=await nucleoCheckApiUrl(target);nucleoConfirmedApiUrl=target;}
-      catch(error){console.warn('Endereço central não confirmado; mantendo a conexão atual.',error);}
+      res=await nucleoCheckApiUrl(target);
+      nucleoConfirmedApiUrl=target;
     }
-    if(res?.config?.sectorListsByUnit)localStorage.setItem('nucleo-unit-public-sectors',JSON.stringify(res.config.sectorListsByUnit));
-    if(!res?.sucesso||!res.config)return false;
-    const local=getAdminConfig();
-    const merged={...local,...res.config};
-    localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(merged));
+    if(!res?.sucesso||!res.config)throw new Error('A configuração central não foi confirmada.');
+    // Antes do login, também não mescla configuração administrativa antiga deste navegador.
+    localStorage.setItem('nucleo-unit-public-sectors',JSON.stringify(res.config.sectorListsByUnit||{}));
+    localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify({...res.config,apiUrl:portalApiBase()}));
+    nucleoPublicConfigReady=true;
     refreshSectorSelectors();
     try{refreshLoginSectorByUnit()}catch(e){}
     return true;
   }catch(e){
     console.warn('Não foi possível carregar a configuração central antes do login.',e);
+    nucleoPublicConfigReady=false;
     return false;
   }
 }
@@ -2924,8 +2966,13 @@ async function loginUser(){
     return;
   }
   if(enterBtn)enterBtn.disabled=true;
-  if(msg)msg.textContent='Validando acesso...';
+  if(msg)msg.textContent='Confirmando configuração central...';
   try{
+    if(!nucleoPublicConfigReady){
+      const publicOk=await syncPublicPortalConfig();
+      if(!publicOk)throw new Error('Não foi possível confirmar a configuração central do Núcleo. Tente novamente.');
+    }
+    if(msg)msg.textContent='Validando acesso...';
     const remote=await portalJsonp({
       acao:'portal_login_jsonp', nome:name, unidade:unit, setor:sector, senha:password
     },60000);
@@ -2975,6 +3022,8 @@ async function loginUser(){
     try{document.activeElement?.blur()}catch(e){}
     try{setSession(session)}catch(e){nucleoSessionMemory=session;console.warn('Sessão mantida em memória:',e)}
 
+    // O cache pode aparecer imediatamente, mas ainda não é considerado dado atual.
+    nucleoSetCentralSyncState('syncing','Login confirmado. Atualizando dados com a base central…');
     // Tudo abaixo é pós-login e NÃO pode fechar/bloquear uma sessão já autorizada.
     const steps=[refreshAccessUI,enforceAdminVisibility,refreshRoRegistrationAccess,showList,refreshNotificationBell,refreshContestPendingBadge,refreshPdcaSidebarBadge,schedulePendingAnnouncementCheck];
     steps.forEach(fn=>{try{if(typeof fn==='function')fn()}catch(e){console.error('Pós-login:',e)}});
@@ -4857,26 +4906,20 @@ function integrationPeriodLabel(settings){
 }
 
 function getSavedIntegrationSettings(){
-  let dedicated={}, legacy={}, admin={};
-  try{dedicated=JSON.parse(localStorage.getItem(INTEGRATION_PERSIST_KEY)||'{}')||{};}catch(e){dedicated={};}
-  try{legacy=JSON.parse(localStorage.getItem('ro-sync-settings')||'{}')||{};}catch(e){legacy={};}
+  // Esta leitura é apenas cache da última configuração CENTRAL confirmada.
+  // A URL jamais é escolhida pelo navegador: portalApiBase() é definida pelo bootstrap central/publicado.
+  let admin={}, dedicated={};
   try{admin=JSON.parse(localStorage.getItem(ADMIN_CONFIG_KEY)||'{}')||{};}catch(e){admin={};}
-
-  const sync={
+  try{dedicated=JSON.parse(localStorage.getItem(INTEGRATION_PERSIST_KEY)||'{}')||{};}catch(e){dedicated={};}
+  return {
     apiUrl:portalApiBase(),
-    apiKey:String(dedicated.apiKey||legacy.apiKey||admin.apiKey||'').trim(),
-    autoSync:String(dedicated.autoSync??legacy.autoSync??admin.autoSync??'0'),
-    roSyncPeriod:String(dedicated.roSyncPeriod??legacy.roSyncPeriod??admin.roSyncPeriod??'all'),
-    roSyncDateFrom:String(dedicated.roSyncDateFrom??legacy.roSyncDateFrom??admin.roSyncDateFrom??''),
-    roSyncDateTo:String(dedicated.roSyncDateTo??legacy.roSyncDateTo??admin.roSyncDateTo??''),
-    savedAt:dedicated.savedAt||legacy.savedAt||admin.__savedAt||''
+    apiKey:String(admin.apiKey??dedicated.apiKey??'').trim(),
+    autoSync:String(admin.autoSync??dedicated.autoSync??'0'),
+    roSyncPeriod:String(admin.roSyncPeriod??dedicated.roSyncPeriod??'all'),
+    roSyncDateFrom:String(admin.roSyncDateFrom??dedicated.roSyncDateFrom??''),
+    roSyncDateTo:String(admin.roSyncDateTo??dedicated.roSyncDateTo??''),
+    savedAt:String(admin.__savedAt??dedicated.savedAt??'')
   };
-
-  // Migra configurações antigas para o armazenamento dedicado.
-  if(sync.apiUrl || sync.apiKey || sync.autoSync!=='0'){
-    try{localStorage.setItem(INTEGRATION_PERSIST_KEY,JSON.stringify(sync));}catch(e){}
-  }
-  return sync;
 }
 
 let roPdfDownloadInProgress=false;
@@ -8460,23 +8503,22 @@ function getOfflineQueue(){try{return JSON.parse(localStorage.getItem(OFFLINE_QU
 function setOfflineQueue(q){localStorage.setItem(OFFLINE_QUEUE_KEY,JSON.stringify(q.slice(-500)))}
 function queueOfflineOperation(op){const q=getOfflineQueue();q.push({...op,queuedAt:new Date().toISOString()});setOfflineQueue(q);updateNetworkState()}
 async function flushOfflineQueue(){
-  if(!navigator.onLine||!portalBackendEnabled())return false;
-  const q=getOfflineQueue();if(!q.length){updateNetworkState();return true}
-  const pending=[];
-  q.forEach(op=>{
-    const ok=portalPostForm(op.params||{});
-    if(!ok)pending.push(op);
-  });
-  setOfflineQueue(pending);
+  // Operações empresariais não são mais reproduzidas a partir de fila local.
+  // Rascunhos continuam locais em suas chaves próprias e exigem confirmação explícita do usuário.
+  const q=getOfflineQueue();
+  if(q.length){
+    console.warn('Fila operacional local antiga encontrada e não reenviada automaticamente:',q.length);
+  }
   updateNetworkState();
-  return !pending.length;
+  return q.length===0;
 }
 function updateNetworkState(){
-  const pill=document.getElementById('networkStatePill');if(!pill)return;
-  const q=getOfflineQueue().length;
-  const online=navigator.onLine;
-  pill.textContent=online?(q?'● Online · '+q+' aguardando sync':'● Online'):'● Offline · rascunho local';
-  pill.classList.toggle('offline',!online||q>0);
+  // O estado relevante para o usuário é a confirmação da base central, não apenas navigator.onLine.
+  if(!navigator.onLine && nucleoCentralSyncState.status!=='synced'){
+    nucleoSetCentralSyncState('error','Sem conexão de rede. Os dados em tela são apenas cache local e não estão confirmados pela base central.');
+  }else{
+    nucleoRenderCentralSyncState();
+  }
 }
 window.addEventListener('online',()=>{updateNetworkState();flushOfflineQueue();setTimeout(()=>syncPortalBackend(false),500)});
 
@@ -10678,7 +10720,8 @@ async function saveIntegrationSettingsConfirmed(){
     if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
     nucleoConfirmedApiUrl=candidate;
     if(st)st.textContent='Integração confirmada e salva na base central.';
-    alert('Integração salva para todos. Os demais usuários receberão o endereço ao reabrir o Núcleo.');
+    await syncPortalBackend(false);
+    alert('Integração salva na base central. Todos os dispositivos usarão esta configuração ao atualizar o Núcleo.');
     return true;
   }catch(e){
     keys.forEach((key,i)=>before[i]===null?localStorage.removeItem(key):localStorage.setItem(key,before[i]));
@@ -16040,6 +16083,7 @@ async function syncNow(){
   // Links, chave, regras e período continuam protegidos na Administração.
   if(syncNow.inProgress)return;
   syncNow.inProgress=true;
+  nucleoSetCentralSyncState('syncing','Sincronização manual em andamento. Os dados locais ainda não estão confirmados.');
   const syncMsg=document.getElementById('syncMsg');
   const s=getSavedIntegrationSettings();
   await showNucleoLoading('Buscando '+integrationPeriodLabel(s)+' nas abas Interna e Externa...','Sincronizando com a planilha');
@@ -16085,14 +16129,15 @@ async function syncNow(){
     updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
     await new Promise(resolve=>requestAnimationFrame(resolve));
     const qty=applyImportedRos(data.dados,data);
-    // A carga das R.O.s já terminou. A base complementar não deve segurar
-    // o botão de sincronização nem manter o indicador aberto.
-    setTimeout(()=>syncPortalBackend(false,{foreground:false}).catch(e=>console.warn('Falha na sincronização complementar:',e)),100);
+    updateNucleoLoading('Confirmando configurações e cadastros na base central...');
+    const centralOk=await syncPortalBackend(false,{foreground:false});
+    if(!centralOk)throw new Error('As R.O.s foram lidas, mas a base central não confirmou todos os dados do Núcleo.');
     const bases=(typeof data.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
-    syncMsg.textContent='Sincronização concluída: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
+    syncMsg.textContent='Sincronização concluída e confirmada: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
     syncMsg.className='statusline okline';
   }catch(err){
     const detail=String(err?.message||err||'Erro não informado');
+    nucleoSetCentralSyncState('error','Sincronização não confirmada: '+detail);
     syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+'.';
     syncMsg.className='statusline';
     console.error('[NÚCLEO SYNC] Falha na sincronização manual',err);
@@ -16104,15 +16149,23 @@ async function syncNow(){
 try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
 ensurePreviewSession();
 initLogin();
-if(getSession())render();
+if(getSession()){
+  nucleoSetCentralSyncState('syncing','Cache local exibido temporariamente. Confirmando dados com a base central…');
+  render();
+}
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
   if(!getSession()?.authToken)return;
-  // Não restaurar o cache legado automaticamente: ele pode bloquear a aba
-  // antes de o usuário conseguir entrar ou consultar a base central.
-  await showNucleoLoading('Carregando R.O.s da base central...','Carregando NÚCLEO');
-  try{await refreshLegacyRoCacheFromApi(true);}
-  catch(e){console.warn('Falha ao carregar R.O.s da base central.',e);}
+  await showNucleoLoading('Confirmando dados com a base central...','Carregando NÚCLEO');
+  try{
+    const centralOk=await syncPortalBackend(false);
+    if(!centralOk)throw new Error('A base central não confirmou os dados.');
+    if(!getSession()?.permissions||nucleoPersonCan('ros'))await refreshLegacyRoCacheFromApi(true);
+  }
+  catch(e){
+    console.warn('Falha ao confirmar dados da base central.',e);
+    nucleoSetCentralSyncState('error','Não foi possível confirmar os dados com a base central: '+(e?.message||e));
+  }
   finally{hideNucleoLoading(true);}
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
@@ -16190,6 +16243,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 try{restoreSideModules()}catch(e){}
 try{enforceAdminVisibility()}catch(e){}
 document.addEventListener('DOMContentLoaded',()=>{
+  try{nucleoRenderCentralSyncState()}catch(e){}
   try{enforceAdminVisibility()}catch(e){}
   try{refreshRoRegistrationAccess()}catch(e){}
   try{refreshRoleNavigationLabels()}catch(e){}
@@ -16435,12 +16489,15 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 async function nucleoSyncAfterLogin(token){
  if(!token||getSession()?.authToken!==token)return;
  const status=document.getElementById('syncMsg');if(status)status.textContent='Atualizando dados da base central após o login…';
- try{await syncPortalBackend(false);}catch(e){console.warn('Atualização central após login:',e);}
+ let centralOk=false;
+ try{centralOk=await syncPortalBackend(false);}catch(e){console.warn('Atualização central após login:',e);}
  if(getSession()?.authToken!==token)return;
- // Uma falha na atualização de cadastros não impede a tentativa de carregar as R.O.s.
- if(!getSession()?.permissions||nucleoPersonCan('ros')){try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}}
+ if(centralOk && (!getSession()?.permissions||nucleoPersonCan('ros'))){
+   try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}
+ }
  if(getSession()?.authToken!==token)return;
  try{refreshSectorSelectors();populateTriageSectors();render();}catch(e){console.warn('Atualização da tela após login:',e);}
+ if(status)status.textContent=centralOk?'Dados confirmados pela base central.':'Dados locais/cache — atualização central ainda não confirmada.';
 }
 
 function nucleoPersonPermissions(user){
