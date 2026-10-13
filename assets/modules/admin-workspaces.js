@@ -475,18 +475,37 @@ function nucleoEquipmentSaveCalibration(id){
 function nucleoEquipmentOpenAlertTester(){
   const records=nucleoEquipmentRows();if(!records.length)return alert('Cadastre um equipamento primeiro.');
   let ov=document.getElementById('equipmentAlertTesterOverlay');if(ov)ov.remove();
-  ov=document.createElement('div');ov.id='equipmentAlertTesterOverlay';ov.className='modal';ov.style.zIndex='100420';ov.innerHTML=`<div class="modal-box" style="width:min(650px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Testar alerta de calibração</h3><div class="small" style="margin-top:4px">O teste não altera a data real do equipamento.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('equipmentAlertTesterOverlay')?.remove()">Fechar</button></div><div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:16px"><label><span class="small">Equipamento</span><select id="eqAlertEquipment">${records.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.title||r.code||r.id)}</option>`).join('')}</select></label><label><span class="small">Simular situação</span><select id="eqAlertScenario"><option value="real">Usar data real</option><option value="overdue">Vencido há 1 dia</option><option value="today">Vence hoje</option><option value="7">Vence em 7 dias</option><option value="30">Vence em 30 dias</option><option value="90">Vence em 90 dias</option></select></label></div><div id="eqAlertPreview" style="margin-top:16px"></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn primary" type="button" onclick="nucleoEquipmentRunAlertTest()">Executar teste</button></div></div>`;document.body.appendChild(ov);nucleoEquipmentRunAlertTest();
+  ov=document.createElement('div');ov.id='equipmentAlertTesterOverlay';ov.className='modal';ov.style.zIndex='100420';ov.innerHTML=`<div class="modal-box" style="width:min(650px,96vw)"><div style="display:flex;justify-content:space-between;gap:12px"><div><h3 style="margin:0">Testar alerta de calibração</h3><div class="small" style="margin-top:4px">O teste não altera a data real do equipamento. Ao executar, ele também testa o envio por e-mail se sua preferência estiver ativada.</div></div><button class="btn secondary" type="button" onclick="document.getElementById('equipmentAlertTesterOverlay')?.remove()">Fechar</button></div><div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:16px"><label><span class="small">Equipamento</span><select id="eqAlertEquipment" onchange="nucleoEquipmentRenderAlertTestPreview()">${records.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.title||r.code||r.id)}</option>`).join('')}</select></label><label><span class="small">Simular situação</span><select id="eqAlertScenario" onchange="nucleoEquipmentRenderAlertTestPreview()"><option value="real">Usar data real</option><option value="overdue">Vencido há 1 dia</option><option value="today">Vence hoje</option><option value="7">Vence em 7 dias</option><option value="30">Vence em 30 dias</option><option value="90">Vence em 90 dias</option></select></label></div><div id="eqAlertPreview" style="margin-top:16px"></div><div id="eqAlertEmailTestStatus" class="small" style="margin-top:10px"></div><div style="display:flex;justify-content:flex-end;margin-top:14px"><button id="eqAlertRunBtn" class="btn primary" type="button" onclick="nucleoEquipmentRunAlertTest()">Executar teste</button></div></div>`;document.body.appendChild(ov);nucleoEquipmentRenderAlertTestPreview();
 }
-function nucleoEquipmentRunAlertTest(){
-  const id=String(document.getElementById('eqAlertEquipment')?.value||'');const r=adminModuleRecord(id);if(!r)return;
+function nucleoEquipmentBuildAlertTest(){
+  const id=String(document.getElementById('eqAlertEquipment')?.value||'');const r=adminModuleRecord(id);if(!r)return null;
   const scenario=String(document.getElementById('eqAlertScenario')?.value||'real');let test={...r};
-  if(scenario!=='real'){const n=scenario==='overdue'?-1:scenario==='today'?0:Number(scenario);const d=new Date();d.setDate(d.getDate()+n);test.dueDate=d.toISOString().slice(0,10);test.calibrationRequired=true;test.alertDays=Math.max(Number(test.alertDays||30),30)}
-  const st=nucleoEquipmentCalibrationState(test);const host=document.getElementById('eqAlertPreview');if(!host)return;
-  const urgent=['overdue','today'].includes(st.key);const warning=st.key==='warning';
-  host.innerHTML=`<div style="padding:16px;border:1px solid ${urgent?'#fda29b':warning?'#fedf89':'#abefc6'};background:${urgent?'#fff1f0':warning?'#fffaeb':'#ecfdf3'};border-radius:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em">TESTE DE ALERTA</div><h3 style="margin:7px 0 5px">${escapeHtml(r.title||'Equipamento')}</h3><div>${nucleoEquipmentStatusPill(test)}</div><div class="small" style="margin-top:10px">Próxima calibração: <b>${escapeHtml(adminModuleDate(test.dueDate)||'não informada')}</b>${r.code?' · Código: '+escapeHtml(r.code):''}</div>${urgent||warning?'<div style="margin-top:12px;font-weight:700">Ação necessária: programar a calibração deste equipamento.</div>':'<div style="margin-top:12px">Nenhum alerta de necessidade de calibração seria disparado nesta situação.</div>'}</div>`;
+  if(scenario!=='real'){const n=scenario==='overdue'?-1:scenario==='today'?0:Number(scenario);const d=new Date();d.setDate(d.getDate()+n);test.dueDate=d.toISOString().slice(0,10);test.calibrationRequired=true;test.calibrationScheduled=false;test.alertDays=Math.max(Number(test.alertDays||30),30)}
+  const st=nucleoEquipmentCalibrationState(test);return {id,r,test,scenario,st};
 }
-function nucleoEquipmentTestAlert(id){nucleoEquipmentOpenAlertTester();setTimeout(()=>{const el=document.getElementById('eqAlertEquipment');if(el){el.value=id;nucleoEquipmentRunAlertTest()}},0)}
-
+function nucleoEquipmentRenderAlertTestPreview(){
+  const ctx=nucleoEquipmentBuildAlertTest();if(!ctx)return;const {r,test,st}=ctx;const host=document.getElementById('eqAlertPreview');if(!host)return;
+  const urgent=['overdue','today'].includes(st.key),warning=st.key==='warning',scheduled=st.key==='scheduled_today';
+  host.innerHTML=`<div style="padding:16px;border:1px solid ${urgent?'#fda29b':warning||scheduled?'#fedf89':'#abefc6'};background:${urgent?'#fff1f0':warning||scheduled?'#fffaeb':'#ecfdf3'};border-radius:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.12em">TESTE DE ALERTA</div><h3 style="margin:7px 0 5px">${escapeHtml(r.title||'Equipamento')}</h3><div>${nucleoEquipmentStatusPill(test)}</div><div class="small" style="margin-top:10px">Próxima calibração: <b>${escapeHtml(adminModuleDate(test.dueDate)||'não informada')}</b>${r.code?' · Código: '+escapeHtml(r.code):''}</div>${urgent||warning||scheduled?'<div style="margin-top:12px;font-weight:700">Este cenário gera alerta. Ao clicar em Executar teste, o Núcleo também tentará enviar o e-mail de teste.</div>':'<div style="margin-top:12px">Este cenário não geraria alerta real; portanto, o teste de e-mail também não será enviado.</div>'}</div>`;
+  const status=document.getElementById('eqAlertEmailTestStatus');if(status)status.textContent='';
+}
+async function nucleoEquipmentRunAlertTest(){
+  const ctx=nucleoEquipmentBuildAlertTest();if(!ctx)return;const {id,scenario,st}=ctx;nucleoEquipmentRenderAlertTestPreview();
+  const status=document.getElementById('eqAlertEmailTestStatus'),btn=document.getElementById('eqAlertRunBtn');if(status)status.textContent='Testando alerta e envio por e-mail...';if(btn)btn.disabled=true;
+  const alertWouldFire=['overdue','today','warning','scheduled_today'].includes(st.key);
+  if(!alertWouldFire){if(status)status.textContent='✓ Teste concluído: este cenário não gera alerta, então nenhum e-mail foi enviado.';if(btn)btn.disabled=false;return;}
+  try{
+    const res=await portalJsonp({acao:'portal_metrology_email_test',equipmentId:id,scenario:scenario},30000);
+    if(res?.sucesso===false)throw new Error(res.erro||'Não foi possível executar o teste de e-mail.');
+    if(status){
+      if(res.enviado)status.textContent='✓ Alerta testado e e-mail de teste enviado para '+(res.email||'seu e-mail')+'.';
+      else if(res.motivo==='email_disabled')status.textContent='✓ Alerta testado. O e-mail não foi enviado porque sua preferência de alertas por e-mail está desativada.';
+      else if(res.motivo==='no_alert')status.textContent='✓ Teste concluído: este cenário não gera alerta real, então nenhum e-mail foi enviado.';
+      else status.textContent='✓ Alerta testado. '+(res.mensagem||'Nenhum e-mail foi enviado.');
+    }
+  }catch(e){if(status)status.textContent='O alerta foi simulado, mas o teste de e-mail falhou: '+(e?.message||e)}finally{if(btn)btn.disabled=false}
+}
+function nucleoEquipmentTestAlert(id){nucleoEquipmentOpenAlertTester();setTimeout(()=>{const el=document.getElementById('eqAlertEquipment');if(el){el.value=id;nucleoEquipmentRenderAlertTestPreview()}},0)}
 
 if(typeof window.nucleoRncTemplateEditorOpen!=='boolean')window.nucleoRncTemplateEditorOpen=false;
 if(typeof window.nucleoProcessTemplateEditor!=='string')window.nucleoProcessTemplateEditor='';
