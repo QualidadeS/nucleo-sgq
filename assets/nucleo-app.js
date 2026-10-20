@@ -10817,6 +10817,9 @@ function refreshPresentationScreenState(){
   if(!p || !badge || !btn)return;
 
   let rec=getPdcaPresentationMap().get(String(p.id||''));
+  if(!rec && (p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm)){
+    rec={presentationCompleted:true,presentedBy:p.claimantDeliveredBy||'Núcleo',completedAt:p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm,claimantDeliveredAt:p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm};
+  }
   if(!rec){
     const source=findRoByAnyNumber(p.ro||'',p.origemBase||p.sourceRoOrigin||'');
     if(source?.reclamanteRecebeuPdca){
@@ -10864,7 +10867,8 @@ async function completeCurrentPdcaPresentation(){
 
   // Mesmo que a apresentação já tenha sido marcada localmente antes,
   // se a planilha ainda não tem a data do reclamante, o Núcleo corrige/backfill.
-  if(existing?.presentationCompleted && (origin!=='Interna' || alreadyInSheet)){
+  const alreadyConfirmed=String(p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm||alreadyInSheet||'').trim();
+  if(existing?.presentationCompleted && alreadyConfirmed){
     refreshPresentationScreenState();
     refreshViewedPdcaPresentation();
     return;
@@ -10889,14 +10893,26 @@ async function completeCurrentPdcaPresentation(){
       : new Date().toLocaleDateString('pt-BR')+' '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}));
 
   try{
-    if(origin==='Interna' && !alreadyInSheet){
-      const result=await portalUpdateRoSheetConfirmed(p.ro||'',{
-        pdcaEnviado:claimantDeliveredAt
-      });
+    if(portalBackendEnabled()){
+      const result=await portalJsonp({
+        acao:'portal_pdca_claimant_delivered',
+        ro:p.ro||'',
+        pdcaId:String(p.id||''),
+        deliveredAt:claimantDeliveredAt
+      },60000);
+      if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a devolutiva ao reclamante.');
+      if(result.record){
+        p.claimantDeliveredAt=result.record.claimantDeliveredAt||claimantDeliveredAt;
+        p.pdcaEnviadoReclamanteEm=p.claimantDeliveredAt;
+        p.claimantDeliveredBy=result.record.claimantDeliveredBy||userName;
+        p.status=result.record.status||p.status;
+      }
+    }else{
+      const result=await portalUpdateRoSheetConfirmed(p.ro||'',{pdcaEnviado:claimantDeliveredAt});
       if(!result?.sucesso)throw new Error(result?.erro||'A planilha não confirmou a gravação.');
     }
   }catch(sheetError){
-    alert('A apresentação NÃO foi concluída porque a planilha não confirmou a data do reclamante.\n\n'+String(sheetError?.message||sheetError));
+    alert('A apresentação NÃO foi concluída porque a base central/planilha não confirmou a data do reclamante.\n\n'+String(sheetError?.message||sheetError));
     return;
   }
 
@@ -10914,10 +10930,14 @@ async function completeCurrentPdcaPresentation(){
   });
 
   // Atualiza também a cópia local da R.O. para a interface refletir imediatamente.
-  if(roRecord && origin==='Interna'){
+  if(roRecord){
     roRecord.pdcaEnviadoReclamanteEm=claimantDeliveredAt;
     roRecord.reclamanteRecebeuPdca=true;
-    if(roRecord.raw)roRecord.raw['PDCA ENVIADO PARA O RECLAMANTE (DATA)']=claimantDeliveredAt;
+    roRecord.situacaoPdca='Enviado ao reclamante';
+    if(roRecord.raw){
+      roRecord.raw['PDCA ENVIADO PARA O RECLAMANTE (DATA)']=claimantDeliveredAt;
+      roRecord.raw['Situação PDCA']='Enviado ao reclamante';
+    }
   }
 
   refreshPresentationScreenState();
@@ -11016,6 +11036,9 @@ function refreshViewedPdcaPresentation(){
   if(!p || !badge || !meta || !btn)return;
 
   let rec=getPdcaPresentationMap().get(String(p.id||''));
+  if(!rec && (p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm)){
+    rec={presentationCompleted:true,presentedBy:p.claimantDeliveredBy||'Núcleo',completedAt:p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm,claimantDeliveredAt:p.claimantDeliveredAt||p.pdcaEnviadoReclamanteEm};
+  }
   if(!rec){
     const source=findRoByAnyNumber(p.ro||'',p.origemBase||p.sourceRoOrigin||'');
     if(source?.reclamanteRecebeuPdca){
@@ -12533,8 +12556,10 @@ function normalizeImportedRo(raw,index){
 
   const pdcaEnvio=raw?.__pdcaReclamanteData || firstValue(raw,[
     'PDCA ENVIADO PARA O RECLAMANTE (DATA)',
+    'PDCA ENVIADO PARA O RECLAMENTE (DATA)',
     'Data Resposta PDCA'
   ]);
+  const situacaoPdca=String(firstValue(raw,['Situação PDCA','Situacao PDCA'])||'').trim();
   const reclamanteRecebeuPdca=!!(pdcaEnvio && !String(pdcaEnvio).toLowerCase().includes('antes da implantação'));
   if(reclamanteRecebeuPdca){
     status='Retorno entregue ao reclamante';
@@ -12634,6 +12659,7 @@ function normalizeImportedRo(raw,index){
     prazoConclusaoAcao,
     dataEnvioOperacional,
     resultadoEnvio,
+    situacaoPdca,
     pdcaEnviadoReclamanteEm:String(pdcaEnvio||''),
     reclamanteRecebeuPdca,
     origemBase:origemBase,
@@ -16044,6 +16070,8 @@ function pdcaExternalExists(ro,preloadedMap=null){
   return tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external';
 }
 function pdcaSituationLabel(ro,preloadedMap=null){
+  const tri=getRoTriageRecord(ro,preloadedMap)||{};
+  if(String(tri.pdcaSituation||'').trim())return String(tri.pdcaSituation).trim();
   if(pdcaExternalExists(ro,preloadedMap))return 'PDCA externo';
   const sent=getPdcaReturnForRo(ro);
   if(sent){
