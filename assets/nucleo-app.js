@@ -16665,6 +16665,24 @@ function setAssignedLifecycle(mode){
   if(f)f.value='todas';
   render();
 }
+
+function assignedHasAnswerWithoutPdca(r,triageMap){
+  const tri=getRoTriageRecord(r,triageMap)||{};
+  const display=assignedRoStatus(r,triageMap);
+  const pdcaExists=
+    !!getPdcaReturnForRo(r)||
+    pdcaExternalExists(r,triageMap)||
+    tri?.pdcaExternal===true||
+    tri?.pdcaFileId;
+
+  if(pdcaExists)return false;
+
+  if(tri?.pdcaResponded===true||tri?.answered===true||tri?.responseReceived===true)return true;
+
+  const s=normalizeAnswer(display||'');
+  return ['pdca respondido','pdca apresentado','respondido','apresentado','respondida','apresentada'].includes(s);
+}
+
 function assignedTerminalStatus(status){
   const s=normalizeAnswer(status||'');
   return ['cancelada','cancelado','registro','somente para registro','obsoleto','obsoleta'].includes(s);
@@ -16757,6 +16775,18 @@ function nucleoAssignedExportDataset(){
   return source
     .filter(nucleoManagerScopeAllows)
     .filter(r=>{
+      const triNow=getRoTriageRecord(r,triageMap);
+      const reviewCanonical=nucleoPdcaReviewCanonical2026(
+        nucleoPdcaReviewRoKey2026(r),
+        String(r?.origemBase||r?.raw?.__origemBase||'')
+      );
+      const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
+      const pdcaExists=
+        reviewDecision==='yes'||
+        triNow?.pdcaRequired===true||
+        !!getPdcaReturnForRo(r)||
+        pdcaExternalExists(r,triageMap);
+      if(pdcaExists)return false;
       const tri=getRoTriageRecord(r,triageMap);
       const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
       const sheetSector=String(
@@ -16814,7 +16844,10 @@ function nucleoAssignedExportMeta(r,triageMap){
     !!getPdcaReturnForRo(r)||
     pdcaExternalExists(r,triageMap);
 
-  const lifecycle=terminal?'history':pdcaAdvanced?'pdca':'active';
+  const hasAnswer=assignedHasAnswerWithoutPdca(r,triageMap);
+  const lifecycle=terminal
+    ? (status==='Cancelada'?'cancelada':status==='Registro'?'registro':'obsoleto')
+    : hasAnswer?'ja_respondeu':'precisa_resposta';
   const sector=String(
     tri?.responsibleSector||
     tri?.setorDirecionado||
@@ -16948,10 +16981,12 @@ function nucleoOpenAssignedExcelExport(){
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px">
         <label><div class="label">Escopo</div>
           <select id="axScope">
-            <option value="active"${currentLifecycle==='active'?' selected':''}>Em andamento</option>
-            <option value="history"${currentLifecycle==='history'?' selected':''}>Histórico — encerradas</option>
-            <option value="pdca">Já avançaram para PDCA</option>
-            <option value="all">Todos os atribuídos</option>
+            <option value="precisa_resposta">Precisa de resposta</option>
+            <option value="ja_respondeu">Já tem resposta</option>
+            <option value="cancelada">Canceladas</option>
+            <option value="registro">Registro</option>
+            <option value="obsoleto">Obsoletas</option>
+            <option value="all">Todos desta etapa</option>
           </select>
         </label>
         <label><div class="label">Data inicial</div><input id="axDateFrom" type="date"></label>
@@ -16977,13 +17012,10 @@ function nucleoOpenAssignedExcelExport(){
         <label><div class="label">Status</div>
           <select id="axStatus">
             <option value="all">Todos</option>
-            <option value="Pendente"${currentStatus==='pendente'?' selected':''}>Pendente</option>
-            <option value="PDCA externo"${currentStatus==='pdca_externo'?' selected':''}>PDCA externo</option>
-            <option value="PDCA respondido"${currentStatus==='pdca_respondido'?' selected':''}>PDCA respondido</option>
-            <option value="PDCA apresentado"${currentStatus==='pdca_apresentado'?' selected':''}>PDCA apresentado</option>
-            <option value="Cancelada"${currentStatus==='cancelada'?' selected':''}>Cancelada</option>
-            <option value="Registro"${currentStatus==='registro'?' selected':''}>Registro</option>
-            <option value="Obsoleto"${currentStatus==='obsoleto'?' selected':''}>Obsoleto</option>
+            <option value="Pendente">Precisa de resposta</option>
+            <option value="Cancelada">Cancelada</option>
+            <option value="Registro">Registro</option>
+            <option value="Obsoleto">Obsoleto</option>
           </select>
         </label>
         <label><div class="label">Situação PDCA</div>
@@ -17002,13 +17034,6 @@ function nucleoOpenAssignedExcelExport(){
             <option value="obsolete">Obsoleto</option>
           </select>
         </label>
-        <label><div class="label">PDCA</div>
-          <select id="axPdcaFlag">
-            <option value="all">Todos</option>
-            <option value="yes">Com PDCA / avançou</option>
-            <option value="no">Sem PDCA</option>
-          </select>
-        </label>
       </div>
 
       <div id="axCount" class="small" style="margin-top:14px"></div>
@@ -17019,6 +17044,9 @@ function nucleoOpenAssignedExcelExport(){
     </div>`;
 
   document.body.appendChild(modal);
+
+  const scopeEl=document.getElementById('axScope');
+  if(scopeEl)scopeEl.value=currentLifecycle==='history'?'cancelada':'precisa_resposta';
 
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
   modal.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',nucleoAssignedExportUpdateCount));
@@ -17039,8 +17067,7 @@ function nucleoAssignedExportFilters(){
     status:val('axStatus')||'all',
     pdca:val('axPdca')||'all',
     classification:val('axClassification')||'all',
-    decision:val('axDecision')||'all',
-    pdcaFlag:val('axPdcaFlag')||'all'
+    decision:val('axDecision')||'all'
   };
 }
 
@@ -17062,8 +17089,6 @@ function nucleoAssignedExportFiltered(){
     if(filters.pdca!=='all'&&m.pdcaSituation!==filters.pdca)return false;
     if(filters.classification!=='all'&&m.classification!==filters.classification)return false;
     if(filters.decision!=='all'&&String(m.decision||'')!==filters.decision)return false;
-    if(filters.pdcaFlag==='yes'&&!m.pdcaAdvanced)return false;
-    if(filters.pdcaFlag==='no'&&m.pdcaAdvanced)return false;
     if(fromDate&&(!m.date||m.date<fromDate))return false;
     if(toDate&&(!m.date||m.date>toDate))return false;
 
@@ -17087,9 +17112,9 @@ function nucleoAssignedExportUpdateCount(){
 
 function nucleoAssignedExportReset(){
   ['axDateFrom','axDateTo','axSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
-  ['axOrigin','axUnit','axSector','axPerson','axStatus','axPdca','axClassification','axDecision','axPdcaFlag']
+  ['axOrigin','axUnit','axSector','axPerson','axStatus','axPdca','axClassification','axDecision']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='all'});
-  const scope=document.getElementById('axScope');if(scope)scope.value='all';
+  const scope=document.getElementById('axScope');if(scope)scope.value='precisa_resposta';
   nucleoAssignedExportUpdateCount();
 }
 
@@ -17288,24 +17313,23 @@ function render(){
 
         // Em andamento: não mostra encerradas e nem R.O. que já avançou para PDCA.
         // Histórico: mostra somente Cancelada / Registro / Obsoleto.
+        const reviewCanonical=nucleoPdcaReviewCanonical2026(
+          nucleoPdcaReviewRoKey2026(r),
+          String(r?.origemBase||r?.raw?.__origemBase||'')
+        );
+        const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
+        const triNow=getRoTriageRecord(r,renderTriageMap);
+        const pdcaMarcadoComoTem=reviewDecision==='yes'||triNow?.pdcaRequired===true;
+        const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
+
+        // Esta tela é para cobrança/acompanhamento de resposta.
+        // Se a R.O. já tem PDCA, ela saiu desta etapa e não aparece aqui.
+        if(pdcaMarcadoComoTem||pdcaJaRecebido)return false;
+
         if(assignedLifecycle==='history'){
           if(!encerrada)return false;
         }else{
           if(encerrada)return false;
-
-          // Se o SGQ já marcou "Tem PDCA", esta R.O. já avançou para a etapa
-          // de importação/acompanhamento de PDCA e não deve continuar em
-          // "R.O.s atribuídas", mesmo antes de o arquivo aparecer em pdca_sent.
-          const reviewCanonical=nucleoPdcaReviewCanonical2026(
-            nucleoPdcaReviewRoKey2026(r),
-            String(r?.origemBase||r?.raw?.__origemBase||'')
-          );
-          const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
-          const triNow=getRoTriageRecord(r,renderTriageMap);
-          const pdcaMarcadoComoTem=reviewDecision==='yes'||triNow?.pdcaRequired===true;
-
-          const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
-          if(pdcaMarcadoComoTem||pdcaJaRecebido)return false;
         }
 
         const tri=getRoTriageRecord(r,renderTriageMap);
@@ -17318,8 +17342,13 @@ function render(){
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r,renderTriageMap);
-      const statusKey={'Pendente':'pendente','PDCA externo':'pdca_externo','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'pendente';
-      const filt=f==='todas'||f===statusKey;
+      const statusKey={'Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'';
+      const hasAnswer=assignedHasAnswerWithoutPdca(r,renderTriageMap);
+      const filt=
+        f==='todas'||
+        (f==='precisa_resposta'&&!assignedTerminalStatus(displayStatus)&&!hasAnswer)||
+        (f==='ja_respondeu'&&!assignedTerminalStatus(displayStatus)&&hasAnswer)||
+        f===statusKey;
       return text&&filt;
     });
 
