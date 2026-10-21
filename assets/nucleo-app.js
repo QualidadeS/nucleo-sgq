@@ -12081,6 +12081,74 @@ function removePdcaLocalRecords(roKey,pdcas){
   }catch(e){}
 }
 
+async function adminCorrectRoSend(){
+  if(!isAdmin())return false;
+  const key=cleanupRoKey();
+  if(!key){alert('Selecione uma R.O.');return false;}
+
+  const ro=findRoByAnyNumber(key,'');
+  if(!ro){
+    alert('R.O. não encontrada. Digite o número completo ou apenas os dígitos.');
+    return false;
+  }
+
+  const numero=String(ro.number||ro.numero||ro.ro||key);
+  const statusAtual=String(ro.__statusOperacional||ro.status||'').trim();
+  const dataAtual=String(ro.__dataEnvioOperacional||'').trim();
+  const resultadoAtual=String(ro.__resultadoOperacional||'').trim();
+  const detalhe=[
+    statusAtual?'Status atual: '+statusAtual:'',
+    dataAtual?'Data atual: '+dataAtual:'',
+    resultadoAtual?'Resultado atual: '+resultadoAtual:''
+  ].filter(Boolean).join('\n');
+
+  const ok=confirm(
+    'Corrigir o envio da '+numero+'?\n\n'+
+    (detalhe?detalhe+'\n\n':'')+
+    'A triagem e o PDCA serão preservados.\n'+
+    'O envio voltará para "Não enviado", a data será limpa e o Resultado registrará a correção quando essa coluna existir.'
+  );
+  if(!ok)return false;
+
+  try{
+    await adminCleanupEnsureTestBackend();
+
+    const campos={
+      status:'Não enviado',
+      dataEnvio:'',
+      resultado:'Envio corrigido administrativamente'
+    };
+    const res=await portalUpdateRoSheetConfirmed(numero,campos);
+
+    ro.__statusOperacional='Não enviado';
+    ro.__dataEnvioOperacional='';
+    ro.__resultadoOperacional='Envio corrigido administrativamente';
+
+    // Não desfaz a decisão de triagem nem o PDCA. Ajusta apenas a apresentação
+    // local do estado para não continuar exibindo o envio antigo até o próximo sync.
+    const tri=getRoTriageRecord(ro);
+    if(tri?.decision==='directed'){
+      ro.status=adminCleanupLinkedPdca(numero).length?'Respondido':'Aguardando resposta';
+    }else if(!tri?.decision){
+      ro.status='Aguardando triagem';
+    }
+
+    try{await syncPortalBackend(false,{foreground:true})}catch(e){}
+    try{renderAssignedRos()}catch(e){}
+    try{renderTriage()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+    refreshAdminCleanupPreview();
+
+    alert('Envio corrigido. A triagem e o PDCA foram preservados.');
+    return true;
+  }catch(e){
+    console.error('[CORREÇÃO ADMIN] falha ao corrigir envio',e);
+    alert('Não foi possível corrigir o envio.\n\n'+String(e?.message||e));
+    return false;
+  }
+}
+
 async function adminDeleteTriageForRo(skipConfirm=false){
   if(!isAdmin())return false;
   const key=cleanupRoKey();
