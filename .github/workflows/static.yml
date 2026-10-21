@@ -2,27 +2,20 @@
 name: Deploy static content to Pages
 
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
   deploy:
     environment:
       name: github-pages
@@ -31,13 +24,48 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate production API URL
+        env:
+          NUCLEO_API_URL: ${{ vars.NUCLEO_API_URL }}
+        run: |
+          if [ -z "$NUCLEO_API_URL" ]; then
+            echo "::error::Configure a variável de repositório NUCLEO_API_URL com a URL /exec do Apps Script de PRODUÇÃO."
+            exit 1
+          fi
+          case "$NUCLEO_API_URL" in
+            https://script.google.com/macros/s/*/exec) ;;
+            *)
+              echo "::error::NUCLEO_API_URL não é uma URL válida de Web App do Apps Script (/exec)."
+              exit 1
+              ;;
+          esac
+
+      - name: Generate central runtime config
+        env:
+          NUCLEO_API_URL: ${{ vars.NUCLEO_API_URL }}
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          url = os.environ["NUCLEO_API_URL"].strip()
+          path = pathlib.Path("assets/nucleo-runtime-config.js")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_text(
+              "window.NUCLEO_RUNTIME_CONFIG = Object.freeze(" +
+              json.dumps({"apiUrl": url}, ensure_ascii=False) +
+              ");\n",
+              encoding="utf-8"
+          )
+          PY
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
           path: '.'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
