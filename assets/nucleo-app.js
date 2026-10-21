@@ -8528,6 +8528,7 @@ async function nucleoMarkPdcaReview2026(roKey,origin,decision){
   try{
     await nucleoPdcaReviewPersist2026(ro,decision);
     renderPdcaReview2026();
+    renderPdcaPdfSummary();
     if(decision==='yes'){
       await nucleoDriveLoad();
       if(typeof nucleoDriveOpenForRo==='function')await nucleoDriveOpenForRo(nucleoPdcaReviewRoKey2026(ro),explicitRecordUnit(ro),effectiveRoSector(ro,getSavedTriageMap()));
@@ -8535,21 +8536,149 @@ async function nucleoMarkPdcaReview2026(roKey,origin,decision){
     }
   }catch(e){alert('Não foi possível salvar a definição de PDCA.\n\n'+String(e?.message||e));}
 }
+
+function nucleoPdcaPdfSummaryData(){
+  const all=getSentPdcas()||[];
+  const visible=isAdmin()?all:all.filter(p=>String(p.email||'').toLowerCase()===currentEmail());
+
+  let withPdf=0;
+  let pendingPdf=0;
+  let presentedNoPdf=0;
+  let respondedNoPdf=0;
+
+  visible.forEach(p=>{
+    const pending=!!(p.pdfPending||p.legacyMissingPdf||p.controlImported);
+    const hasPdf=!pending&&!!(
+      p.externalPdf===true||
+      p.fileId||
+      p.pdcaFileId||
+      p.pdfUrl||
+      p.driveFileId
+    );
+
+    if(hasPdf)withPdf++;
+    if(pending){
+      pendingPdf++;
+      if(String(p.status||'').toLowerCase().includes('apresent'))presentedNoPdf++;
+      else respondedNoPdf++;
+    }
+  });
+
+  return {
+    total:visible.length,
+    withPdf,
+    pendingPdf,
+    presentedNoPdf,
+    respondedNoPdf
+  };
+}
+
+function renderPdcaPdfSummary(){
+  const box=document.getElementById('pdcaPdfSummary');
+  if(!box)return;
+
+  const d=nucleoPdcaPdfSummaryData();
+  const priorities=isAdmin()?nucleoPdcaReviewCandidates2026().length:0;
+  const btn=document.getElementById('pdcaPrioritiesButton');
+  if(btn){
+    btn.innerHTML='Abrir prioridades'+(priorities?` <span class="status-badge" style="margin-left:6px">${priorities}</span>`:'');
+    btn.style.display=isAdmin()?'':'none';
+  }
+
+  const card=(label,value,detail,cls='')=>`
+    <div style="min-width:150px;flex:1;border:1px solid #dfe7ef;border-radius:12px;padding:10px 12px;background:#fff">
+      <div class="small" style="margin-bottom:4px">${escapeHtml(label)}</div>
+      <div style="font-size:21px;font-weight:800;line-height:1">${value}</div>
+      <div class="small ${cls}" style="margin-top:5px">${escapeHtml(detail)}</div>
+    </div>`;
+
+  box.innerHTML=`
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${card('PDCAs no Núcleo',d.total,'Total reconhecido')}
+      ${card('Com PDF',d.withPdf,'Arquivo já disponível')}
+      ${card('PDF pendente',d.pendingPdf,'Falta anexar o arquivo',d.pendingPdf?'':'')}
+      ${card('Apresentados sem PDF',d.presentedNoPdf,'Status já confirmado')}
+      ${card('Respondidos sem PDF',d.respondedNoPdf,'Status já confirmado')}
+    </div>`;
+}
+
 function renderPdcaReview2026(){
   if(!isAdmin())return;
-  const view=document.getElementById('sentView');if(!view)return;
-  let panel=document.getElementById('pdcaReview2026Panel');
-  if(!panel){
-    panel=document.createElement('div');panel.id='pdcaReview2026Panel';panel.style.cssText='margin:14px 0 18px;padding:16px;border:2px solid #e8b44b;border-radius:14px;background:#fff8e6';
-    const table=view.querySelector('table');
-    const anchor=table?.closest('.card,.panel,.table-wrap')||table;
-    if(anchor)anchor.before(panel);
-    else view.prepend(panel);
-  }
+  const panel=document.getElementById('pdcaPrioritiesContent');
+  if(!panel)return;
+
   const rows=nucleoPdcaReviewCandidates2026();
-  if(!rows.length){panel.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b>Revisão temporária de PDCA — 2026</b><div class="small">Nenhuma R.O. de 2026 pendente de definição de PDCA.</div></div><span class="status-badge answered">0 pendentes</span></div>';return;}
-  panel.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><b>Revisão temporária de PDCA — 2026</b><div class="small">Somente R.O.s a partir de 01/01/2026. Registro, Cancelada e Obsoleto não entram nesta revisão.</div></div><span class="status-badge" style="background:#fff1c2;color:#7a4b00">'+rows.length+' para definir</span></div><div style="overflow:auto;margin-top:12px"><table class="action-table" style="min-width:900px"><thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Definir PDCA</th></tr></thead><tbody>'+rows.slice(0,100).map(x=>{const r=x.ro,origin=String(r.origemBase||r.raw?.__origemBase||'');const sector=effectiveRoSector(r,getSavedTriageMap())||'-';return '<tr style="background:#fffdf5"><td><b>'+escapeHtml(x.key)+'</b></td><td>'+escapeHtml(formatDateBR(r.data||r.dataRegistro||r.dataSolicitacao||''))+'</td><td>'+escapeHtml(r.cliente||r.origem||'-')+'</td><td>'+escapeHtml(sector)+'</td><td><div style="display:flex;gap:8px;white-space:nowrap"><button class="btn primary" type="button" onclick="nucleoMarkPdcaReview2026(\''+escapeHtml(x.key)+'\',\''+escapeHtml(origin)+'\',\'yes\')">Tem PDCA</button><button class="btn secondary" type="button" onclick="nucleoMarkPdcaReview2026(\''+escapeHtml(x.key)+'\',\''+escapeHtml(origin)+'\',\'no\')">Não tem PDCA</button></div></td></tr>';}).join('')+'</tbody></table></div>'+(rows.length>100?'<p class="small">Mostrando as 100 mais recentes. Resolva estas para carregar as próximas.</p>':'');
+  const count=document.getElementById('pdcaPrioritiesCount');
+  if(count)count.textContent=rows.length+' para definir';
+
+  if(!rows.length){
+    panel.innerHTML='<div style="padding:28px;text-align:center"><b>Nenhuma prioridade pendente.</b><div class="small" style="margin-top:5px">Todas as R.O.s de 2026 já possuem definição de PDCA.</div></div>';
+    return;
+  }
+
+  panel.innerHTML=`
+    <div style="overflow:auto">
+      <table class="action-table" style="min-width:900px">
+        <thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Definir PDCA</th></tr></thead>
+        <tbody>
+          ${rows.slice(0,150).map(x=>{
+            const r=x.ro;
+            const origin=String(r.origemBase||r.raw?.__origemBase||'');
+            const sector=effectiveRoSector(r,getSavedTriageMap())||'-';
+            return `<tr style="background:#fffdf5">
+              <td><b>${escapeHtml(x.key)}</b></td>
+              <td>${escapeHtml(formatDateBR(r.data||r.dataRegistro||r.dataSolicitacao||''))}</td>
+              <td>${escapeHtml(r.cliente||r.origem||'-')}</td>
+              <td>${escapeHtml(sector)}</td>
+              <td>
+                <div style="display:flex;gap:8px;white-space:nowrap">
+                  <button class="btn primary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','yes')">Tem PDCA</button>
+                  <button class="btn secondary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','no')">Não tem PDCA</button>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${rows.length>150?'<p class="small" style="margin-top:10px">Mostrando as 150 prioridades mais recentes. Resolva estas para carregar as próximas.</p>':''}`;
 }
+
+function nucleoOpenPdcaPriorities(){
+  if(!isAdmin())return;
+
+  let modal=document.getElementById('pdcaPrioritiesModal');
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id='pdcaPrioritiesModal';
+    modal.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:22px';
+    modal.innerHTML=`
+      <div style="background:#fff;width:min(1500px,97vw);max-height:92vh;overflow:auto;border-radius:16px;box-shadow:0 22px 60px rgba(15,23,42,.28);padding:20px">
+        <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px">
+          <div>
+            <h2 style="margin:0">Prioridades de PDCA — 2026</h2>
+            <p class="small" style="margin:5px 0 0">R.O.s a partir de 01/01/2026 que ainda precisam ser definidas como Tem PDCA ou Não tem PDCA. Registro, Cancelada e Obsoleto não entram aqui.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span id="pdcaPrioritiesCount" class="status-badge"></span>
+            <button class="btn secondary" type="button" onclick="nucleoClosePdcaPriorities()">Fechar</button>
+          </div>
+        </div>
+        <div id="pdcaPrioritiesContent"></div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click',e=>{if(e.target===modal)nucleoClosePdcaPriorities()});
+  }
+
+  modal.style.display='flex';
+  renderPdcaReview2026();
+}
+
+function nucleoClosePdcaPriorities(){
+  const modal=document.getElementById('pdcaPrioritiesModal');
+  if(modal)modal.style.display='none';
+}
+
 
 function renderTriage(){
   try{refreshMenuNotificationBadges()}catch(e){}
@@ -11618,7 +11747,7 @@ async function showSentPdcas(){
   try{
     const ok=await nucleoEnsureCentralPdcaSnapshot();
     if(!ok)throw new Error('A base central não confirmou os PDCAs recebidos.');
-    renderPdcaReview2026();
+    renderPdcaPdfSummary();
     renderSentPdcas();
     refreshPdcaSidebarBadge();
   }catch(e){
@@ -11628,6 +11757,7 @@ async function showSentPdcas(){
 }
 function renderSentPdcas(){
  refreshPdcaSidebarBadge();
+ renderPdcaPdfSummary();
  const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase(),sf=document.getElementById('sentStatusFilter')?.value||'todos';
  let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
  const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):p.id};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
