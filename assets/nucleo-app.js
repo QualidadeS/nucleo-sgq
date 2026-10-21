@@ -16557,8 +16557,20 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
           if(!encerrada)return false;
         }else{
           if(encerrada)return false;
+
+          // Se o SGQ já marcou "Tem PDCA", esta R.O. já avançou para a etapa
+          // de importação/acompanhamento de PDCA e não deve continuar em
+          // "R.O.s atribuídas", mesmo antes de o arquivo aparecer em pdca_sent.
+          const reviewCanonical=nucleoPdcaReviewCanonical2026(
+            nucleoPdcaReviewRoKey2026(r),
+            String(r?.origemBase||r?.raw?.__origemBase||'')
+          );
+          const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
+          const triNow=getRoTriageRecord(r,renderTriageMap);
+          const pdcaMarcadoComoTem=reviewDecision==='yes'||triNow?.pdcaRequired===true;
+
           const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
-          if(pdcaJaRecebido)return false;
+          if(pdcaMarcadoComoTem||pdcaJaRecebido)return false;
         }
 
         const tri=getRoTriageRecord(r,renderTriageMap);
