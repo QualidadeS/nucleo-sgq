@@ -9186,9 +9186,12 @@ async function saveTriageRecord(){
   const syncWarnings=[];let centralTriageSaved=true;
 
   // Depois sincroniza com a planilha/base central.
-  // Se a planilha estiver lenta/indisponível, a decisão local continua válida
-  // e o usuário recebe um AVISO, não fica preso no carregamento.
-  for(const record of savedRecords){
+  // Se uma mesma R.O. foi direcionada para mais de um setor, a partir do
+  // segundo vínculo a planilha precisa CRIAR uma nova linha física da R.O.,
+  // e não simplesmente sobrescrever a primeira.
+  // Em edição de um vínculo existente, não criamos linha nova.
+  for(let recordIndex=0;recordIndex<savedRecords.length;recordIndex++){
+    const record=savedRecords[recordIndex];
     if(portalBackendEnabled()){
       updateNucleoLoading('Atualizando a linha de '+(record.responsibleSector||roNumber)+' na planilha...','Processando');
 
@@ -9198,7 +9201,8 @@ async function saveTriageRecord(){
           setor:record.responsibleSector||'',
           setorAnterior:record.previousResponsibleSector||record.responsibleSector||'',
           pessoa:decision==='directed'?(record.responsibleUserName||'Todo o setor'):'',
-          status:decision==='directed'?'Enviado':decision==='record'?(decisionRule.id==='falta_caixa'?'Falta de caixa':'Registro'):decision==='obsolete'?'Obsoleto':'Cancelada'
+          status:decision==='directed'?'Enviado':decision==='record'?(decisionRule.id==='falta_caixa'?'Falta de caixa':'Registro'):decision==='obsolete'?'Obsoleto':'Cancelada',
+          duplicarLinha:decision==='directed'&&!currentEditingTriageKey&&savedRecords.length>1&&recordIndex>0
         });
       }catch(syncErr){
         console.warn('[NUCLEO TRIAGEM] decisão salva localmente, mas planilha não confirmou',syncErr);
@@ -16461,7 +16465,491 @@ function assignedTerminalStatus(status){
   return ['cancelada','cancelado','registro','somente para registro','obsoleto','obsoleta'].includes(s);
 }
 function showMoreRos(){roListVisibleLimit+=60;render()}
-function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
+function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}
+function nucleoAssignedExportDataset(){
+  const hiddenAssigned=getHiddenAssignedKeys();
+  const triageMap=getSavedTriageMap();
+  const byRo=new Map();
+
+  triageMap.forEach(t=>{
+    const number=String(t?.roNumber||String(t?.roKey||'').split('::')[0]||'').trim();
+    if(!number)return;
+    const arr=byRo.get(number)||[];
+    arr.push(t);
+    byRo.set(number,arr);
+  });
+
+  const grouped=new Map();
+  ros.forEach(r=>{
+    const k=nucleoPdcaReviewGroupKey2026(r)||[
+      String(r.numero||r.id||r.codigo||''),
+      String(r.origemBase||''),
+      String(r.unidade||'')
+    ].join('|');
+    const arr=grouped.get(k)||[];
+    arr.push(r);
+    grouped.set(k,arr);
+  });
+
+  const bases=[...grouped.values()]
+    .map(items=>nucleoPdcaPreferredRo2026(items,triageMap))
+    .filter(Boolean);
+
+  const source=bases.flatMap(r=>{
+    const base=String(r.numero||r.id||r.codigo||'').trim();
+    let records=(byRo.get(base)||[])
+      .filter(t=>String(t.decision||'')!==''&&!hiddenAssigned.has(String(t.roKey||'')));
+
+    const confirmed=resolvedTriageForRo(r,triageMap);
+    if(confirmed?.decision&&confirmed.decision!=='directed')records=[confirmed];
+
+    if(!records.length){
+      const deletedKeys=getDeletedTriageKeys();
+      if(deletedKeys.has(base)||deletedKeys.has(String(triageKeyOf(r)||'')))return [];
+
+      const sheetSector=String(
+        r.setorResponsavelPlanilha||
+        r.raw?.__setorResponsavel||
+        r.setor||
+        ''
+      ).trim();
+      const norm=normalizeAnswer(sheetSector);
+      if(sheetSector&&!['nao direcionado','nao informado','sem setor','-'].includes(norm)){
+        records=[{
+          roKey:triageCompositeKey(base,sheetSector),
+          roNumber:base,
+          decision:'directed',
+          responsibleSector:sheetSector,
+          importedFromSheet:true,
+          __synthetic:true
+        }];
+      }
+    }
+
+    if(!records.length)return [];
+
+    const sectorMap=new Map();
+    records.forEach(t=>{
+      const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
+      const key=triageCompositeKey(base,sector||'__sem_setor__');
+      const prev=sectorMap.get(key);
+      const score=x=>{
+        const composite=String(x?.roKey||'').includes('::')?10000000000000:0;
+        const ts=Date.parse(x?.pdcaExternalUpdatedAt||x?.updatedAt||x?.triagedAt||x?.createdAt||'')||0;
+        return composite+ts;
+      };
+      if(!prev||score(t)>=score(prev))sectorMap.set(key,t);
+    });
+
+    return [...sectorMap.values()].map(t=>({
+      ...r,
+      __triageKey:t.roKey,
+      __triageRecord:t,
+      __assignedSector:t.responsibleSector||''
+    }));
+  });
+
+  return source
+    .filter(nucleoManagerScopeAllows)
+    .filter(r=>{
+      const tri=getRoTriageRecord(r,triageMap);
+      const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
+      const sheetSector=String(
+        r.setorResponsavelPlanilha||
+        r.raw?.__setorResponsavel||
+        r.setor||
+        ''
+      ).trim();
+      const validSheetSector=!!sheetSector&&!['nao direcionado','nao informado','sem setor','-']
+        .includes(normalizeAnswer(sheetSector));
+      const assignedByTriage=!!tri&&!['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
+      if(!assignedByTriage&&!validSheetSector)return false;
+      return isAdmin()?true:canViewRO(r);
+    })
+    .map(r=>isAdmin()?r:getOperationalRoView(r));
+}
+
+function nucleoAssignedExportDateValue(r){
+  const candidates=[
+    r?.data,
+    r?.dataRegistro,
+    r?.dataSolicitacao,
+    r?.createdAt,
+    r?.raw?.data,
+    r?.raw?.Data,
+    r?.raw?.timestamp
+  ];
+  for(const v of candidates){
+    if(!v)continue;
+    if(v instanceof Date&&!Number.isNaN(v.getTime()))return v;
+    const txt=String(v).trim();
+    let d=new Date(txt);
+    if(!Number.isNaN(d.getTime()))return d;
+    const m=txt.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m){
+      d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]));
+      if(!Number.isNaN(d.getTime()))return d;
+    }
+  }
+  return null;
+}
+
+function nucleoAssignedExportMeta(r,triageMap){
+  const tri=getRoTriageRecord(r,triageMap)||{};
+  const status=assignedRoStatus(r,triageMap);
+  const terminal=assignedTerminalStatus(status);
+  const reviewCanonical=nucleoPdcaReviewCanonical2026(
+    nucleoPdcaReviewRoKey2026(r),
+    String(r?.origemBase||r?.raw?.__origemBase||'')
+  );
+  const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
+  const pdcaAdvanced=
+    reviewDecision==='yes'||
+    tri?.pdcaRequired===true||
+    !!getPdcaReturnForRo(r)||
+    pdcaExternalExists(r,triageMap);
+
+  const lifecycle=terminal?'history':pdcaAdvanced?'pdca':'active';
+  const sector=String(
+    tri?.responsibleSector||
+    tri?.setorDirecionado||
+    r.__assignedSector||
+    r.setorResponsavelPlanilha||
+    r.raw?.__setorResponsavel||
+    r.setorResponsavel||
+    r.setor||
+    ''
+  ).trim();
+
+  const person=String(
+    tri?.responsibleUserName||
+    tri?.pessoaResponsavel||
+    r?.pessoaResponsavel||
+    r?.raw?.__pessoaResponsavel||
+    ''
+  ).trim();
+
+  const origin=String(r?.origemBase||r?.raw?.__origemBase||'').trim();
+  const unit=String(r?.unidade||'').trim();
+  const classification=String(
+    tri?.classification||
+    tri?.classificacaoSGQ||
+    r?.classificacaoSGQ||
+    ''
+  ).trim();
+  const decision=String(
+    tri?.decision||
+    tri?.triagemStatus||
+    ''
+  ).trim();
+  const pdcaSituation=pdcaSituationLabel(r,triageMap)||'';
+  const client=String(r?.cliente||r?.origem||'').trim();
+  const occurrence=String(
+    r?.problema||
+    r?.descricao||
+    r?.ocorrencia||
+    r?.assunto||
+    r?.tipo||
+    ''
+  ).trim();
+
+  return {
+    tri,status,terminal,pdcaAdvanced,lifecycle,sector,person,origin,unit,
+    classification,decision,pdcaSituation,client,occurrence,
+    date:nucleoAssignedExportDateValue(r)
+  };
+}
+
+function nucleoAssignedExportUnique(rows, getter){
+  return [...new Set(rows.map(getter).map(v=>String(v||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
+}
+
+function nucleoAssignedExportOptions(values, selected){
+  return '<option value="all">Todos</option>'+
+    values.map(v=>'<option value="'+escapeHtml(v)+'"'+(String(v)===String(selected)?' selected':'')+'>'+escapeHtml(v)+'</option>').join('');
+}
+
+function nucleoOpenAssignedExcelExport(){
+  const rows=nucleoAssignedExportDataset();
+  const triageMap=getSavedTriageMap();
+  const metas=rows.map(r=>({r,m:nucleoAssignedExportMeta(r,triageMap)}));
+
+  let modal=document.getElementById('assignedExcelExportModal');
+  if(modal)modal.remove();
+
+  modal=document.createElement('div');
+  modal.id='assignedExcelExportModal';
+  modal.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+
+  const currentLifecycle=typeof assignedLifecycle==='string'?assignedLifecycle:'active';
+  const currentSector=document.getElementById('assignedSectorFilter')?.value||'all';
+  const currentOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
+  const currentUnit=document.getElementById('assignedUnitFilter')?.value||'all';
+  const currentStatus=document.getElementById('filter')?.value||'todas';
+  const currentSearch=document.getElementById('search')?.value||'';
+
+  const sectors=nucleoAssignedExportUnique(metas,x=>x.m.sector);
+  const origins=nucleoAssignedExportUnique(metas,x=>x.m.origin);
+  const units=nucleoAssignedExportUnique(metas,x=>x.m.unit);
+  const persons=nucleoAssignedExportUnique(metas,x=>x.m.person);
+  const classifications=nucleoAssignedExportUnique(metas,x=>x.m.classification);
+  const pdcaSituations=nucleoAssignedExportUnique(metas,x=>x.m.pdcaSituation);
+
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(15,23,42,.25);width:min(980px,96vw);max-height:92vh;overflow:auto;padding:22px">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+        <div>
+          <h2 style="margin:0">Exportar R.O.s para Excel</h2>
+          <p class="small" style="margin:6px 0 0">Aplique os filtros abaixo. O arquivo leva somente os registros que correspondem aos filtros selecionados.</p>
+        </div>
+        <button class="btn secondary" type="button" onclick="document.getElementById('assignedExcelExportModal')?.remove()">Fechar</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px">
+        <label><div class="label">Escopo</div>
+          <select id="axScope">
+            <option value="active"${currentLifecycle==='active'?' selected':''}>Em andamento</option>
+            <option value="history"${currentLifecycle==='history'?' selected':''}>Histórico — encerradas</option>
+            <option value="pdca">Já avançaram para PDCA</option>
+            <option value="all">Todos os atribuídos</option>
+          </select>
+        </label>
+        <label><div class="label">Data inicial</div><input id="axDateFrom" type="date"></label>
+        <label><div class="label">Data final</div><input id="axDateTo" type="date"></label>
+
+        <label style="grid-column:span 3"><div class="label">Busca geral</div>
+          <input id="axSearch" value="${escapeHtml(currentSearch)}" placeholder="R.O., cliente, ocorrência, setor, responsável...">
+        </label>
+
+        <label><div class="label">Origem</div>
+          <select id="axOrigin">${nucleoAssignedExportOptions(origins,currentOrigin)}</select>
+        </label>
+        <label><div class="label">Unidade</div>
+          <select id="axUnit">${nucleoAssignedExportOptions(units,currentUnit)}</select>
+        </label>
+        <label><div class="label">Setor responsável</div>
+          <select id="axSector">${nucleoAssignedExportOptions(sectors,currentSector)}</select>
+        </label>
+
+        <label><div class="label">Pessoa responsável</div>
+          <select id="axPerson">${nucleoAssignedExportOptions(persons,'all')}</select>
+        </label>
+        <label><div class="label">Status</div>
+          <select id="axStatus">
+            <option value="all">Todos</option>
+            <option value="Pendente"${currentStatus==='pendente'?' selected':''}>Pendente</option>
+            <option value="PDCA externo"${currentStatus==='pdca_externo'?' selected':''}>PDCA externo</option>
+            <option value="PDCA respondido"${currentStatus==='pdca_respondido'?' selected':''}>PDCA respondido</option>
+            <option value="PDCA apresentado"${currentStatus==='pdca_apresentado'?' selected':''}>PDCA apresentado</option>
+            <option value="Cancelada"${currentStatus==='cancelada'?' selected':''}>Cancelada</option>
+            <option value="Registro"${currentStatus==='registro'?' selected':''}>Registro</option>
+            <option value="Obsoleto"${currentStatus==='obsoleto'?' selected':''}>Obsoleto</option>
+          </select>
+        </label>
+        <label><div class="label">Situação PDCA</div>
+          <select id="axPdca">${nucleoAssignedExportOptions(pdcaSituations,'all')}</select>
+        </label>
+
+        <label><div class="label">Classificação SGQ</div>
+          <select id="axClassification">${nucleoAssignedExportOptions(classifications,'all')}</select>
+        </label>
+        <label><div class="label">Decisão SGQ</div>
+          <select id="axDecision">
+            <option value="all">Todas</option>
+            <option value="directed">Direcionada</option>
+            <option value="record">Registro</option>
+            <option value="cancelled">Cancelada</option>
+            <option value="obsolete">Obsoleto</option>
+          </select>
+        </label>
+        <label><div class="label">PDCA</div>
+          <select id="axPdcaFlag">
+            <option value="all">Todos</option>
+            <option value="yes">Com PDCA / avançou</option>
+            <option value="no">Sem PDCA</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="axCount" class="small" style="margin-top:14px"></div>
+      <div class="actions" style="margin-top:16px">
+        <button class="btn primary" type="button" onclick="nucleoExportAssignedExcel()">Gerar Excel</button>
+        <button class="btn secondary" type="button" onclick="nucleoAssignedExportReset()">Limpar filtros</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
+  modal.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',nucleoAssignedExportUpdateCount));
+  nucleoAssignedExportUpdateCount();
+}
+
+function nucleoAssignedExportFilters(){
+  const val=id=>document.getElementById(id)?.value||'';
+  return {
+    scope:val('axScope')||'all',
+    from:val('axDateFrom'),
+    to:val('axDateTo'),
+    search:normalizeAnswer(val('axSearch')),
+    origin:val('axOrigin')||'all',
+    unit:val('axUnit')||'all',
+    sector:val('axSector')||'all',
+    person:val('axPerson')||'all',
+    status:val('axStatus')||'all',
+    pdca:val('axPdca')||'all',
+    classification:val('axClassification')||'all',
+    decision:val('axDecision')||'all',
+    pdcaFlag:val('axPdcaFlag')||'all'
+  };
+}
+
+function nucleoAssignedExportFiltered(){
+  const filters=nucleoAssignedExportFilters();
+  const rows=nucleoAssignedExportDataset();
+  const triageMap=getSavedTriageMap();
+
+  let fromDate=filters.from?new Date(filters.from+'T00:00:00'):null;
+  let toDate=filters.to?new Date(filters.to+'T23:59:59'):null;
+
+  return rows.map(r=>({r,m:nucleoAssignedExportMeta(r,triageMap)})).filter(({r,m})=>{
+    if(filters.scope!=='all'&&m.lifecycle!==filters.scope)return false;
+    if(filters.origin!=='all'&&m.origin!==filters.origin)return false;
+    if(filters.unit!=='all'&&!sameCanonicalUnit(m.unit,filters.unit))return false;
+    if(filters.sector!=='all'&&m.sector!==filters.sector)return false;
+    if(filters.person!=='all'&&m.person!==filters.person)return false;
+    if(filters.status!=='all'&&m.status!==filters.status)return false;
+    if(filters.pdca!=='all'&&m.pdcaSituation!==filters.pdca)return false;
+    if(filters.classification!=='all'&&m.classification!==filters.classification)return false;
+    if(filters.decision!=='all'&&String(m.decision||'')!==filters.decision)return false;
+    if(filters.pdcaFlag==='yes'&&!m.pdcaAdvanced)return false;
+    if(filters.pdcaFlag==='no'&&m.pdcaAdvanced)return false;
+    if(fromDate&&(!m.date||m.date<fromDate))return false;
+    if(toDate&&(!m.date||m.date>toDate))return false;
+
+    if(filters.search){
+      const hay=normalizeAnswer([
+        r.numero,r.id,r.codigo,m.client,m.occurrence,m.unit,m.sector,m.person,
+        m.origin,m.status,m.pdcaSituation,m.classification,m.decision
+      ].join(' '));
+      if(!hay.includes(filters.search))return false;
+    }
+    return true;
+  });
+}
+
+function nucleoAssignedExportUpdateCount(){
+  const count=document.getElementById('axCount');
+  if(!count)return;
+  const total=nucleoAssignedExportFiltered().length;
+  count.textContent=total+' registro'+(total===1?'':'s')+' será'+(total===1?'':'ão')+' exportado'+(total===1?'':'s')+'.';
+}
+
+function nucleoAssignedExportReset(){
+  ['axDateFrom','axDateTo','axSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=''});
+  ['axOrigin','axUnit','axSector','axPerson','axStatus','axPdca','axClassification','axDecision','axPdcaFlag']
+    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='all'});
+  const scope=document.getElementById('axScope');if(scope)scope.value='all';
+  nucleoAssignedExportUpdateCount();
+}
+
+function nucleoExcelXmlEscape(v){
+  return String(v==null?'':v)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&apos;');
+}
+
+function nucleoExcelCell(v,style){
+  return '<Cell'+(style?' ss:StyleID="'+style+'"':'')+'><Data ss:Type="String">'+nucleoExcelXmlEscape(v)+'</Data></Cell>';
+}
+
+function nucleoExportAssignedExcel(){
+  const filtered=nucleoAssignedExportFiltered();
+  if(!filtered.length){alert('Nenhum registro corresponde aos filtros selecionados.');return;}
+
+  const headers=[
+    'R.O.','Data','Cliente / origem','Ocorrência','Unidade','Setor responsável',
+    'Pessoa responsável','Origem','Classificação SGQ','Decisão SGQ','Prazo',
+    'Status','Situação PDCA','PDCA','Reclamante','Atualizado em'
+  ];
+
+  const rows=filtered.map(({r,m})=>{
+    const claimant=typeof resolveRoClaimant==='function' ? resolveRoClaimant(r) : null;
+    const claimantName=claimant&&typeof personDisplayName==='function'?personDisplayName(claimant):'';
+    const deadline=assignedRoDeadline(r,getSavedTriageMap());
+    const date=m.date?m.date.toLocaleDateString('pt-BR'):'';
+    const updated=String(
+      m.tri?.updatedAt||
+      m.tri?.triagedAt||
+      r?.updatedAt||
+      r?.raw?.updatedAt||
+      ''
+    );
+    return [
+      String(r.numero||r.id||r.codigo||''),
+      date,
+      m.client,
+      m.occurrence,
+      m.unit,
+      m.sector,
+      m.person,
+      m.origin,
+      m.classification,
+      m.decision,
+      deadline==='—'?'':deadline,
+      m.status,
+      m.pdcaSituation,
+      m.pdcaAdvanced?'Sim':'Não',
+      claimantName,
+      updated
+    ];
+  });
+
+  const xmlRows=[
+    '<Row>'+headers.map(h=>nucleoExcelCell(h,'Header')).join('')+'</Row>',
+    ...rows.map(row=>'<Row>'+row.map(v=>nucleoExcelCell(v,'Cell')).join('')+'</Row>')
+  ].join('');
+
+  const xml='<?xml version="1.0"?>'+
+    '<?mso-application progid="Excel.Sheet"?>'+
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '+
+      'xmlns:o="urn:schemas-microsoft-com:office:office" '+
+      'xmlns:x="urn:schemas-microsoft-com:office:excel" '+
+      'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
+      '<Styles>'+
+        '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Bottom"/><Font ss:FontName="Calibri" ss:Size="11"/></Style>'+
+        '<Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#D9EAF7" ss:Pattern="Solid"/><Alignment ss:Vertical="Center"/></Style>'+
+        '<Style ss:ID="Cell"><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style>'+
+      '</Styles>'+
+      '<Worksheet ss:Name="ROs">'+
+        '<Table>'+xmlRows+'</Table>'+
+        '<AutoFilter x:Range="R1C1:R'+(rows.length+1)+'C'+headers.length+'" xmlns="urn:schemas-microsoft-com:office:excel"/>'+
+      '</Worksheet>'+
+    '</Workbook>';
+
+  const blob=new Blob(['\ufeff',xml],{type:'application/vnd.ms-excel;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const now=new Date();
+  const stamp=[
+    now.getFullYear(),
+    String(now.getMonth()+1).padStart(2,'0'),
+    String(now.getDate()).padStart(2,'0')
+  ].join('-');
+  a.href=url;
+  a.download='ROs_Nucleo_'+stamp+'.xls';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
+
+function render(){
   const searchEl=document.getElementById('search');
   const filterEl=document.getElementById('filter');
   const rowsEl=document.getElementById('rows');
