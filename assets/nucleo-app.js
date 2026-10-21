@@ -8537,11 +8537,14 @@ async function nucleoMarkPdcaReview2026(roKey,origin,decision){
 }
 function renderPdcaReview2026(){
   if(!isAdmin())return;
-  const view=document.getElementById('triageView');if(!view)return;
+  const view=document.getElementById('sentView');if(!view)return;
   let panel=document.getElementById('pdcaReview2026Panel');
   if(!panel){
     panel=document.createElement('div');panel.id='pdcaReview2026Panel';panel.style.cssText='margin:14px 0 18px;padding:16px;border:2px solid #e8b44b;border-radius:14px;background:#fff8e6';
-    const filters=view.querySelector('.triage-box');filters?.before(panel);
+    const table=view.querySelector('table');
+    const anchor=table?.closest('.card,.panel,.table-wrap')||table;
+    if(anchor)anchor.before(panel);
+    else view.prepend(panel);
   }
   const rows=nucleoPdcaReviewCandidates2026();
   if(!rows.length){panel.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b>Revisão temporária de PDCA — 2026</b><div class="small">Nenhuma R.O. de 2026 pendente de definição de PDCA.</div></div><span class="status-badge answered">0 pendentes</span></div>';return;}
@@ -8620,7 +8623,6 @@ function showTriage(){
   populateTriageSectors();
   populateTriageUnits();
   renderTriage();
-  renderPdcaReview2026();
 }
 
 
@@ -11596,6 +11598,7 @@ async function showSentPdcas(){
   try{
     const ok=await nucleoEnsureCentralPdcaSnapshot();
     if(!ok)throw new Error('A base central não confirmou os PDCAs recebidos.');
+    renderPdcaReview2026();
     renderSentPdcas();
     refreshPdcaSidebarBadge();
   }catch(e){
@@ -16382,9 +16385,14 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 function assignedRoStatus(r,preloadedMap=null){
   const raw=String(r?.status||'').trim().toLowerCase();
   const tri=getRoTriageRecord(r,preloadedMap)||{};
-  if(raw.includes('cancel')) return 'Cancelada';
-  if(raw.includes('obsolet')) return 'Obsoleto';
-  if(tri.decision==='record'||raw==='falta de caixa'||raw==='falta de caixas'||raw.includes('registro')) return 'Registro';
+  const triDecision=String(tri?.decision||tri?.status||'').trim().toLowerCase();
+
+  // O encerramento pode estar registrado apenas na triagem central.
+  // Considerar a decisão da triagem evita que "Cancelar R.O." permaneça
+  // em Em andamento e evita exibir ações de PDCA para uma R.O. encerrada.
+  if(raw.includes('cancel')||['cancelled','canceled','cancelada','cancelado','cancel'].includes(triDecision)) return 'Cancelada';
+  if(raw.includes('obsolet')||['obsolete','obsoleto','obsoleta'].includes(triDecision)) return 'Obsoleto';
+  if(['record','registro'].includes(triDecision)||raw==='falta de caixa'||raw==='falta de caixas'||raw.includes('registro')) return 'Registro';
   if(tri.pdcaExternal===true&&!tri.pdcaFileId) return 'PDCA externo';
 
   // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
@@ -16605,11 +16613,12 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r,renderTriageMap);
     const displayStatus=assignedRoStatus(r,renderTriageMap);
+    const terminalAssigned=assignedTerminalStatus(displayStatus);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus,renderTriageMap);
     const reviewCanonical=nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''));
     const reviewState=nucleoPdcaReviewMap2026()[reviewCanonical];
     const reviewDate=nucleoPdcaReviewDate2026(r);
-    const review2026Eligible=admin&&reviewDate&&reviewDate>=new Date(2026,0,1)&&!nucleoPdcaReviewOwnTerminal2026(r);
+    const review2026Eligible=admin&&reviewDate&&reviewDate>=new Date(2026,0,1)&&!terminalAssigned&&!nucleoPdcaReviewOwnTerminal2026(r);
     const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
     const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
     const pdcaReviewAction=review2026Eligible&&!reviewDecision
