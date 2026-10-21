@@ -18366,6 +18366,10 @@ function renderCurrentOverview(){
 }
 
 
+
+const NUCLEO_5S_SECTORS = {"matriz": ["Expedição", "Infraestrutura", "Mecânica (manutenção)", "Clicheria + sala de tintas", "Plotter", "2° turno", "Serralheria", "Acabamento", "Recebimento + almoxarifado", "Acessórios", "Máquinas 1", "Máquinas 2", "Serviços gerais", "Administrativo (rh)", "Administrativo aquário 1", "Administrativo aquário 2", "Administrativo aquário 3"], "filial": ["ADMINISTRATIVO 1", "ADMINISTRATIVO 2", "CLICHERIA", "EXPEDIÇÃO", "MÁQUINAS", "MANUTENÇÃO", "ACABAMENTO", "ACESSÓRIOS", "RECEBIMENTO - ALMOXARIFADO", "ÁREA EXTERNA"]};
+let nucleo5sCurrentUnit='matriz';
+
 function nucleo5sNormalizeUnit(value){
   const n=normalizeAnswer(String(value||''));
   if(n.includes('linhares')||n.includes('seta es')||n==='filial')return 'filial';
@@ -18389,37 +18393,188 @@ function nucleo5sConfig(unit){
   };
 }
 
-function nucleoOpen5SUnit(unit){
-  unit=unit==='filial'?'filial':'matriz';
-  const cfg=nucleo5sConfig(unit);
-  const frame=document.getElementById('audit5sFrame');
-  const notice=document.getElementById('audit5sConfigNotice');
+function nucleo5sUnitLabel(unit){
+  return unit==='filial'?'Filial — Linhares (ES)':'Matriz — São Bento do Sul (SC)';
+}
+
+function nucleo5sSetUnitButtons(unit){
   const matrizBtn=document.getElementById('audit5sMatrizBtn');
   const filialBtn=document.getElementById('audit5sFilialBtn');
-
   if(matrizBtn)matrizBtn.className='btn '+(unit==='matriz'?'primary':'secondary');
   if(filialBtn)filialBtn.className='btn '+(unit==='filial'?'primary':'secondary');
+}
 
-  if(!cfg.url){
-    if(frame)frame.removeAttribute('src');
-    if(notice){
-      notice.classList.remove('hidden');
-      notice.innerHTML='<b>Integração 5S da '+(unit==='filial'?'Filial':'Matriz')+' ainda não configurada.</b>'+
-        '<div class="small" style="margin-top:5px">Configure a URL central do Apps Script desta auditoria no GitHub e publique novamente. Nenhuma configuração por navegador será solicitada.</div>';
-    }
+function nucleoOpen5SUnit(unit){
+  unit=unit==='filial'?'filial':'matriz';
+  nucleo5sCurrentUnit=unit;
+  nucleo5sSetUnitButtons(unit);
+  nucleo5sShowPanel('home');
+}
+
+function nucleo5sConfigReady(){
+  const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
+  const notice=document.getElementById('audit5sConfigNotice');
+  if(cfg.url){
+    if(notice)notice.classList.add('hidden');
+    return true;
+  }
+  if(notice){
+    notice.classList.remove('hidden');
+    notice.innerHTML='<b>Integração 5S da '+escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))+' ainda não configurada.</b>'+
+      '<div class="small" style="margin-top:5px">Configure a URL central do Apps Script da unidade no GitHub e publique novamente.</div>';
+  }
+  return false;
+}
+
+function nucleo5sSectorOptions(selected=''){
+  return (NUCLEO_5S_SECTORS[nucleo5sCurrentUnit]||[])
+    .map(s=>`<option value="${escapeHtml(s)}"${s===selected?' selected':''}>${escapeHtml(s)}</option>`).join('');
+}
+
+function nucleo5sShowPanel(panel){
+  const host=document.getElementById('audit5sPanel');
+  if(!host)return;
+  if(panel==='home'){
+    host.innerHTML='<div class="small" style="padding:8px 2px">Selecione uma opção acima. Unidade atual: <b>'+escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))+'</b>.</div>';
     return;
   }
+  if(panel==='audit')return nucleo5sRenderAudit(host);
+  if(panel==='tutorial')return nucleo5sRenderTutorial(host);
+  if(panel==='schedule')return nucleo5sRenderSchedule(host);
+  if(panel==='actions')return nucleo5sRenderActions(host);
+  if(panel==='history')return nucleo5sRenderHistory(host);
+  if(panel==='cycle')return nucleo5sRenderCycle(host);
+}
 
-  if(notice)notice.classList.add('hidden');
-
+function nucleo5sRenderAudit(host){
+  if(!nucleo5sConfigReady())return;
+  const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
   const src=new URL(cfg.page,document.baseURI);
   src.searchParams.set('embedded','1');
   src.searchParams.set('config',cfg.url);
-  src.searchParams.set('nucleoUnit',unit);
+  src.searchParams.set('nucleoUnit',nucleo5sCurrentUnit);
   const session=getSession()||{};
   if(session.name)src.searchParams.set('auditor',String(session.name));
+  host.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+      <div><h3 style="margin:0">Realizar auditoria 5S</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div>
+      <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+    </div>
+    <iframe id="audit5sFrame" title="Auditoria 5S" src="${escapeHtml(src.toString())}" style="width:100%;height:calc(100vh - 205px);min-height:760px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>`;
+}
 
-  if(frame)frame.src=src.toString();
+function nucleo5sRenderTutorial(host){
+  host.innerHTML=`
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Como realizar a auditoria 5S</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div style="margin-top:16px;display:grid;gap:12px">
+        <div><b>1. Confirme setor, responsáveis e data.</b><div class="small">O cronograma pode preencher os auditores previstos; eles podem ser ajustados quando necessário.</div></div>
+        <div><b>2. Avalie todos os itens dos cinco sensos.</b><div class="small">Registre a nota, observação e evidência quando aplicável.</div></div>
+        <div><b>3. Confira pendências do setor.</b><div class="small">Ações abertas aparecem durante a auditoria para atualização do status.</div></div>
+        <div><b>4. Cadastre novas ações.</b><div class="small">Toda não conformidade que exigir acompanhamento deve ter descrição, responsável e prazo no fluxo 5S.</div></div>
+        <div><b>5. Salve e sincronize.</b><div class="small">A auditoria fica vinculada à unidade, setor, auditores, pontuações, evidências e ações.</div></div>
+        <div><b>6. Consulte o resultado do ciclo.</b><div class="small">Depois da migração histórica para o Supabase, o resultado consolidado e a impressão ficam disponíveis neste Centro 5S.</div></div>
+      </div>
+    </div>`;
+}
+
+async function nucleo5sFetchJson(url){
+  const r=await fetch(url,{method:'GET',cache:'no-store'});
+  if(!r.ok)throw new Error('Erro HTTP '+r.status);
+  const data=await r.json();
+  if(data&&data.error)throw new Error(data.error);
+  return data;
+}
+
+function nucleo5sRenderSchedule(host){
+  const now=new Date();
+  const month=String(now.getMonth()+1).padStart(2,'0');
+  host.innerHTML=`
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Cronograma do mês</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div class="toolbar" style="margin-top:14px">
+        <select id="nucleo5sScheduleSector"><option value="">Selecione o setor</option>${nucleo5sSectorOptions()}</select>
+        <input id="nucleo5sScheduleMonth" type="month" value="${now.getFullYear()}-${month}">
+        <button class="btn primary" type="button" onclick="nucleo5sLoadSchedule()">Consultar</button>
+      </div>
+      <div id="nucleo5sScheduleResult" style="margin-top:14px"></div>
+    </div>`;
+}
+
+async function nucleo5sLoadSchedule(){
+  const box=document.getElementById('nucleo5sScheduleResult');
+  const sector=document.getElementById('nucleo5sScheduleSector')?.value||'';
+  const monthRaw=document.getElementById('nucleo5sScheduleMonth')?.value||'';
+  if(!sector){if(box)box.innerHTML='<div class="notice">Selecione um setor.</div>';return;}
+  if(!nucleo5sConfigReady())return;
+  if(box)box.innerHTML='<div class="small">Consultando cronograma...</div>';
+  try{
+    const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
+    const url=new URL(cfg.url);
+    const monthNumber=monthRaw?monthRaw.split('-')[1]:'';
+    const monthNames=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+    url.searchParams.set('tipo','escala');
+    url.searchParams.set('setor',sector);
+    if(monthNumber)url.searchParams.set('mes',nucleo5sCurrentUnit==='filial'?monthNames[Number(monthNumber)-1]:monthNumber);
+    url.searchParams.set('_',Date.now());
+    let data=await nucleo5sFetchJson(url.toString());
+    if(Array.isArray(data))data=data[0]||{};
+    const a1=data.aud1??data.auditor1??data.auditor_1??data.Auditor1??data['Auditor 1']??'';
+    const a2=data.aud2??data.auditor2??data.auditor_2??data.Auditor2??data['Auditor 2']??'';
+    box.innerHTML=`<div class="grid"><div><div class="label">Setor</div><div class="value">${escapeHtml(sector)}</div></div><div><div class="label">Auditor 1</div><div class="value">${escapeHtml(a1||'Não informado')}</div></div><div><div class="label">Auditor 2</div><div class="value">${escapeHtml(a2||'Não informado')}</div></div></div>`;
+  }catch(e){
+    if(box)box.innerHTML='<div class="notice danger">Não foi possível consultar o cronograma: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+}
+
+function nucleo5sRenderActions(host){
+  host.innerHTML=`
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Ações pendentes por setor</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div class="toolbar" style="margin-top:14px">
+        <select id="nucleo5sActionsSector"><option value="">Selecione o setor</option>${nucleo5sSectorOptions()}</select>
+        <button class="btn primary" type="button" onclick="nucleo5sLoadActions()">Consultar</button>
+      </div>
+      <div id="nucleo5sActionsResult" style="margin-top:14px"></div>
+    </div>`;
+}
+
+async function nucleo5sLoadActions(){
+  const box=document.getElementById('nucleo5sActionsResult');
+  const sector=document.getElementById('nucleo5sActionsSector')?.value||'';
+  if(!sector){if(box)box.innerHTML='<div class="notice">Selecione um setor.</div>';return;}
+  if(!nucleo5sConfigReady())return;
+  if(box)box.innerHTML='<div class="small">Consultando ações...</div>';
+  try{
+    const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
+    const url=new URL(cfg.url);
+    url.searchParams.set('setor',sector);
+    url.searchParams.set('_',Date.now());
+    const rows=await nucleo5sFetchJson(url.toString());
+    const list=Array.isArray(rows)?rows:[];
+    if(!list.length){box.innerHTML='<div class="notice success">Nenhuma ação pendente para este setor.</div>';return;}
+    box.innerHTML='<div style="overflow:auto"><table><thead><tr><th>Ação</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>'+
+      list.map(a=>`<tr><td>${escapeHtml(a.descricao||a.acao||'-')}</td><td>${escapeHtml(a.responsavel||'-')}</td><td>${escapeHtml(a.prazo||'-')}</td><td>${escapeHtml(a.status||'-')}</td></tr>`).join('')+
+      '</tbody></table></div>';
+  }catch(e){
+    if(box)box.innerHTML='<div class="notice danger">Não foi possível consultar as ações: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+}
+
+function nucleo5sRenderHistory(host){
+  host.innerHTML=`
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Histórico de pontuações</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div class="notice" style="margin-top:14px"><b>Preparado para o Supabase.</b><div class="small" style="margin-top:5px">Este painel vai ser alimentado pelo histórico migrado das planilhas SC/ES. Não vou inventar pontuações enquanto a migração não estiver conferida.</div></div>
+    </div>`;
+}
+
+function nucleo5sRenderCycle(host){
+  host.innerHTML=`
+    <div class="card" style="padding:18px">
+      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Resultado do ciclo</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div class="notice" style="margin-top:14px"><b>Resultado consolidado será calculado no Supabase.</b><div class="small" style="margin-top:5px">Depois da importação, este painel mostrará os resultados do ciclo da unidade/setor e terá impressão pelo próprio Núcleo.</div></div>
+    </div>`;
 }
 
 function showAudit5S(){
@@ -18429,7 +18584,10 @@ function showAudit5S(){
   const switcher=document.getElementById('audit5sUnitSwitcher');
   if(switcher)switcher.style.display=isAdmin()?'flex':'none';
 
-  nucleoOpen5SUnit(nucleo5sSessionUnit());
+  nucleo5sCurrentUnit=nucleo5sSessionUnit();
+  nucleo5sSetUnitButtons(nucleo5sCurrentUnit);
+  nucleo5sConfigReady();
+  nucleo5sShowPanel('home');
   window.scrollTo({top:0,behavior:'instant'});
 }
 
