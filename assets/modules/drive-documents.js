@@ -1,6 +1,6 @@
 /* Pastas, respostas externas e documentos: dados confirmados na base central. */
 const nucleoDriveLabels={ros:'R.O.s',pdcas:'PDCAs',standard:'Documentos padrão',requested:'Documentos solicitados',templates:'Modelos editáveis'};
-let nucleoDriveState={unit:'matriz',tab:'pdca',files:[],offset:0,pdcaFiles:[],templates:[],documents:[],selectedPdf:null,parsed:null,links:[],previousId:'',busy:false,pdcaLimit:5,documentLimit:5};
+let nucleoDriveState={unit:'matriz',tab:'pdca',files:[],offset:0,pdcaFiles:[],templates:[],documents:[],selectedPdf:null,parsed:null,links:[],previousId:'',busy:false,pdcaLimit:5,documentLimit:5,preselectedRo:'',preselectedSector:''};
 function nucleoDriveUnit(){return getSession()?.role==='quality'?'filial':document.getElementById('qualityConfigUnit')?.value||nucleoDriveState.unit||'matriz';}
 function nucleoDriveEscape(v){return escapeHtml(String(v??''));}
 function nucleoDriveStatus(text){const el=document.getElementById('ndStatus');if(el)el.textContent=text;}
@@ -37,6 +37,18 @@ async function nucleoDriveShow(tab='pdca'){
   const pane=document.getElementById('pdcaImportView');pane.replaceChildren(host);
  }else document.body.appendChild(host);
  document.getElementById('ndUnit').value=nucleoDriveState.unit;document.getElementById('ndUnit').onchange=async()=>{if(nucleoDriveState.busy){document.getElementById('ndUnit').value=nucleoDriveState.unit;return;}nucleoDriveState.unit=document.getElementById('ndUnit').value;nucleoDriveState.selectedPdf=null;nucleoDriveState.previousId='';await nucleoDriveRefresh();};await nucleoDriveRefresh();
+}
+async function nucleoDriveOpenForRo(ro,unit,sector){
+  if(!nucleoFeatureRequire('pdca','import'))return;
+  nucleoDriveState.unit=unit||nucleoDriveUnit();
+  nucleoDriveState.preselectedRo=String(ro||'').trim();
+  nucleoDriveState.preselectedSector=String(sector||'').trim();
+  await nucleoDriveShow('pdca');
+  nucleoDriveState.unit=unit||nucleoDriveState.unit;
+  const unitEl=document.getElementById('ndUnit');if(unitEl){unitEl.value=nucleoDriveState.unit;unitEl.disabled=true;}
+  nucleoDrivePdcaPage('import');
+  const input=document.getElementById('ndPdf');if(input)input.focus();
+  nucleoDriveStatus('PDCA definido para '+nucleoDriveState.preselectedRo+'. Anexe ou selecione o PDF; o vínculo com esta R.O. será pré-selecionado.');
 }
 async function nucleoDriveRefresh(){try{const r=await nucleoDriveApi('nucleo_drive_overview');Object.assign(nucleoDriveState,{pdcaFiles:r.pdcaFiles||[],templates:r.templates||[],documents:r.documents||[]});nucleoDriveSwitchTab(nucleoDriveState.tab);nucleoDriveStatus('Dados da unidade consultados na base central.');}catch(e){nucleoDriveStatus(e.message);}}
 function nucleoDriveSwitchTab(tab){const spec=tab==='pdca'?['pdca','import']:tab==='templates'?['processes','templates']:['documents','prepare'];if(!nucleoFeatureRequire(...spec))return;if(nucleoDriveState.busy)return;nucleoDriveState.tab=tab;const host=document.getElementById('ndContent');if(!host)return;if(tab==='pdca')nucleoDrivePdcaPage(nucleoDriveState.pdcaPanel||'import');else if(tab==='templates')nucleoDriveRenderTemplates();else nucleoDriveRenderRequests();}
@@ -94,6 +106,12 @@ function nucleoDriveRoIdentity(r){
 function nucleoDrivePrepareLinks(){
  if(nucleoDriveState.previousId)return;
  const p=nucleoDriveState.parsed,candidates=nucleoDriveCandidates();nucleoDriveState.links=[];
+ if(nucleoDriveState.preselectedRo){
+  const directed=nucleoDriveSectors(nucleoDriveState.preselectedRo);
+  const sector=nucleoDriveState.preselectedSector||((directed.length===1)?directed[0]:'');
+  nucleoDriveState.links.push({ro:nucleoDriveState.preselectedRo,sector,sectorConfirmed:Boolean(sector)});
+  return;
+ }
  p.numbers.forEach(n=>{
   const matches=new Map();
   candidates.forEach(r=>{const id=nucleoDriveRoIdentity(r);if(id.number===Number(n)&&(!p.origin||id.origin===p.origin))matches.set(id.key,r);});
@@ -129,7 +147,7 @@ async function nucleoDriveSavePdca(){if(!nucleoFeatureRequire('pdca','import'))r
   if(!result?.record||result.record.importComplete!==true||!Array.isArray(result.sentRecords)||!result.sentRecords.length)throw new Error('A base não confirmou a inclusão em PDCAs recebidos. Confira se a versão atual do Apps Script foi publicada antes de tentar novamente.');
   stored=true;
   const existing=getSentPdcas(),byId=new Map(existing.map(x=>[x.id,x]));result.sentRecords.forEach(x=>byId.set(x.id,x));localStorage.setItem(SENT_PDCA_KEY,JSON.stringify([...byId.values()]));
-  const files=nucleoDriveState.pdcaFiles.filter(x=>x.id!==result.record.id);files.push(result.record);nucleoDriveState.pdcaFiles=files;nucleoDriveState.previousId='';nucleoDriveState.selectedPdf=null;nucleoDriveState.links=[];nucleoDriveState.parsed=null;
+  const files=nucleoDriveState.pdcaFiles.filter(x=>x.id!==result.record.id);files.push(result.record);nucleoDriveState.pdcaFiles=files;nucleoDriveState.previousId='';nucleoDriveState.selectedPdf=null;nucleoDriveState.links=[];nucleoDriveState.parsed=null;nucleoDriveState.preselectedRo='';nucleoDriveState.preselectedSector='';
   nucleoDriveRenderPdca();nucleoDriveSavedNotice(savedRos,result.record.fileName,result.record.id);nucleoDriveStatus(result.alreadyLinked?'Este PDF já estava vinculado. Registro localizado em PDCAs recebidos.':'PDCA confirmado em PDCAs recebidos.');
  }catch(e){status.textContent='Não foi possível concluir: '+e.message;status.style.color='#b42318';status.scrollIntoView({behavior:'smooth',block:'center'});nucleoDriveStatus(e.message);}
  finally{if(!stored)btn.disabled=false;}
