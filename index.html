@@ -2896,15 +2896,15 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
   <div id="assignedLifecycleTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px">
-    <button id="assignedActiveTab" class="btn primary" type="button" onclick="setAssignedLifecycle('active')">Em andamento</button>
-    <button id="assignedHistoryTab" class="btn secondary" type="button" onclick="setAssignedLifecycle('history')">Histórico — encerradas</button>
+    <button id="assignedActiveTab" class="btn primary" type="button" onclick="setAssignedLifecycle('active')">Precisa de resposta</button>
+    <button id="assignedHistoryTab" class="btn secondary" type="button" onclick="setAssignedLifecycle('history')">Encerradas</button>
   </div>
   <div class="assigned-filter-row">
     <input id="search" placeholder="Buscar por número ou cliente" oninput="nucleoScheduleRoSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();nucleoRunRoSearch()}">
     <select id="assignedSectorFilter" aria-label="Setor responsável" onchange="render()"><option value="all">Todos os setores</option></select>
     <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
-    <select id="filter" onchange="render()"><option value="todas">Todos os status</option><option value="pendente">Pendente</option><option value="pdca_externo">PDCA externo</option><option value="pdca_respondido">PDCA respondido</option><option value="pdca_apresentado">PDCA apresentado</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
+    <select id="filter" onchange="render()"><option value="todas">Todas as situações</option><option value="precisa_resposta">Precisa de resposta</option><option value="ja_respondeu">Já tem resposta</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
   </div>
   <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th aria-label="Visualizar R.O."></th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
   <div id="roListMore" class="small" style="margin-top:12px;text-align:center"></div>
