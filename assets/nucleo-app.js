@@ -42,10 +42,48 @@ function nucleoLoadAdminModule(){
   });
   return nucleoAdminModulePromise;
 }
+
+function nucleoPatchEquipmentReportsUi(){
+  if(window.__nucleoEquipmentReportsPatched)return;
+  if(typeof window.nucleoEquipmentReportsPanel!=='function' || typeof window.nucleoEquipmentRenderReports!=='function')return;
+
+  window.__nucleoEquipmentReportsPatched=true;
+
+  const originalRender=window.nucleoEquipmentRenderReports;
+  window.nucleoEquipmentRenderReports=function(record,reports){
+    const fresh=(typeof adminModuleRecord==='function'&&record?.id)?adminModuleRecord(record.id):record;
+    const central=Array.isArray(fresh?.equipmentReports)?fresh.equipmentReports:[];
+    const incoming=Array.isArray(reports)?reports:[];
+    const merged=[];
+    const seen=new Set();
+
+    [...incoming,...central].forEach(item=>{
+      if(!item)return;
+      const key=String(item.fileId||item.id||item.fileName||'').trim();
+      if(!key||seen.has(key))return;
+      seen.add(key);
+      merged.push(item);
+    });
+
+    return originalRender(fresh||record,merged);
+  };
+
+  const originalPanel=window.nucleoEquipmentReportsPanel;
+  window.nucleoEquipmentReportsPanel=async function(record){
+    try{
+      if(typeof syncPortalBackend==='function')await syncPortalBackend(false);
+    }catch(_){}
+
+    const fresh=(typeof adminModuleRecord==='function'&&record?.id)?adminModuleRecord(record.id):record;
+    return originalPanel(fresh||record);
+  };
+}
+
 async function nucleoOpenLazyAdmin(name,args){
   const request=++nucleoLazyNavigation;
   try{
     await nucleoLoadAdminModule();
+    nucleoPatchEquipmentReportsUi();
     if(request!==nucleoLazyNavigation)return;
     return window[name](...args);
   }catch(e){alert('Não foi possível abrir o módulo: '+(e?.message||e)+' Tente novamente.');}
@@ -14703,7 +14741,8 @@ function collectAdminModuleForm(key,existing){
       scheduledCalibrationDate:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationDate'):'',
       scheduledCalibrationCompany:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationCompany'):'',
       scheduledCalibrationNotes:val('admModCalibrationScheduled')==='yes'?val('admModScheduledCalibrationNotes'):'',
-      metrologyHistory:Array.isArray(existing?.metrologyHistory)?existing.metrologyHistory:[]
+      metrologyHistory:Array.isArray(existing?.metrologyHistory)?existing.metrologyHistory:[],
+      equipmentReports:Array.isArray(existing?.equipmentReports)?existing.equipmentReports:[]
     }:{}),
     createdAt:existing?.createdAt||now,
     createdBy:existing?.createdBy||getSession()?.name||'SGQ',
