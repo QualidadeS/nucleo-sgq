@@ -2894,6 +2894,10 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
     </div>
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
+  <div id="assignedLifecycleTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px">
+    <button id="assignedActiveTab" class="btn primary" type="button" onclick="setAssignedLifecycle('active')">Em andamento</button>
+    <button id="assignedHistoryTab" class="btn secondary" type="button" onclick="setAssignedLifecycle('history')">Histórico — encerradas</button>
+  </div>
   <div class="assigned-filter-row">
     <input id="search" placeholder="Buscar por número ou cliente" oninput="nucleoScheduleRoSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();nucleoRunRoSearch()}">
     <select id="assignedSectorFilter" aria-label="Setor responsável" onchange="render()"><option value="all">Todos os setores</option></select>
