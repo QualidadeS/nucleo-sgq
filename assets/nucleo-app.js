@@ -18486,42 +18486,49 @@ async function nucleo5sFetchJson(url){
   return data;
 }
 
+
+function nucleo5sBackend(action, params={}){
+  return portalJsonp({
+    acao: action,
+    unit: nucleo5sCurrentUnit,
+    ...(params||{})
+  },90000);
+}
+
 function nucleo5sRenderSchedule(host){
   const now=new Date();
   const month=String(now.getMonth()+1).padStart(2,'0');
   host.innerHTML=`
     <div class="card" style="padding:18px">
-      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Cronograma do mês</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <div><h3 style="margin:0">Cronograma do mês</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div>
+        <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+      </div>
       <div class="toolbar" style="margin-top:14px">
-        <select id="nucleo5sScheduleSector"><option value="">Selecione o setor</option>${nucleo5sSectorOptions()}</select>
+        <select id="nucleo5sScheduleSector"><option value="">Todos os setores</option>${nucleo5sSectorOptions()}</select>
         <input id="nucleo5sScheduleMonth" type="month" value="${now.getFullYear()}-${month}">
         <button class="btn primary" type="button" onclick="nucleo5sLoadSchedule()">Consultar</button>
       </div>
-      <div id="nucleo5sScheduleResult" style="margin-top:14px"></div>
+      <div id="nucleo5sScheduleResult" style="margin-top:14px"><div class="small">Consulte o cronograma já migrado para o Supabase.</div></div>
     </div>`;
 }
 
 async function nucleo5sLoadSchedule(){
   const box=document.getElementById('nucleo5sScheduleResult');
   const sector=document.getElementById('nucleo5sScheduleSector')?.value||'';
-  const monthRaw=document.getElementById('nucleo5sScheduleMonth')?.value||'';
-  if(!sector){if(box)box.innerHTML='<div class="notice">Selecione um setor.</div>';return;}
-  if(!nucleo5sConfigReady())return;
-  if(box)box.innerHTML='<div class="small">Consultando cronograma...</div>';
+  const month=document.getElementById('nucleo5sScheduleMonth')?.value||'';
+  if(box)box.innerHTML='<div class="small">Consultando Supabase...</div>';
   try{
-    const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
-    const url=new URL(cfg.url);
-    const monthNumber=monthRaw?monthRaw.split('-')[1]:'';
-    const monthNames=['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
-    url.searchParams.set('tipo','escala');
-    url.searchParams.set('setor',sector);
-    if(monthNumber)url.searchParams.set('mes',nucleo5sCurrentUnit==='filial'?monthNames[Number(monthNumber)-1]:monthNumber);
-    url.searchParams.set('_',Date.now());
-    let data=await nucleo5sFetchJson(url.toString());
-    if(Array.isArray(data))data=data[0]||{};
-    const a1=data.aud1??data.auditor1??data.auditor_1??data.Auditor1??data['Auditor 1']??'';
-    const a2=data.aud2??data.auditor2??data.auditor_2??data.Auditor2??data['Auditor 2']??'';
-    box.innerHTML=`<div class="grid"><div><div class="label">Setor</div><div class="value">${escapeHtml(sector)}</div></div><div><div class="label">Auditor 1</div><div class="value">${escapeHtml(a1||'Não informado')}</div></div><div><div class="label">Auditor 2</div><div class="value">${escapeHtml(a2||'Não informado')}</div></div></div>`;
+    const data=await nucleo5sBackend('nucleo_5s_schedule',{sector,month});
+    if(!data?.sucesso)throw new Error(data?.erro||'Falha ao consultar cronograma.');
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    if(!rows.length){
+      box.innerHTML='<div class="notice">Nenhum cronograma encontrado para os filtros selecionados.</div>';
+      return;
+    }
+    box.innerHTML='<div style="overflow:auto"><table><thead><tr><th>Setor</th><th>Mês</th><th>Auditor 1</th><th>Auditor 2</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr><td>${escapeHtml(r.sector||'-')}</td><td>${escapeHtml(r.monthLabel||month||'-')}</td><td>${escapeHtml(r.auditor1||'-')}</td><td>${escapeHtml(r.auditor2||'-')}</td></tr>`).join('')+
+      '</tbody></table></div>';
   }catch(e){
     if(box)box.innerHTML='<div class="notice danger">Não foi possível consultar o cronograma: '+escapeHtml(e.message||String(e))+'</div>';
   }
@@ -18530,31 +18537,38 @@ async function nucleo5sLoadSchedule(){
 function nucleo5sRenderActions(host){
   host.innerHTML=`
     <div class="card" style="padding:18px">
-      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Ações pendentes por setor</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <div><h3 style="margin:0">Ações do 5S</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div>
+        <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+      </div>
       <div class="toolbar" style="margin-top:14px">
-        <select id="nucleo5sActionsSector"><option value="">Selecione o setor</option>${nucleo5sSectorOptions()}</select>
+        <select id="nucleo5sActionsSector"><option value="">Todos os setores</option>${nucleo5sSectorOptions()}</select>
+        <select id="nucleo5sActionsStatus">
+          <option value="open">Pendentes / em andamento</option>
+          <option value="all">Todas</option>
+          <option value="done">Concluídas</option>
+        </select>
         <button class="btn primary" type="button" onclick="nucleo5sLoadActions()">Consultar</button>
       </div>
-      <div id="nucleo5sActionsResult" style="margin-top:14px"></div>
+      <div id="nucleo5sActionsResult" style="margin-top:14px"><div class="small">As ações agora são consultadas no Supabase.</div></div>
     </div>`;
 }
 
 async function nucleo5sLoadActions(){
   const box=document.getElementById('nucleo5sActionsResult');
   const sector=document.getElementById('nucleo5sActionsSector')?.value||'';
-  if(!sector){if(box)box.innerHTML='<div class="notice">Selecione um setor.</div>';return;}
-  if(!nucleo5sConfigReady())return;
-  if(box)box.innerHTML='<div class="small">Consultando ações...</div>';
+  const status=document.getElementById('nucleo5sActionsStatus')?.value||'open';
+  if(box)box.innerHTML='<div class="small">Consultando Supabase...</div>';
   try{
-    const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
-    const url=new URL(cfg.url);
-    url.searchParams.set('setor',sector);
-    url.searchParams.set('_',Date.now());
-    const rows=await nucleo5sFetchJson(url.toString());
-    const list=Array.isArray(rows)?rows:[];
-    if(!list.length){box.innerHTML='<div class="notice success">Nenhuma ação pendente para este setor.</div>';return;}
-    box.innerHTML='<div style="overflow:auto"><table><thead><tr><th>Ação</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>'+
-      list.map(a=>`<tr><td>${escapeHtml(a.descricao||a.acao||'-')}</td><td>${escapeHtml(a.responsavel||'-')}</td><td>${escapeHtml(a.prazo||'-')}</td><td>${escapeHtml(a.status||'-')}</td></tr>`).join('')+
+    const data=await nucleo5sBackend('nucleo_5s_actions',{sector,status});
+    if(!data?.sucesso)throw new Error(data?.erro||'Falha ao consultar ações.');
+    const list=Array.isArray(data.rows)?data.rows:[];
+    if(!list.length){
+      box.innerHTML='<div class="notice success">Nenhuma ação encontrada para os filtros selecionados.</div>';
+      return;
+    }
+    box.innerHTML='<div style="overflow:auto"><table><thead><tr><th>Ação</th><th>Setor</th><th>Responsável</th><th>Prazo</th><th>Status</th></tr></thead><tbody>'+
+      list.map(a=>`<tr><td>${escapeHtml(a.description||'-')}</td><td>${escapeHtml(a.sector||'-')}</td><td>${escapeHtml(a.responsible||'-')}</td><td>${escapeHtml(a.dueDate||'-')}</td><td>${escapeHtml(a.status||'-')}</td></tr>`).join('')+
       '</tbody></table></div>';
   }catch(e){
     if(box)box.innerHTML='<div class="notice danger">Não foi possível consultar as ações: '+escapeHtml(e.message||String(e))+'</div>';
@@ -18562,19 +18576,108 @@ async function nucleo5sLoadActions(){
 }
 
 function nucleo5sRenderHistory(host){
+  const now=new Date();
   host.innerHTML=`
     <div class="card" style="padding:18px">
-      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Histórico de pontuações</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
-      <div class="notice" style="margin-top:14px"><b>Preparado para o Supabase.</b><div class="small" style="margin-top:5px">Este painel vai ser alimentado pelo histórico migrado das planilhas SC/ES. Não vou inventar pontuações enquanto a migração não estiver conferida.</div></div>
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <div><h3 style="margin:0">Histórico de pontuações</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div>
+        <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+      </div>
+      <div class="toolbar" style="margin-top:14px">
+        <select id="nucleo5sHistorySector"><option value="">Todos os setores</option>${nucleo5sSectorOptions()}</select>
+        <input id="nucleo5sHistoryYear" type="number" min="2020" max="2100" value="${now.getFullYear()}" style="max-width:130px">
+        <button class="btn primary" type="button" onclick="nucleo5sLoadHistory()">Consultar</button>
+      </div>
+      <div id="nucleo5sHistoryResult" style="margin-top:14px"><div class="small">Histórico alimentado pelo Supabase.</div></div>
     </div>`;
+  setTimeout(()=>nucleo5sLoadHistory(),0);
+}
+
+async function nucleo5sLoadHistory(){
+  const box=document.getElementById('nucleo5sHistoryResult');
+  const sector=document.getElementById('nucleo5sHistorySector')?.value||'';
+  const year=document.getElementById('nucleo5sHistoryYear')?.value||'';
+  if(box)box.innerHTML='<div class="small">Consultando Supabase...</div>';
+  try{
+    const data=await nucleo5sBackend('nucleo_5s_history',{sector,year});
+    if(!data?.sucesso)throw new Error(data?.erro||'Falha ao consultar histórico.');
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    const summary=data.summary||{};
+    if(!rows.length){
+      box.innerHTML='<div class="notice">Nenhuma auditoria encontrada para os filtros selecionados.</div>';
+      return;
+    }
+    const cards=`
+      <div class="ro-summary" style="margin-bottom:12px">
+        <div class="ro-summary-card"><b>${escapeHtml(String(summary.total||rows.length))}</b><span>Auditorias</span></div>
+        <div class="ro-summary-card"><b>${summary.average!=null?escapeHtml(String(summary.average))+'%':'-'}</b><span>Média</span></div>
+        <div class="ro-summary-card"><b>${summary.best!=null?escapeHtml(String(summary.best))+'%':'-'}</b><span>Melhor resultado</span></div>
+      </div>`;
+    box.innerHTML=cards+'<div style="overflow:auto"><table><thead><tr><th>Data</th><th>Setor</th><th>Pontuação</th><th>Auditor 1</th><th>Auditor 2</th><th>Status</th></tr></thead><tbody>'+
+      rows.map(r=>`<tr><td>${escapeHtml(r.date||'-')}</td><td>${escapeHtml(r.sector||'-')}</td><td>${r.score!=null?escapeHtml(String(r.score))+'%':'-'}</td><td>${escapeHtml(r.auditor1||'-')}</td><td>${escapeHtml(r.auditor2||'-')}</td><td>${escapeHtml(r.status||'-')}</td></tr>`).join('')+
+      '</tbody></table></div>';
+  }catch(e){
+    if(box)box.innerHTML='<div class="notice danger">Não foi possível consultar o histórico: '+escapeHtml(e.message||String(e))+'</div>';
+  }
 }
 
 function nucleo5sRenderCycle(host){
+  const now=new Date();
+  const month=String(now.getMonth()+1).padStart(2,'0');
   host.innerHTML=`
     <div class="card" style="padding:18px">
-      <div style="display:flex;justify-content:space-between;gap:10px"><div><h3 style="margin:0">Resultado do ciclo</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div><button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button></div>
-      <div class="notice" style="margin-top:14px"><b>Resultado consolidado será calculado no Supabase.</b><div class="small" style="margin-top:5px">Depois da importação, este painel mostrará os resultados do ciclo da unidade/setor e terá impressão pelo próprio Núcleo.</div></div>
+      <div style="display:flex;justify-content:space-between;gap:10px">
+        <div><h3 style="margin:0">Resultado do ciclo</h3><div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div></div>
+        <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+      </div>
+      <div class="toolbar" style="margin-top:14px">
+        <input id="nucleo5sCycleMonth" type="month" value="${now.getFullYear()}-${month}">
+        <select id="nucleo5sCycleSector"><option value="">Todos os setores</option>${nucleo5sSectorOptions()}</select>
+        <button class="btn primary" type="button" onclick="nucleo5sLoadCycle()">Consultar</button>
+        <button class="btn secondary" type="button" onclick="nucleo5sPrintCycle()">Imprimir</button>
+      </div>
+      <div id="nucleo5sCycleResult" style="margin-top:14px"><div class="small">Resultado consolidado pelo Supabase.</div></div>
     </div>`;
+  setTimeout(()=>nucleo5sLoadCycle(),0);
+}
+
+async function nucleo5sLoadCycle(){
+  const box=document.getElementById('nucleo5sCycleResult');
+  const month=document.getElementById('nucleo5sCycleMonth')?.value||'';
+  const sector=document.getElementById('nucleo5sCycleSector')?.value||'';
+  if(box)box.innerHTML='<div class="small">Calculando ciclo...</div>';
+  try{
+    const data=await nucleo5sBackend('nucleo_5s_cycle',{month,sector});
+    if(!data?.sucesso)throw new Error(data?.erro||'Falha ao calcular ciclo.');
+    const rows=Array.isArray(data.rows)?data.rows:[];
+    if(!rows.length){
+      box.innerHTML='<div class="notice">Nenhum resultado encontrado neste ciclo.</div>';
+      return;
+    }
+    box.dataset.printTitle='Resultado 5S - '+(data.monthLabel||month||'ciclo');
+    box.innerHTML=`
+      <div id="nucleo5sCyclePrintable">
+        <div style="margin-bottom:12px"><b>${escapeHtml(data.monthLabel||month||'Ciclo')}</b> · ${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div>
+        <div style="overflow:auto"><table><thead><tr><th>Setor</th><th>Auditorias</th><th>Média</th><th>Melhor</th><th>Última auditoria</th></tr></thead><tbody>
+          ${rows.map(r=>`<tr><td>${escapeHtml(r.sector||'-')}</td><td>${escapeHtml(String(r.count||0))}</td><td>${r.average!=null?escapeHtml(String(r.average))+'%':'-'}</td><td>${r.best!=null?escapeHtml(String(r.best))+'%':'-'}</td><td>${escapeHtml(r.lastDate||'-')}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>`;
+  }catch(e){
+    if(box)box.innerHTML='<div class="notice danger">Não foi possível calcular o ciclo: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+}
+
+function nucleo5sPrintCycle(){
+  const printable=document.getElementById('nucleo5sCyclePrintable');
+  if(!printable){alert('Consulte um ciclo antes de imprimir.');return;}
+  const win=window.open('','_blank','width=1000,height=760');
+  if(!win){alert('O navegador bloqueou a janela de impressão.');return;}
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Resultado 5S</title><style>
+    body{font-family:Arial,sans-serif;color:#111;padding:28px}h1{font-size:22px;margin:0 0 18px}
+    table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:8px;text-align:left}
+    th{background:#f2f2f2}@media print{button{display:none}}
+  </style></head><body><h1>Resultado do ciclo 5S</h1>${printable.innerHTML}<script>window.onload=()=>window.print();<\/script></body></html>`);
+  win.document.close();
 }
 
 function showAudit5S(){
