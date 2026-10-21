@@ -1414,7 +1414,18 @@ function applyPortalBackendSnapshot(snapshot){
   return true;
 }
 async function syncPortalBackend(showMessage=false,options={}){
-  if(portalBackendSyncInProgress)return false;
+  // Se outra sincronização central já estiver em andamento, não tratar isso
+  // como falha. Aguarda a sincronização corrente terminar e tenta novamente.
+  if(portalBackendSyncInProgress){
+    const started=Date.now();
+    while(portalBackendSyncInProgress && Date.now()-started<30000){
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    if(portalBackendSyncInProgress){
+      updateBackendStatus(null,'Base central ainda está sincronizando...');
+      return false;
+    }
+  }
 
   if(!portalBackendEnabled()){
     try{
@@ -19376,11 +19387,28 @@ async function syncNow(){
     await new Promise(resolve=>requestAnimationFrame(resolve));
     const qty=applyImportedRos(data.dados,data);
     updateNucleoLoading('Confirmando configurações e cadastros na base central...');
-    const centralOk=await syncPortalBackend(false,{foreground:false});
-    if(!centralOk)throw new Error('As R.O.s foram lidas, mas a base central não confirmou todos os dados do Núcleo.');
+    let centralOk=await syncPortalBackend(false,{foreground:false});
+
+    // Uma sincronização automática pode ter acabado de encerrar entre a leitura das
+    // R.O.s e esta confirmação. Faz uma segunda tentativa curta antes de concluir
+    // que a base central está indisponível.
+    if(!centralOk){
+      await new Promise(resolve=>setTimeout(resolve,800));
+      centralOk=await syncPortalBackend(false,{foreground:false});
+    }
+
     const bases=(typeof data.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
-    syncMsg.textContent='Sincronização concluída e confirmada: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
-    syncMsg.className='statusline okline';
+    if(centralOk){
+      syncMsg.textContent='Sincronização concluída e confirmada: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
+      syncMsg.className='statusline okline';
+    }else{
+      // As R.O.s oficiais já foram carregadas com sucesso. Não bloquear a tela inteira
+      // por uma confirmação auxiliar; mantém estado de atenção e agenda nova tentativa.
+      nucleoSetCentralSyncState('syncing','R.O.s atualizadas. A confirmação dos demais dados da base central será repetida automaticamente.');
+      syncMsg.textContent='R.O.s atualizadas: '+qty+' carregada(s)'+bases+'. Confirmando os demais dados da base central...';
+      syncMsg.className='statusline';
+      setTimeout(()=>syncPortalBackend(false,{foreground:false}),2500);
+    }
   }catch(err){
     const detail=String(err?.message||err||'Erro não informado');
     nucleoSetCentralSyncState('error','Sincronização não confirmada: '+detail);
