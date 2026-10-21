@@ -62,10 +62,36 @@ function nucleoPatchEquipmentReportsUi(){
       const key=String(item.fileId||item.id||item.fileName||'').trim();
       if(!key||seen.has(key))return;
       seen.add(key);
-      merged.push(item);
+
+      const imported=!!item.importedFromDrive;
+      merged.push({
+        ...item,
+        title:String(item.title||'').trim()||(imported?'Laudo de calibração':''),
+        issued:String(item.issued||'').trim()||(imported?String(fresh?.lastCalibration||fresh?.eventDate||'').trim():''),
+        expires:String(item.expires||'').trim()||(imported?String(fresh?.dueDate||'').trim():''),
+        calibrationCompany:String(item.calibrationCompany||'').trim()||(imported?String(fresh?.lastCalibrationCompany||'').trim():'')
+      });
     });
 
-    return originalRender(fresh||record,merged);
+    const host=document.getElementById('equipmentReportsList');
+    if(!host)return originalRender(fresh||record,merged);
+
+    const equipmentId=String((fresh||record)?.id||'');
+    host.innerHTML=merged.slice().reverse().map(p=>{
+      const meta=[
+        p.fileName||'',
+        p.issued?'Emissão: '+p.issued:'',
+        p.expires?'Validade: '+p.expires:'',
+        p.calibrationCompany?'Empresa: '+p.calibrationCompany:''
+      ].filter(Boolean).map(escapeHtml).join(' · ');
+
+      return `<div class="card" style="padding:12px;margin:10px 0">
+        <b>${escapeHtml(p.title||p.fileName||'Laudo')}</b>
+        <p class="small">${meta}</p>
+        <button class="btn secondary" onclick="nucleoEquipmentViewReport('${escapeHtml(equipmentId)}','${escapeHtml(p.id)}')">Abrir / baixar PDF</button>
+        <button class="btn secondary" style="margin-left:8px;color:#b42318" onclick="nucleoEquipmentDeleteReport(this,'${escapeHtml(equipmentId)}','${escapeHtml(p.id)}')">Excluir laudo</button>
+      </div>`;
+    }).join('')||'<p class="small">Nenhum laudo anexado.</p>';
   };
 
   const originalPanel=window.nucleoEquipmentReportsPanel;
@@ -75,7 +101,25 @@ function nucleoPatchEquipmentReportsUi(){
     }catch(_){}
 
     const fresh=(typeof adminModuleRecord==='function'&&record?.id)?adminModuleRecord(record.id):record;
-    return originalPanel(fresh||record);
+    await originalPanel(fresh||record);
+
+    const title=document.getElementById('equipmentReportTitle');
+    const issued=document.getElementById('equipmentReportIssued');
+    const expires=document.getElementById('equipmentReportExpires');
+    if(title&&!title.value)title.value='Laudo de calibração';
+    if(issued&&!issued.value&&fresh?.lastCalibration)issued.value=String(fresh.lastCalibration);
+    if(expires&&!expires.value&&fresh?.dueDate)expires.value=String(fresh.dueDate);
+
+    const panel=document.getElementById('equipmentReportsPanel');
+    if(panel&&typeof nucleoEquipmentPendingKey==='function'){
+      let hasPending=false;
+      try{hasPending=!!localStorage.getItem(nucleoEquipmentPendingKey(fresh||record));}catch(_){}
+      [...panel.querySelectorAll('button')].forEach(btn=>{
+        if(String(btn.textContent||'').trim()==='Descartar tentativa pendente'){
+          btn.style.display=hasPending?'':'none';
+        }
+      });
+    }
   };
 }
 
