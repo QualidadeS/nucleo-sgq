@@ -3110,8 +3110,18 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 </section>
 
 <section id="sentView" class="card hidden">
-  <h2 style="margin-top:0">PDCAs recebidos</h2>
-  <p class="small">Histórico dos PDCAs já enviados. Administradores visualizam todos; usuários operacionais visualizam apenas os PDCAs permitidos para seu usuário.</p>
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <div>
+      <h2 style="margin-top:0;margin-bottom:4px">PDCAs recebidos</h2>
+      <p class="small" style="margin:0">Histórico dos PDCAs já enviados. Administradores visualizam todos; usuários operacionais visualizam apenas os PDCAs permitidos para seu usuário.</p>
+    </div>
+    <button id="pdcaPrioritiesButton" class="btn secondary" type="button" onclick="nucleoOpenPdcaPriorities()">
+      Abrir prioridades
+    </button>
+  </div>
+
+  <div id="pdcaPdfSummary" style="margin:14px 0 16px"></div>
+
   <div class="toolbar">
     <input id="sentSearch" placeholder="Buscar por R.O., cliente, responsável, reclamante ou setor" oninput="renderSentPdcas()">
     <div id="sentLifecycleTabs" class="actions" role="tablist" aria-label="Etapas das respostas"><button id="sentActiveTab" class="btn primary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('active')">Pendências e confirmações</button><button id="sentHistoryTab" class="btn secondary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('history')">Histórico — encerradas</button></div><input id="sentLifecycleFilter" type="hidden" value="active"><p id="sentLifecycleDescription" class="small" role="status"></p>
