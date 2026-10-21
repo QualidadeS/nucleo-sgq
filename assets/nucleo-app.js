@@ -1167,7 +1167,8 @@ const NUCLEO_SHARED_GLOBAL_KEYS=new Set([
   'nucleo-ro-origin-registry-v1',
   'nucleo-hidden-assigned-directions-v1',
   'nucleo-deleted-triage-keys-v1',
-  'nucleo-unified-actions-v1'
+  'nucleo-unified-actions-v1',
+  'nucleo-pdca-review-2026-v1'
 ]);
 const NUCLEO_SHARED_USER_KEYS=new Set([
   'ro-pdca-notifications-v1',
@@ -8401,6 +8402,108 @@ function triageStatusClass(status){
   return 'triage-status-new';
 }
 
+const NUCLEO_PDCA_REVIEW_2026_KEY='nucleo-pdca-review-2026-v1';
+function nucleoPdcaReviewMap2026(){
+  try{return JSON.parse(localStorage.getItem(NUCLEO_PDCA_REVIEW_2026_KEY)||'{}')||{}}catch(e){return {}}
+}
+function nucleoSavePdcaReviewMap2026(map){
+  localStorage.setItem(NUCLEO_PDCA_REVIEW_2026_KEY,JSON.stringify(map||{}));
+}
+function nucleoPdcaReviewDate2026(ro){
+  const raw=String(ro?.data||ro?.dataRegistro||ro?.dataSolicitacao||ro?.createdAt||ro?.timestamp||ro?.raw?.['Data']||ro?.raw?.['Carimbo de data/hora']||'').trim();
+  if(!raw)return null;
+  let d=null;
+  try{d=parseBrDate(raw)}catch(e){}
+  if(!(d instanceof Date)||isNaN(d)){
+    const iso=new Date(raw);if(!isNaN(iso))d=iso;
+  }
+  return d instanceof Date&&!isNaN(d)?d:null;
+}
+function nucleoPdcaReviewRoKey2026(ro){return String(ro?.numero||ro?.id||ro?.codigo||'').trim();}
+function nucleoPdcaReviewCanonical2026(value,originHint=''){
+  const s=String(value||'').trim();
+  const digits=(s.match(/\d+/g)||[]).pop();
+  if(!digits)return normalizeAnswer(s);
+  let origin='';
+  if(/RO[-_ ]?EX|ROE|extern/i.test(s)||/extern/i.test(originHint))origin='EX';
+  else if(/RO[-_ ]?IN|RIO|intern/i.test(s)||/intern/i.test(originHint))origin='IN';
+  return origin+':'+String(Number(digits));
+}
+function nucleoPdcaReviewTerminal2026(ro,map){
+  const tri=resolvedTriageForRo(ro,map)||{};
+  const decision=normalizeAnswer(tri.decision||'');
+  const status=normalizeAnswer(ro?.statusPlanilha||ro?.status||ro?.raw?.__statusOperacional||'');
+  if(['record','cancelled','obsolete'].includes(decision))return true;
+  return status.includes('registro')||status.includes('cancel')||status.includes('obsolet');
+}
+function nucleoPdcaReviewHasEvidence2026(ro){
+  const roKey=nucleoPdcaReviewRoKey2026(ro), origin=String(ro?.origemBase||ro?.raw?.__origemBase||'');
+  const target=nucleoPdcaReviewCanonical2026(roKey,origin);
+  if(!target)return false;
+  return getAllSentPdcas().some(p=>nucleoPdcaReviewCanonical2026(p?.ro||p?.roId||'',p?.origin||p?.origemBase||'')===target);
+}
+function nucleoPdcaReviewCandidates2026(){
+  const cutoff=new Date(2026,0,1,0,0,0,0),triageMap=getSavedTriageMap(),review=nucleoPdcaReviewMap2026();
+  const seen=new Set(),out=[];
+  getAllRoRecords().forEach(ro=>{
+    const key=nucleoPdcaReviewRoKey2026(ro);if(!key)return;
+    const d=nucleoPdcaReviewDate2026(ro);if(!d||d<cutoff)return;
+    const canonical=nucleoPdcaReviewCanonical2026(key,String(ro?.origemBase||ro?.raw?.__origemBase||''));
+    if(!canonical||seen.has(canonical))return;seen.add(canonical);
+    if(nucleoPdcaReviewTerminal2026(ro,triageMap))return;
+    const manual=review[canonical];
+    const hasEvidence=nucleoPdcaReviewHasEvidence2026(ro);
+    if(hasEvidence && manual?.decision!=='yes'){
+      review[canonical]={decision:'yes',automatic:true,at:new Date().toISOString(),by:'Núcleo',ro:key};
+    }
+    if(!review[canonical])out.push({ro,key,canonical,date:d});
+  });
+  nucleoSavePdcaReviewMap2026(review);
+  return out.sort((a,b)=>b.date-a.date);
+}
+async function nucleoPdcaReviewPersist2026(ro,decision){
+  const key=nucleoPdcaReviewRoKey2026(ro),origin=String(ro?.origemBase||ro?.raw?.__origemBase||''),canonical=nucleoPdcaReviewCanonical2026(key,origin);
+  if(!canonical)throw new Error('R.O. não identificada.');
+  const review=nucleoPdcaReviewMap2026();
+  review[canonical]={decision,automatic:false,at:new Date().toISOString(),by:getSession()?.name||'SGQ',ro:key,origin};
+  nucleoSavePdcaReviewMap2026(review);
+  const map=getSavedTriageMap();
+  const records=getTriageRecordsForRoNumber(key,map);
+  for(const old of records){
+    const updated={...old,pdcaRequired:decision==='yes',pdcaReviewDecision:decision,pdcaReviewAt:new Date().toISOString(),pdcaReviewBy:getSession()?.name||'SGQ'};
+    map.set(String(updated.roKey||key),updated);
+    if(portalBackendEnabled())await portalBackendSaveConfirmed('triage',String(updated.roKey||key),updated);
+  }
+  localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+  return true;
+}
+async function nucleoMarkPdcaReview2026(roKey,origin,decision){
+  if(!nucleoFeatureRequire('pdca','import'))return;
+  const ro=findRoByAnyNumber(roKey,origin)||getAllRoRecords().find(r=>nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''))===nucleoPdcaReviewCanonical2026(roKey,origin));
+  if(!ro){alert('R.O. não encontrada. Sincronize e tente novamente.');return;}
+  try{
+    await nucleoPdcaReviewPersist2026(ro,decision);
+    renderPdcaReview2026();
+    if(decision==='yes'){
+      await nucleoDriveLoad();
+      if(typeof nucleoDriveOpenForRo==='function')await nucleoDriveOpenForRo(nucleoPdcaReviewRoKey2026(ro),explicitRecordUnit(ro),effectiveRoSector(ro,getSavedTriageMap()));
+      else await nucleoDriveOpen('pdca');
+    }
+  }catch(e){alert('Não foi possível salvar a definição de PDCA.\n\n'+String(e?.message||e));}
+}
+function renderPdcaReview2026(){
+  if(!isAdmin())return;
+  const view=document.getElementById('triageView');if(!view)return;
+  let panel=document.getElementById('pdcaReview2026Panel');
+  if(!panel){
+    panel=document.createElement('div');panel.id='pdcaReview2026Panel';panel.style.cssText='margin:14px 0 18px;padding:16px;border:2px solid #e8b44b;border-radius:14px;background:#fff8e6';
+    const filters=view.querySelector('.triage-box');filters?.before(panel);
+  }
+  const rows=nucleoPdcaReviewCandidates2026();
+  if(!rows.length){panel.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><div><b>Revisão temporária de PDCA — 2026</b><div class="small">Nenhuma R.O. de 2026 pendente de definição de PDCA.</div></div><span class="status-badge answered">0 pendentes</span></div>';return;}
+  panel.innerHTML='<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><b>Revisão temporária de PDCA — 2026</b><div class="small">Somente R.O.s a partir de 01/01/2026. Registro, Cancelada e Obsoleto não entram nesta revisão.</div></div><span class="status-badge" style="background:#fff1c2;color:#7a4b00">'+rows.length+' para definir</span></div><div style="overflow:auto;margin-top:12px"><table class="action-table" style="min-width:900px"><thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Definir PDCA</th></tr></thead><tbody>'+rows.slice(0,100).map(x=>{const r=x.ro,origin=String(r.origemBase||r.raw?.__origemBase||'');const sector=effectiveRoSector(r,getSavedTriageMap())||'-';return '<tr style="background:#fffdf5"><td><b>'+escapeHtml(x.key)+'</b></td><td>'+escapeHtml(formatDateBR(r.data||r.dataRegistro||r.dataSolicitacao||''))+'</td><td>'+escapeHtml(r.cliente||r.origem||'-')+'</td><td>'+escapeHtml(sector)+'</td><td><div style="display:flex;gap:8px;white-space:nowrap"><button class="btn primary" type="button" onclick="nucleoMarkPdcaReview2026(\''+escapeHtml(x.key)+'\',\''+escapeHtml(origin)+'\',\'yes\')">Tem PDCA</button><button class="btn secondary" type="button" onclick="nucleoMarkPdcaReview2026(\''+escapeHtml(x.key)+'\',\''+escapeHtml(origin)+'\',\'no\')">Não tem PDCA</button></div></td></tr>';}).join('')+'</tbody></table></div>'+(rows.length>100?'<p class="small">Mostrando as 100 mais recentes. Resolva estas para carregar as próximas.</p>':'');
+}
+
 function renderTriage(){
   try{refreshMenuNotificationBadges()}catch(e){}
   if(!isAdmin())return;
@@ -8473,6 +8576,7 @@ function showTriage(){
   populateTriageSectors();
   populateTriageUnits();
   renderTriage();
+  renderPdcaReview2026();
 }
 
 
