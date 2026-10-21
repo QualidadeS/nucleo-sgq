@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#00467f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="5S SETA">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+    <title>Sistema 5S Digital - Gabrielly Silva</title>
+    <link rel="icon" type="image/png" href="https://files.manuscdn.com/user_upload_by_module/session_file/310519663476236047/aWhAVKuQKCrJuSmh.png">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #00467f; 
+            --success: #16a34a; --warning: #eab308;
+            --danger: #dc2626; --dark: #1f2937; --light: #f9fafb;
+            --border: #e5e7eb; --text: #374151;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--text); min-height: 100vh; padding: 15px;
+        }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); border-top: 8px solid var(--primary); }
+        .logo-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .logo-img { height: 60px; width: auto; max-width: 100%; object-fit: contain; }
+        h1 { color: var(--primary); font-size: 20px; font-weight: 900; }
+        
+        .header-info { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px; }
+        @media(min-width: 600px) { .header-info { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); } }
+        .info-item { background: var(--light); padding: 10px; border-radius: 8px; border-left: 4px solid var(--primary); }
+        .info-label { font-size: 10px; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; }
+        
+        input, select, textarea { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; width: 100%; }
+        .section-title { font-size: 18px; font-weight: 800; color: var(--dark); margin: 25px 0 12px; display: flex; align-items: center; gap: 8px; }
+        
+        .senso-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .senso-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #f3f4f6; padding-bottom: 8px; }
+        .senso-title { font-size: 16px; font-weight: 800; color: var(--primary); }
+        .senso-score { font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 50px; background: #f3f4f6; }
+        
+        .item { margin-bottom: 20px; padding: 15px; background: #fcfcfc; border-radius: 8px; border: 1px solid #f0f0f0; border-left: 4px solid #e5e7eb; }
+        .item-label { font-weight: 600; margin-bottom: 8px; color: var(--dark); font-size: 14px; line-height: 1.4; }
+        .item-lembrete { font-size: 11px; color: #6b7280; margin-bottom: 12px; background: #f8fafc; padding: 8px; border-radius: 4px; border-left: 3px solid #cbd5e1; }
+        
+        /* Layout Mobile Padrão SETA: Círculo, Emoji e Texto na mesma linha */
+        .radio-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .radio-wrapper { display: flex; align-items: center; gap: 10px; background: white; padding: 10px 15px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; transition: 0.2s; }
+        .radio-wrapper:hover { border-color: var(--primary); background: #eff6ff; }
+        .radio-wrapper input { width: 18px; height: 18px; flex-shrink: 0; margin: 0; }
+        .radio-label { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+        
+        .photo-btn { background: var(--primary); color: white; padding: 8px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; display: inline-block; margin-top: 10px; }
+        .photo-preview { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .photo-item { position: relative; width: 60px; height: 60px; border-radius: 6px; overflow: hidden; border: 1px solid #ddd; }
+        .photo-item img { width: 100%; height: 100%; object-fit: cover; }
+        
+        .action-card { background: white; padding: 15px; border-radius: 10px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid var(--warning); }
+        .action-desc { font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 6px; display: block; }
+        .action-meta { font-size: 10px; color: #6b7280; font-weight: 600; display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+        .status-select { font-size: 12px; font-weight: 800; padding: 6px; border-radius: 6px; background: #fffbeb; border: 1px solid var(--warning); color: #92400e; width: 100%; }
+
+        .actions-footer { position: sticky; bottom: 15px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 -4px 15px rgba(0,0,0,0.1); display: flex; gap: 10px; z-index: 100; margin-top: 30px; }
+        .btn-save { background: var(--success); color: white; flex: 2; font-size: 16px; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; padding: 12px; }
+        .btn-clear { background: #94a3b8; color: white; flex: 1; border: none; border-radius: 8px; cursor: pointer; padding: 12px; font-size: 14px; }
+        
+        footer { text-align: center; margin-top: 30px; padding: 20px; color: #64748b; font-size: 11px; line-height: 1.6; }
+        .admin-link { color: var(--primary); font-weight: 800; text-decoration: none; cursor: pointer; }
+        .about-btn-footer { display: inline-block; margin-top: 10px; font-size: 11px; background: #f1f5f9; padding: 8px 16px; border-radius: 6px; cursor: pointer; color: var(--primary); font-weight: 800; border: 1px solid #cbd5e1; }
+
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: white; padding: 25px; border-radius: 12px; max-width: 800px; width: 100%; max-height: 85vh; overflow-y: auto; position: relative; }
+        .modal-title { font-size: 18px; font-weight: 800; color: var(--primary); margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+        
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; color: white; }
+        .spinner { width: 35px; height: 35px; border: 4px solid #f3f3f3; border-top: 4px solid var(--success); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 12px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .about-section { margin-bottom: 25px; }
+        .about-h3 { font-size: 15px; color: var(--primary); font-weight: 800; margin-bottom: 10px; text-transform: uppercase; border-left: 4px solid var(--primary); padding-left: 10px; }
+        .about-p { font-size: 13px; line-height: 1.6; margin-bottom: 10px; color: #374151; text-align: justify; }
+        .about-list { list-style: none; margin-bottom: 15px; }
+        .about-list li { font-size: 13px; margin-bottom: 6px; padding-left: 20px; position: relative; }
+        .about-list li::before { content: "•"; position: absolute; left: 0; color: var(--primary); font-weight: bold; }
+
+        .install-app-btn { display:none; position:fixed; right:16px; bottom:88px; z-index:900; border:0; border-radius:999px; padding:11px 16px; background:var(--primary); color:white; font-weight:800; font-size:13px; box-shadow:0 6px 18px rgba(0,0,0,.18); cursor:pointer; }
+        .install-app-btn.show { display:block; }
+        @media (display-mode: standalone) { .install-app-btn { display:none !important; } }
+    </style>
+
+    <style id="nucleo-embedded-5s-style">
+      html.nucleo-embedded body{background:#fff!important;padding:10px!important;min-height:auto!important}
+      html.nucleo-embedded .container{max-width:none!important}
+      html.nucleo-embedded header{box-shadow:none!important;margin-bottom:14px!important}
+      html.nucleo-embedded footer{display:none!important}
+      html.nucleo-embedded #installAppBtn{display:none!important}
+    </style>
+    
+</head>
+
+    <script>
+      (function(){
+        try{
+          const q=new URLSearchParams(location.search);
+          if(q.get('embedded')==='1') document.documentElement.classList.add('nucleo-embedded');
+        }catch(e){}
+      })();
+    </script>
+    
+<body>
+    <button id="installAppBtn" class="install-app-btn" type="button">📲 INSTALAR APP</button>
+    <div id="loading" class="loading-overlay"><div class="spinner"></div><p id="loadingText" style="font-weight: bold;">Enviando dados...</p></div>
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;"></iframe>
+
+    <!-- Modal Sobre INTEGRAL -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">📄 SOBRE O SISTEMA</div>
+            
+            <div class="about-section">
+                <h3 class="about-h3">Sistema de Gestão 5S Digital</h3>
+                <p class="about-p">O Sistema de Gestão 5S Digital é uma aplicação web criada para digitalizar, padronizar e facilitar a realização de inspeções baseadas na metodologia 5S. O sistema permite registrar avaliações, calcular resultados automaticamente, anexar evidências fotográficas, acompanhar o histórico das inspeções, visualizar indicadores e controlar ações de melhoria. Esta instalação corresponde a uma versão personalizada para avaliação e utilização nas rotinas internas da SETA.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">PRINCIPAIS RECURSOS</h3>
+                <ul class="about-list">
+                    <li>Realização digital das inspeções 5S;</li>
+                    <li>Avaliação dos cinco sensos;</li>
+                    <li>Cálculo automático das pontuações;</li>
+                    <li>Registro de observações e evidências fotográficas;</li>
+                    <li>Identificação do setor e dos responsáveis pela inspeção;</li>
+                    <li>Histórico das inspeções realizadas;</li>
+                    <li>Visualização de resultados e indicadores;</li>
+                    <li>Cadastro e acompanhamento de ações de melhoria;</li>
+                    <li>Definição de responsáveis e prazos;</li>
+                    <li>Geração de relatórios;</li>
+                    <li>Sincronização com Google Sheets e Google Drive;</li>
+                    <li>Possibilidade de utilização como aplicativo instalado;</li>
+                    <li>Armazenamento temporário para utilização sem conexão.</li>
+                </ul>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">INFORMAÇÕES DA VERSÃO</h3>
+                <p class="about-p">
+                    <strong>Versão personalizada:</strong> SETA 1.0.0<br>
+                    <strong>Produto-base:</strong> Sistema de Gestão 5S Digital 1.0.0<br>
+                    <strong>Data da versão:</strong> 14 de agosto de 2026<br>
+                    <strong>Status:</strong> Em avaliação operacional<br>
+                    <strong>Identificador da versão:</strong> SETA-1.0.0-20260814<br><br>
+                    <strong>Tecnologias utilizadas:</strong> Aplicação Web Progressiva (PWA), HTML, CSS, JavaScript, Google Apps Script, Google Sheets e Google Drive.
+                </p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">AUTORIA E DESENVOLVIMENTO</h3>
+                <p class="about-p">
+                    <strong>Idealização e desenvolvimento:</strong> Gabrielly Silva<br>
+                    <strong>Ano de criação:</strong> 2026<br><br>
+                    Sistema de Gestão 5S Digital © 2026 Gabrielly Silva. Todos os direitos reservados.<br><br>
+                    O nome “Gabrielly Silva” é a identificação pública e profissional utilizada pela autora. A identificação civil completa é mantida nos documentos técnicos, registros e instrumentos jurídicos correspondentes.
+                </p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">PRODUTO-BASE E PERSONALIZAÇÃO</h3>
+                <p class="about-p">O Sistema de Gestão 5S Digital possui um produto-base genérico, criado para possibilitar sua aplicação em diferentes organizações. Esta instalação contém configurações, setores, históricos, modelos e outras adaptações desenvolvidas especificamente para as necessidades internas da SETA. Os dados, nomes, estruturas internas e demais informações exclusivas da SETA não integram o produto-base destinado a outras organizações.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">LICENÇA DE USO</h3>
+                <p class="about-p">Esta versão é disponibilizada gratuitamente à SETA por meio de licença não exclusiva, intransferível e por prazo indeterminado, exclusivamente para utilização interna. A SETA poderá utilizar a versão personalizada nas atividades internas relacionadas às inspeções e à gestão do programa 5S. A autorização de uso não representa venda, doação, cessão ou transferência da autoria ou dos direitos sobre o produto-base. A reprodução, distribuição, comercialização, sublicenciamento, disponibilização externa ou utilização do sistema por outras pessoas jurídicas depende de autorização prévia e expressa da autora. A condição de intransferibilidade não impede que colaboradores autorizados da própria SETA utilizem o sistema no exercício de suas atividades internas.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">VERSÕES, MELHORIAS E EVOLUÇÕES</h3>
+                <p class="about-p">O produto-base, seus componentes genéricos, futuras versões, módulos, integrações, melhorias e adaptações destinadas a outros contextos poderão continuar sendo desenvolvidos e licenciados por Gabrielly Silva. A disponibilização desta versão à SETA não inclui automaticamente:</p>
+                <ul class="about-list">
+                    <li>Desenvolvimento de novas funcionalidades;</li>
+                    <li>Personalizações adicionais;</li>
+                    <li>Integrações com outros sistemas;</li>
+                    <li>Alterações solicitadas após a implantação;</li>
+                    <li>Suporte técnico contínuo;</li>
+                    <li>Manutenção por prazo indeterminado;</li>
+                    <li>Compatibilidade automática com futuras alterações dos serviços utilizados.</li>
+                </ul>
+                <p class="about-p">Novos serviços, atualizações ou adaptações poderão ser definidos separadamente.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">DADOS DA SETA</h3>
+                <p class="about-p">Os dados, registros de inspeções, históricos, fotografias, nomes de colaboradores, informações sobre setores e demais conteúdos inseridos na versão da SETA pertencem à empresa. Essas informações devem ser utilizadas exclusivamente para as finalidades internas autorizadas e não serão incorporadas às versões genéricas destinadas a outras organizações. A titularidade dos dados da SETA não implica titularidade sobre o produto-base, sua estrutura, seu funcionamento ou seus componentes genéricos.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">ARMAZENAMENTO E SINCRONIZAÇÃO</h3>
+                <p class="about-p">O sistema pode armazenar temporariamente informações no navegador do dispositivo utilizado e sincronizá-las com a planilha, a pasta e os demais recursos Google configurados para a SETA. Quando não houver conexão com a internet ou quando ocorrer falha no envio, os registros poderão permanecer somente no dispositivo até uma nova tentativa de sincronização. Antes de limpar os dados do navegador, trocar de aparelho ou desinstalar a aplicação, o usuário deverá verificar se as informações foram sincronizadas corretamente. As fotografias e os documentos gerados são armazenados nos locais do Google Drive definidos durante a configuração da versão personalizada.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">PRIVACIDADE E UTILIZAÇÃO RESPONSÁVEL</h3>
+                <p class="about-p">O sistema poderá tratar informações relacionadas às inspeções, incluindo nomes de responsáveis, setores, observações e fotografias. O acesso deve ser limitado às pessoas autorizadas pela SETA. Os usuários não devem inserir dados pessoais, sigilosos ou informações sem relação com a finalidade da inspeção. A gestão dos acessos, o compartilhamento dos documentos e a conservação dos dados inseridos na versão personalizada devem seguir as políticas internas da SETA.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">FINALIDADE E LIMITAÇÕES</h3>
+                <p class="about-p">O Sistema de Gestão 5S Digital é uma ferramenta de apoio às inspeções e à gestão das ações de melhoria. A confiabilidade dos resultados depende do preenchimento correto, completo e verdadeiro das informações pelos usuários. O sistema não substitui:</p>
+                <ul class="about-list">
+                    <li>A avaliação dos responsáveis pelos processos;</li>
+                    <li>Os procedimentos internos da SETA;</li>
+                    <li>As auditorias formais;</li>
+                    <li>A análise das evidências;</li>
+                    <li>As decisões dos gestores;</li>
+                    <li>Os requisitos legais, normativos ou regulamentares aplicáveis.</li>
+                </ul>
+                <p class="about-p">Eventuais resultados, pontuações e indicadores devem ser interpretados em conjunto com as evidências e com os critérios internos adotados pela empresa.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">COMPATIBILIDADE E VALIDADE TÉCNICA</h3>
+                <p class="about-p">Esta versão foi desenvolvida para utilização em navegadores atualizados, em computadores, tablets e celulares compatíveis. A sincronização, o envio de fotografias, a geração de documentos e outras funções online dependem da conexão com a internet, da disponibilidade dos serviços Google, das permissões concedidas às contas utilizadas e da manutenção da planilha, das pastas e das configurações da aplicação. Mudanças realizadas pelo Google ou pelos navegadores poderão exigir atualizações técnicas futuras.</p>
+            </div>
+
+            <div class="about-section">
+                <h3 class="about-h3">CRÉDITOS</h3>
+                <p class="about-p">
+                    <strong>Produto:</strong> Sistema de Gestão 5S Digital<br>
+                    <strong>Idealização e desenvolvimento:</strong> Gabrielly Silva<br>
+                    <strong>Versão personalizada:</strong> SETA 1.0.0<br>
+                    <strong>Ano:</strong> 2026<br><br>
+                    Uso autorizado exclusivamente nas atividades internas da SETA.<br><br>
+                    © 2026 Gabrielly Silva. Todos os direitos não expressamente autorizados permanecem reservados.
+                </p>
+            </div>
+
+            <button class="btn-clear" style="width: 100%; padding: 15px; font-weight: 800; margin-top: 10px;" onclick="closeModal('aboutModal')">FECHAR DOCUMENTAÇÃO</button>
+        </div>
+    </div>
+
+    <!-- Modal Administrativo -->
+    <div id="adminModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-title">🔐 Área Administrativa - Gabrielly Silva</div>
+            <div id="loginSection">
+                <input type="password" id="adminPass" placeholder="Senha de acesso..." style="margin-bottom: 15px;">
+                <button class="btn-save" onclick="checkLogin()">Entrar</button>
+            </div>
+            <div id="configSection" style="display:none;">
+                <label class="info-label">URL do Google Apps Script:</label>
+                <textarea id="configUrl" style="height: 100px; margin-bottom: 15px; font-family: monospace; font-size: 12px;"></textarea>
+                <button class="btn-save" onclick="testConnection()">⚡ TESTAR CONEXÃO E SALVAR</button>
+                <button class="btn-clear" onclick="copyDirectLink()" style="margin-top:10px; width:100%;">🔗 COPIAR LINK DIRETO</button>
+            </div>
+            <button class="btn-clear" onclick="closeModal('adminModal')" style="margin-top:15px; width:100%;">Sair</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="setupWarning" class="setup-warning" style="display: block;">⚠️ SISTEMA NÃO CONFIGURADO — abra a área administrativa para informar a URL.</div>
+        <header>
+            <div class="logo-area">
+                <img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663476236047/aWhAVKuQKCrJuSmh.png" class="logo-img" alt="SETA Logo">
+                <div style="text-align: right;">
+                    <h1>AUDITORIA 5S</h1>
+                    <p style="font-size: 10px; color: #6b7280;">Acompanhamento Geral v46</p>
+                </div>
+            </div>
+            <div class="header-info">
+                <div class="info-item">
+                    <div class="info-label">Setor</div>
+                    <select id="setor" onchange="aoMudarSetor()" data-manus_clickable="true" data-manus_click_id="1">
+                        <option value="">Selecione o setor...</option>
+                        <option value="Expedição">Expedição</option>
+                        <option value="Infraestrutura">Infraestrutura</option>
+                        <option value="Mecânica (manutenção)">Mecânica (manutenção)</option>
+                        <option value="Clicheria + sala de tintas">Clicheria + sala de tintas</option>
+                        <option value="Plotter">Plotter</option>
+                        <option value="2° turno">2° turno</option>
+                        <option value="Serralheria">Serralheria</option>
+                        <option value="Acabamento">Acabamento</option>
+                        <option value="Recebimento + almoxarifado">Recebimento + almoxarifado</option>
+                        <option value="Acessórios">Acessórios</option>
+                        <option value="Máquinas 1">Máquinas 1</option>
+                        <option value="Máquinas 2">Máquinas 2</option>
+                        <option value="Serviços gerais">Serviços gerais</option>
+                        <option value="Administrativo (rh)">Administrativo (rh)</option>
+                        <option value="Administrativo aquário 1">Administrativo aquário 1</option>
+                        <option value="Administrativo aquário 2">Administrativo aquário 2</option>
+                        <option value="Administrativo aquário 3">Administrativo aquário 3</option>
+                    </select>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Resp. Setor</div>
+                    <input type="text" id="responsavel" placeholder="Quem responde?" data-manus_clickable="true" data-manus_click_id="2">
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Auditor 1</div>
+                    <input type="text" id="auditor1" placeholder="Nome do auditor" data-manus_clickable="true" data-manus_click_id="3">
+                    <small style="display:block;margin-top:5px;color:#6b7280;font-size:10px;">Preenchido pelo cronograma. Pode ser alterado.</small>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Auditor 2</div>
+                    <input type="text" id="auditor2" placeholder="Nome do auditor 2" data-manus_clickable="true" data-manus_click_id="4">
+                    <small style="display:block;margin-top:5px;color:#6b7280;font-size:10px;">Preenchido pelo cronograma. Pode ser alterado.</small>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Data</div>
+                    <input type="date" id="data" onchange="carregarRosAtrasadas()" data-manus_clickable="true" data-manus_click_id="5">
+                </div>
+            </div>
+        </header>
+
+        <div id="checklistContent"><div class="senso-card"><div class="senso-header"><span class="senso-title">1. SEIRI - SENSO DE UTILIZAÇÃO</span><span class="senso-score" id="score-utilizacao">0%</span></div>
+                    <div class="item">
+                        <div class="item-label">1.1. Existem objetos ou materiais desnecessários no setor?</div>
+                        <div class="item-lembrete">Ferramentas, peças, materiais de expediente, objetos pessoais...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="6"><input type="radio" name="1.1" value="0" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="7"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="8"><input type="radio" name="1.1" value="1" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="9"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="10"><input type="radio" name="1.1" value="2" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="11"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="12"><input type="radio" name="1.1" value="3" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="13"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="1.1" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="14">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="15">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '1.1')"><div class="photo-preview" id="preview-1.1"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">1.2. Os avisos e informações expostos estão atualizados?</div>
+                        <div class="item-lembrete">Quadros, placas, ordens de produção, procedimentos...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="16"><input type="radio" name="1.2" value="0" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="17"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="18"><input type="radio" name="1.2" value="1" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="19"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="20"><input type="radio" name="1.2" value="2" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="21"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="22"><input type="radio" name="1.2" value="3" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="23"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="1.2" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="24">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="25">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '1.2')"><div class="photo-preview" id="preview-1.2"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">1.3. Existe desperdício de água, energia etc?</div>
+                        <div class="item-lembrete">Vazamentos, lâmpadas acesas sem necessidade, torneiras...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="26"><input type="radio" name="1.3" value="0" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="27"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="28"><input type="radio" name="1.3" value="1" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="29"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="30"><input type="radio" name="1.3" value="2" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="31"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="32"><input type="radio" name="1.3" value="3" onchange="calcularScore('utilizacao')" data-manus_clickable="true" data-manus_click_id="33"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="1.3" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="34">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="35">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '1.3')"><div class="photo-preview" id="preview-1.3"></div></div>
+                    </div></div><div class="senso-card"><div class="senso-header"><span class="senso-title">2. SEITON - SENSO DE ORDENAÇÃO</span><span class="senso-score" id="score-ordenacao">0%</span></div>
+                    <div class="item">
+                        <div class="item-label">2.1. Existem Identificações e Sinalizações adequada no setor?</div>
+                        <div class="item-lembrete">Áreas de circulação, extintores, painéis, máquinas...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="36"><input type="radio" name="2.1" value="0" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="37"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="38"><input type="radio" name="2.1" value="1" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="39"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="40"><input type="radio" name="2.1" value="2" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="41"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="42"><input type="radio" name="2.1" value="3" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="43"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="2.1" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="44">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="45">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '2.1')"><div class="photo-preview" id="preview-2.1"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">2.2. Os corredores e áreas de circulação estão desobstruídos?</div>
+                        <div class="item-lembrete">Livre acesso a extintores, painéis e rotas de fuga...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="46"><input type="radio" name="2.2" value="0" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="47"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="48"><input type="radio" name="2.2" value="1" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="49"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="50"><input type="radio" name="2.2" value="2" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="51"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="52"><input type="radio" name="2.2" value="3" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="53"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="2.2" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="54">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="55">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '2.2')"><div class="photo-preview" id="preview-2.2"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">2.3. Estão Definidos e são Adequados os locais para a guarda de recursos?</div>
+                        <div class="item-lembrete">Armários, bancadas, prateleiras, quadro sombra...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="56"><input type="radio" name="2.3" value="0" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="57"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="58"><input type="radio" name="2.3" value="1" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="59"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="60"><input type="radio" name="2.3" value="2" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="61"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="62"><input type="radio" name="2.3" value="3" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="63"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="2.3" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="64">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="65">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '2.3')"><div class="photo-preview" id="preview-2.3"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">2.4. Os objetos e ferramentas estão localizados em local apropriado?</div>
+                        <div class="item-lembrete">Pastas, ferramentas, EPIs, material de limpeza...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="66"><input type="radio" name="2.4" value="0" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="67"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="68"><input type="radio" name="2.4" value="1" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="69"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="70"><input type="radio" name="2.4" value="2" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="71"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="72"><input type="radio" name="2.4" value="3" onchange="calcularScore('ordenacao')" data-manus_clickable="true" data-manus_click_id="73"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="2.4" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="74">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="75">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '2.4')"><div class="photo-preview" id="preview-2.4"></div></div>
+                    </div></div><div class="senso-card"><div class="senso-header"><span class="senso-title">3. SEISO - SENSO DE LIMPEZA</span><span class="senso-score" id="score-limpeza">0%</span></div>
+                    <div class="item">
+                        <div class="item-label">3.1. Qual o nível de limpeza no local de trabalho?</div>
+                        <div class="item-lembrete">Sujeira do processo, bancadas, frestas, sob equipamentos...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="76"><input type="radio" name="3.1" value="0" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="77"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="78"><input type="radio" name="3.1" value="1" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="79"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="80"><input type="radio" name="3.1" value="2" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="81"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="82"><input type="radio" name="3.1" value="3" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="83"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="3.1" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="84">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="85">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '3.1')"><div class="photo-preview" id="preview-3.1"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">3.2. Qual o estado de conservação das Máquinas, instalações e Recursos?</div>
+                        <div class="item-lembrete">Vazamentos de óleo, paredes sujas, vidros, cortinas...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="86"><input type="radio" name="3.2" value="0" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="87"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="88"><input type="radio" name="3.2" value="1" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="89"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="90"><input type="radio" name="3.2" value="2" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="91"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="92"><input type="radio" name="3.2" value="3" onchange="calcularScore('limpeza')" data-manus_clickable="true" data-manus_click_id="93"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="3.2" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="94">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="95">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '3.2')"><div class="photo-preview" id="preview-3.2"></div></div>
+                    </div></div><div class="senso-card"><div class="senso-header"><span class="senso-title">4. SEIKETSU - SENSO DE PADRONIZAÇÃO</span><span class="senso-score" id="score-padronizacao">0%</span></div>
+                    <div class="item">
+                        <div class="item-label">4.1. Qual o nível de organização e asseio dos funcionários?</div>
+                        <div class="item-lembrete">Uniforme, crachá, EPIs, cabelos presos, barba...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="96"><input type="radio" name="4.1" value="0" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="97"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="98"><input type="radio" name="4.1" value="1" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="99"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="100"><input type="radio" name="4.1" value="2" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="101"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="102"><input type="radio" name="4.1" value="3" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="103"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="4.1" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="104">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="105">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '4.1')"><div class="photo-preview" id="preview-4.1"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">4.2. As condições de Higiene e Segurança são mantidas?</div>
+                        <div class="item-lembrete">Banheiros, bebedouros, refeitório e áreas comuns...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="106"><input type="radio" name="4.2" value="0" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="107"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="108"><input type="radio" name="4.2" value="1" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="109"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="110"><input type="radio" name="4.2" value="2" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="111"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="112"><input type="radio" name="4.2" value="3" onchange="calcularScore('padronizacao')" data-manus_clickable="true" data-manus_click_id="113"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="4.2" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="114">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="115">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '4.2')"><div class="photo-preview" id="preview-4.2"></div></div>
+                    </div></div><div class="senso-card"><div class="senso-header"><span class="senso-title">5. SHITSUKE - SENSO DE AUTO DISCIPLINA</span><span class="senso-score" id="score-auto">0%</span></div>
+                    <div class="item">
+                        <div class="item-label">5.1. O lixo é descartado de forma correta?</div>
+                        <div class="item-lembrete">Lixeiros conforme identificação (orgânico, reciclável)...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="116"><input type="radio" name="5.1" value="0" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="117"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="118"><input type="radio" name="5.1" value="1" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="119"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="120"><input type="radio" name="5.1" value="2" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="121"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="122"><input type="radio" name="5.1" value="3" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="123"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="5.1" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="124">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="125">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '5.1')"><div class="photo-preview" id="preview-5.1"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">5.3. Informações e indicadores atualizados?</div>
+                        <div class="item-lembrete">Quadros de metas, OTIF, qualidade, auditoria 5S...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="126"><input type="radio" name="5.3" value="0" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="127"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="128"><input type="radio" name="5.3" value="1" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="129"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="130"><input type="radio" name="5.3" value="2" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="131"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="132"><input type="radio" name="5.3" value="3" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="133"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="5.3" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="134">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="135">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '5.3')"><div class="photo-preview" id="preview-5.3"></div></div>
+                    </div>
+                    <div class="item">
+                        <div class="item-label">5.4. Tratativa de problemas anteriores?</div>
+                        <div class="item-lembrete">Ações do plano anterior executadas ou em andamento...</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="136"><input type="radio" name="5.4" value="0" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="137"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="138"><input type="radio" name="5.4" value="1" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="139"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="140"><input type="radio" name="5.4" value="2" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="141"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="142"><input type="radio" name="5.4" value="3" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="143"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="5.4" placeholder="Observação..." data-manus_clickable="true" data-manus_click_id="144">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="145">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '5.4')"><div class="photo-preview" id="preview-5.4"></div></div>
+                    </div>
+                    <div class="item" id="item-5.5" style="border-left: 4px solid #2563eb; background: #f8fbff;">
+                        <div class="item-label">5.5. As ROs do setor são apresentadas dentro do prazo?</div>
+                        <div class="item-lembrete">Verificação das ROs em atraso do setor no mês da auditoria.</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper"><input type="radio" name="5.5" value="0" disabled onchange="calcularScore('auto')"><div class="radio-label">🔴 Não atende</div></label>
+                            <label class="radio-wrapper"><input type="radio" name="5.5" value="3" disabled onchange="calcularScore('auto')"><div class="radio-label">🟢 Atende</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="5.5" placeholder="ROs em atraso / observação..." readonly>
+                        <div id="ros-5.5" style="font-size:12px; margin-top:8px; color:#475569;">Selecione o setor para verificar as ROs.</div>
+                    </div>
+                    <div class="item" style="border-left: 4px solid var(--primary); background: #fdfdfd;">
+                        <div class="item-label">5.2. Conhecimento sobre Qualidade e Valores (Entrevista)</div>
+                        <select id="pergunta-5.2" style="margin-bottom: 10px;" data-manus_clickable="true" data-manus_click_id="146">
+                            <option value="">Selecione a pergunta...</option>
+                            <option value="Quem é responsável pela qualidade?">1. Quem é responsável pela qualidade?</option>
+                            <option value="Sua participação na qualidade?">2. Sua participação na qualidade?</option>
+                            <option value="Valores da SETA?">3. Valores da SETA?</option>
+                            <option value="Explique um indicador.">4. Explique um indicador.</option>
+                        </select>
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px;">
+                            <input type="text" id="auditado-5.2" placeholder="Nome do colaborador" data-manus_clickable="true" data-manus_click_id="147">
+                            <div class="radio-group" style="margin-bottom: 0;">
+                                <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="148"><input type="radio" name="5.2" value="0" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="149"><div class="radio-label">🔴 Ruim</div></label>
+                                <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="150"><input type="radio" name="5.2" value="1" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="151"><div class="radio-label">🟡 Regular</div></label>
+                                <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="152"><input type="radio" name="5.2" value="2" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="153"><div class="radio-label">🟢 Bom</div></label>
+                                <label class="radio-wrapper" data-manus_clickable="true" data-manus_click_id="154"><input type="radio" name="5.2" value="3" onchange="calcularScore('auto')" data-manus_clickable="true" data-manus_click_id="155"><div class="radio-label">⭐ Excelente</div></label>
+                            </div>
+                        </div>
+                        <textarea id="resposta-5.2" placeholder="Resposta do colaborador..." style="min-height: 60px; margin-bottom: 10px;" data-manus_clickable="true" data-manus_click_id="156"></textarea>
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()" data-manus_clickable="true" data-manus_click_id="157">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '5.2')"><div class="photo-preview" id="preview-5.2"></div></div>
+                    </div></div></div>
+
+        <!-- Ações Pendentes Movidas para o Final -->
+        <div id="boxPendentes" class="senso-card" style="display:none; background: #fffbeb; border-left: 5px solid var(--warning);">
+            <h3 style="font-size: 16px; margin-bottom: 10px;">⚠️ Ações Pendentes (Vindas da Planilha)</h3>
+            <div id="listaPendentes"></div>
+        </div>
+
+        <div class="section-title">🎯 Plano de Ação</div>
+        <div class="senso-card" id="planoAcao">
+            <textarea id="descricaoAcao" placeholder="O quê deve ser feito?" style="min-height: 80px; margin-bottom: 10px;" data-manus_clickable="true" data-manus_click_id="158"></textarea>
+            <button class="btn-save" style="font-size: 14px; padding: 8px;" onclick="adicionarAcaoMemoria()" data-manus_clickable="true" data-manus_click_id="159">✅ Adicionar Ação</button>
+            <div id="listaNovasAcoes" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="actions-footer">
+            <button class="btn-save" onclick="salvarInspeccao()" data-manus_clickable="true" data-manus_click_id="160">🚀 SALVAR E SINCRONIZAR</button>
+            <button class="btn-clear" onclick="limparFormulario()" data-manus_clickable="true" data-manus_click_id="161">🗑️ LIMPAR</button>
+        </div>
+
+        <footer>
+            <p>Sistema de Gestão 5S Digital © 2026 <span class="admin-link" onclick="openAdmin()" data-manus_clickable="true" data-manus_click_id="162">Gabrielly Silva</span></p>
+            <p>Licença gratuita, não exclusiva e por prazo indeterminado concedida à SETA para uso interno.</p>
+            <div class="about-btn-footer" onclick="openModal('aboutModal')" data-manus_clickable="true" data-manus_click_id="163">📄 SOBRE O SISTEMA</div>
+        </footer>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'GS_5S_CONFIG_URL_V2';
+        let URL_PLANILHA = '';
+        let novasAcoesParaEnviar = [];
+        let acoesPendentesCarregadas = [];
+
+        window.addEventListener('DOMContentLoaded', function() {
+            try {
+                const campoData = document.getElementById('data');
+                if (campoData) campoData.valueAsDate = new Date();
+                carregarConfiguracaoSegura();
+                gerarChecklistCompleto();
+                window.addEventListener('message', function(event) {
+                    if (event.data === 'SUCCESS') {
+                        document.getElementById('loadingText').innerText = '🚀 Auditoria registrada com sucesso!';
+                        setTimeout(() => location.reload(), 1500);
+                    } else if (typeof event.data === 'string' && event.data.indexOf('ERROR:') === 0) {
+                        document.getElementById('loading').style.display = 'none';
+                        alert('Erro no servidor: ' + event.data.substring(6));
+                    }
+                });
+            } catch (erro) {
+                console.error('Falha na inicialização:', erro);
+                const alvo = document.getElementById('checklistContent');
+                if (alvo) alvo.innerHTML = '<div class="senso-card"><strong>Não foi possível carregar o checklist.</strong><br>Recarregue a página. Se persistir, abra o console do navegador.</div>';
+            }
+        });
+
+        function lerConfiguracaoLocal() {
+            try { return window.localStorage ? (localStorage.getItem(STORAGE_KEY) || '') : ''; }
+            catch (e) { return ''; }
+        }
+
+        function gravarConfiguracaoLocal(valor) {
+            try { if (window.localStorage) localStorage.setItem(STORAGE_KEY, valor); return true; }
+            catch (e) { return false; }
+        }
+
+        function carregarConfiguracaoSegura() {
+            const params = new URLSearchParams(window.location.search);
+            const configUrl = params.get('config');
+            URL_PLANILHA = configUrl || lerConfiguracaoLocal();
+            if (configUrl) gravarConfiguracaoLocal(URL_PLANILHA);
+            const aviso = document.getElementById('setupWarning');
+            if (aviso) aviso.style.display = URL_PLANILHA ? 'none' : 'block';
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        async function aoMudarSetor() {
+            const setor = document.getElementById('setor').value;
+            const auditor1 = document.getElementById('auditor1');
+            const auditor2 = document.getElementById('auditor2');
+
+            if (!setor) {
+                auditor1.value = '';
+                auditor2.value = '';
+                await carregarAcoesReais();
+                return;
+            }
+
+            // As duas consultas são independentes: uma busca as ações e a outra a escala.
+            await Promise.allSettled([
+                carregarAcoesReais(),
+                carregarAuditoresEscalados(setor),
+                carregarRosAtrasadas()
+            ]);
+        }
+
+        async function carregarRosAtrasadas() {
+            const box = document.getElementById('ros-5.5');
+            const setor = document.getElementById('setor').value;
+            const data = document.getElementById('data').value;
+            const opcoes55 = Array.from(document.querySelectorAll('input[name="5.5"]'));
+            const ruim = opcoes55.find(el => el.value !== '3') || opcoes55[0];
+            const atende = opcoes55.find(el => el.value === '3') || opcoes55[1];
+            const obs = document.querySelector('.obs-input[data-cod="5.5"]');
+
+            if (!box || !ruim || !atende || !obs) return;
+            ruim.checked = false;
+            atende.checked = false;
+            // Restaura o valor padrão antes de uma nova consulta. Nos Aquários este valor
+            // é substituído pela pontuação proporcional calculada pelo Apps Script.
+            ruim.value = '0';
+            atende.value = '3';
+            obs.value = '';
+
+            if (!setor) {
+                box.innerHTML = 'Selecione o setor para verificar as ROs.';
+                calcularScore('auto');
+                return;
+            }
+            if (!data) {
+                box.innerHTML = 'Informe a data da auditoria para verificar as ROs.';
+                calcularScore('auto');
+                return;
+            }
+            if (!URL_PLANILHA) {
+                box.innerHTML = '⚠️ Configure a URL do Apps Script para consultar as ROs.';
+                calcularScore('auto');
+                return;
+            }
+
+            box.innerHTML = '🔎 Consultando ROs em atraso...';
+            try {
+                const url = `${URL_PLANILHA}?tipo=ros&setor=${encodeURIComponent(setor)}&data=${encodeURIComponent(data)}&_=${Date.now()}`;
+                const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+                if (!resp.ok) throw new Error(`Erro HTTP ${resp.status}`);
+                const resultado = await resp.json();
+                if (resultado && resultado.error) throw new Error(resultado.error);
+
+                const ros = resultado && Array.isArray(resultado.ros) ? resultado.ros : [];
+
+                // Salas Aquário: os 20% do item 5.5 são rateados entre as áreas.
+                if (resultado && resultado.ehAquario) {
+                    const areas = Array.isArray(resultado.areas) ? resultado.areas : [];
+                    const pontos55 = Number(resultado.pontos5_5 == null ? 3 : resultado.pontos5_5);
+                    const percentualItem = Number(resultado.percentualItem == null ? 20 : resultado.percentualItem);
+                    const areasComAtraso = Number(resultado.areasComAtraso || 0);
+
+                    if (areasComAtraso > 0) {
+                        ruim.value = String(pontos55);
+                        ruim.checked = true;
+                    } else {
+                        atende.checked = true;
+                    }
+
+                    const partesObs = [];
+                    areas.forEach(area => {
+                        const lista = Array.isArray(area.ros) ? area.ros : [];
+                        if (lista.length) partesObs.push(`${area.nome}: RO(s) ${lista.map(r => r.ro).join(', ')}`);
+                    });
+                    obs.value = areasComAtraso > 0
+                        ? `Rateio 5.5: ${formatarNumero(percentualItem)}% de 20%. ${partesObs.join(' | ')}`
+                        : '20% de 20%. Nenhuma RO em atraso nas áreas do Aquário.';
+
+                    const cabecalho = areasComAtraso > 0
+                        ? `<strong>🟡 Atende parcialmente — ${formatarNumero(percentualItem)}% dos 20% do item 5.5</strong>`
+                        : '<strong>🟢 Atende — 20% dos 20% do item 5.5</strong>';
+
+                    const htmlAreas = areas.map(area => {
+                        const lista = Array.isArray(area.ros) ? area.ros : [];
+                        if (!lista.length) {
+                            return `<div style="margin-top:9px;padding:8px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #16a34a;">` +
+                                `<strong>🟢 ${escapeHtml(area.nome)}</strong> — sem RO em atraso</div>`;
+                        }
+                        const itens = lista.map(r =>
+                            `<div style="margin-top:5px;padding-left:10px;">` +
+                            `<strong>RO ${escapeHtml(String(r.ro))}</strong> — em atraso desde ${escapeHtml(r.emAtraso || '-')}<br>` +
+                            `<span style="color:#64748b;">Setor da RO: ${escapeHtml(r.setor || area.nome)}${r.unidade ? ' • ' + escapeHtml(r.unidade) : ''}</span></div>`
+                        ).join('');
+                        return `<div style="margin-top:9px;padding:8px 10px;background:#fff7ed;border-radius:6px;border-left:3px solid #ea580c;">` +
+                            `<strong>🔴 ${escapeHtml(area.nome)}</strong> — ${lista.length} RO(s) em atraso${itens}</div>`;
+                    }).join('');
+
+                    box.innerHTML = cabecalho +
+                        `<div style="margin-top:6px;color:#64748b;">${areasComAtraso} de ${areas.length} área(s) com atraso. O desconto é somente da parcela dessas áreas.</div>` +
+                        htmlAreas;
+
+                    calcularScore('auto');
+                    return;
+                }
+
+                // Demais setores: regra binária normal do 5.5.
+                if (ros.length > 0) {
+                    ruim.checked = true;
+                    obs.value = `${ros.length} RO(s) em atraso: ${ros.map(r => r.ro).join(', ')}`;
+                    box.innerHTML = `<strong>🔴 Não atende — ${ros.length} RO(s) em atraso</strong>` +
+                        `<div style="margin-top:6px;">${ros.map(r => `<strong>RO ${escapeHtml(String(r.ro))}</strong> — em atraso desde ${escapeHtml(r.emAtraso || '-')}<br><span style="color:#64748b;">${escapeHtml(r.setor || '')}${r.unidade ? ' • ' + escapeHtml(r.unidade) : ''}</span>`).join('<div style="height:6px"></div>')}</div>`;
+                } else {
+                    atende.checked = true;
+                    obs.value = 'Nenhuma RO em atraso encontrada para o setor.';
+                    box.innerHTML = '<strong>🟢 Atende — nenhuma RO em atraso encontrada.</strong>';
+                }
+                calcularScore('auto');
+            } catch (erro) {
+                console.error('Erro ao consultar ROs:', erro);
+                box.innerHTML = `⚠️ Não foi possível consultar as ROs: ${escapeHtml(erro.message || String(erro))}`;
+                calcularScore('auto');
+            }
+        }
+
+        function formatarNumero(valor) {
+            const n = Number(valor);
+            if (!Number.isFinite(n)) return String(valor);
+            return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        function escapeHtml(valor) {
+            return String(valor == null ? '' : valor)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        async function carregarAuditoresEscalados(setorSelecionado) {
+            if (!URL_PLANILHA || !setorSelecionado) return;
+
+            const auditor1 = document.getElementById('auditor1');
+            const auditor2 = document.getElementById('auditor2');
+            const placeholderAuditor1 = auditor1.placeholder;
+            const placeholderAuditor2 = auditor2.placeholder;
+
+            auditor1.placeholder = 'Buscando auditor previsto...';
+            auditor2.placeholder = 'Buscando auditor previsto...';
+
+            try {
+                const resposta = await fetch(
+                    `${URL_PLANILHA}?tipo=escala&setor=${encodeURIComponent(setorSelecionado)}&mes=${encodeURIComponent((document.getElementById('data').value || '').split('-')[1] || '')}&_=${Date.now()}`,
+                    { method: 'GET', cache: 'no-store' }
+                );
+
+                if (!resposta.ok) throw new Error(`Erro HTTP ${resposta.status}`);
+
+                const escala = await resposta.json();
+                if (escala && escala.error) throw new Error(escala.error);
+
+                // Evita preencher dados de um setor anterior se a pessoa trocar rapidamente.
+                if (document.getElementById('setor').value !== setorSelecionado) return;
+
+                auditor1.value = escala && escala.aud1 ? String(escala.aud1).trim() : '';
+                auditor2.value = escala && escala.aud2 ? String(escala.aud2).trim() : '';
+            } catch (erro) {
+                console.error('Erro ao buscar auditores escalados:', erro);
+
+                if (document.getElementById('setor').value === setorSelecionado) {
+                    auditor1.value = '';
+                    auditor2.value = '';
+                }
+            } finally {
+                auditor1.placeholder = placeholderAuditor1;
+                auditor2.placeholder = placeholderAuditor2;
+            }
+        }
+
+        async function carregarAcoesReais() {
+            if(!URL_PLANILHA) return;
+            const setor = document.getElementById('setor').value;
+            const box = document.getElementById('boxPendentes'); const lista = document.getElementById('listaPendentes');
+            if(!setor) { box.style.display = 'none'; return; }
+            lista.innerHTML = "<p style='font-size:12px;'>Buscando ações...</p>"; box.style.display = 'block';
+            try {
+                const resp = await fetch(`${URL_PLANILHA}?setor=${encodeURIComponent(setor)}`);
+                const respostaAcoes = await resp.json();
+                if (respostaAcoes && respostaAcoes.error) throw new Error(respostaAcoes.error);
+                acoesPendentesCarregadas = Array.isArray(respostaAcoes) ? respostaAcoes : [];
+                if(acoesPendentesCarregadas.length) { 
+                    lista.innerHTML = acoesPendentesCarregadas.map((a, i) => `
+                        <div class="action-card">
+                            <strong class="action-desc">${a.descricao}</strong>
+                            <div class="action-meta">
+                                <span><strong>RESP:</strong> ${a.responsavel || '-'}</span>
+                                <span><strong>PRAZO:</strong> ${a.prazo || '-'}</span>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <div class="info-label">ATUALIZAR STATUS:</div>
+                                <select class="status-select" id="status-update-${i}">
+                                    <option value="${a.status}">${a.status}</option>
+                                    <option value="Concluído">✅ Concluído</option>
+                                    <option value="Em andamento">🟡 Em andamento</option>
+                                    <option value="Pendente">🔴 Pendente</option>
+                                    <option value="Cancelada">❌ Cancelada</option>
+                                    <option value="Depende de terceiro (Manutenção)">💜 Depende de terceiro</option>
+                                </select>
+                            </div>
+                        </div>`).join(''); 
+                } else { lista.innerHTML = "<p style='font-size:12px;'>Sem pendências registradas. 👏</p>"; }
+            } catch(e) { lista.innerHTML = "<p style='font-size:12px;'>Erro ao carregar ações.</p>"; }
+        }
+
+        async function salvarInspeccao() {
+            if(!URL_PLANILHA) return alert("Por favor, configure a URL no painel administrativo!");
+            const setor = document.getElementById('setor').value, aud1 = document.getElementById('auditor1').value;
+            if(!setor || !aud1) return alert("Por favor, preencha o Setor e pelo menos o Auditor 1!");
+            
+            const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
+            loading.style.display = 'flex';
+            loadingText.innerText = "Preparando dados...";
+
+            const statusUpdates = acoesPendentesCarregadas.map((a, i) => {
+                const controle = document.getElementById(`status-update-${i}`);
+                const newStatus = controle ? controle.value : a.status;
+                return newStatus !== a.status ? { row: a.row, itemId: a.item, newStatus: newStatus } : null;
+            }).filter(u => u !== null);
+
+            const insp = { 
+                setor, 
+                auditor1: aud1, 
+                auditor2: document.getElementById('auditor2').value, 
+                responsavel: document.getElementById('responsavel').value, 
+                data: document.getElementById('data').value, 
+                sensos: {}, 
+                itens: [], 
+                anexos: [], 
+                acoes: novasAcoesParaEnviar 
+            };
+            
+            loadingText.innerText = "Processando Checklist...";
+            const sensoMap = { 'utilizacao': ['1.1','1.2','1.3'], 'ordenacao': ['2.1','2.2','2.3','2.4'], 'limpeza': ['3.1','3.2'], 'padronizacao': ['4.1','4.2'], 'auto': ['5.1','5.2','5.3','5.4','5.5'] };
+            let totalPerc = 0;
+            for (let sId in sensoMap) {
+                let sP = 0;
+                sensoMap[sId].forEach(cod => {
+                    const r = document.querySelector(`input[name="${cod}"]:checked`), val = r ? parseFloat(r.value) : 0; sP += val;
+                    const obsEl = document.querySelector(`input[data-cod="${cod}"]`);
+                    let obsFinal = obsEl ? obsEl.value : "";
+                    if(cod === '5.2') { 
+                        const perg = document.getElementById('pergunta-5.2');
+                        const user = document.getElementById('auditado-5.2');
+                        const resp = document.getElementById('resposta-5.2');
+                        obsFinal = `[P: ${perg ? perg.value : ''}] [Auditado: ${user ? user.value : ''}] [Resp: ${resp ? resp.value : ''}] ` + obsFinal; 
+                    }
+                    insp.itens.push({ cod: cod, label: "Item "+cod, pontos: val, obs: obsFinal });
+                    const preview = document.getElementById('preview-' + cod);
+                    if(preview) {
+                        const images = preview.getElementsByTagName('img');
+                        for(let j=0; j<images.length; j++) {
+                            insp.anexos.push({ cod: cod, base64: images[j].src });
+                        }
+                    }
+                });
+                const perc = (sP / (sensoMap[sId].length * 3) * 100); insp.sensos[sId] = { nome: sId.toUpperCase(), perc: perc.toFixed(1), p: sP }; totalPerc += perc;
+            }
+            insp.media = (totalPerc / 5).toFixed(1);
+
+            loadingText.innerText = "Enviando dados...";
+            try {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = URL_PLANILHA;
+                form.target = 'hidden_iframe';
+                form.acceptCharset = 'UTF-8';
+                form.style.display = 'none';
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'data';
+                input.value = JSON.stringify({ inspecao: insp, statusUpdates: statusUpdates });
+                form.appendChild(input);
+                document.body.appendChild(form);
+                form.submit();
+                setTimeout(() => {
+                    if (loading.style.display !== 'none') {
+                        loadingText.innerText = 'Envio concluído. Verifique a planilha.';
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                }, 45000);
+            } catch(e) {
+                loading.style.display = 'none';
+                alert('Erro ao preparar o envio: ' + e.toString());
+            }
+        }
+
+        function gerarChecklistCompleto() {
+            const checklist = [
+                { id: 'utilizacao', nome: '1. SEIRI - SENSO DE UTILIZAÇÃO', itens: [
+                    { cod: '1.1', label: '1.1. Existem objetos ou materiais desnecessários no setor?', lembrete: 'Ferramentas, peças, materiais de expediente, objetos pessoais...' },
+                    { cod: '1.2', label: '1.2. Os avisos e informações expostos estão atualizados?', lembrete: 'Quadros, placas, ordens de produção, procedimentos...' },
+                    { cod: '1.3', label: '1.3. Existe desperdício de água, energia etc?', lembrete: 'Vazamentos, lâmpadas acesas sem necessidade, torneiras...' }
+                ]},
+                { id: 'ordenacao', nome: '2. SEITON - SENSO DE ORDENAÇÃO', itens: [
+                    { cod: '2.1', label: '2.1. Existem Identificações e Sinalizações adequada no setor?', lembrete: 'Áreas de circulação, extintores, painéis, máquinas...' },
+                    { cod: '2.2', label: '2.2. Os corredores e áreas de circulação estão desobstruídos?', lembrete: 'Livre acesso a extintores, painéis e rotas de fuga...' },
+                    { cod: '2.3', label: '2.3. Estão Definidos e são Adequados os locais para a guarda de recursos?', lembrete: 'Armários, bancadas, prateleiras, quadro sombra...' },
+                    { cod: '2.4', label: '2.4. Os objetos e ferramentas estão localizados em local apropriado?', lembrete: 'Pastas, ferramentas, EPIs, material de limpeza...' }
+                ]},
+                { id: 'limpeza', nome: '3. SEISO - SENSO DE LIMPEZA', itens: [
+                    { cod: '3.1', label: '3.1. Qual o nível de limpeza no local de trabalho?', lembrete: 'Sujeira do processo, bancadas, frestas, sob equipamentos...' },
+                    { cod: '3.2', label: '3.2. Qual o estado de conservação das Máquinas, instalações e Recursos?', lembrete: 'Vazamentos de óleo, paredes sujas, vidros, cortinas...' }
+                ]},
+                { id: 'padronizacao', nome: '4. SEIKETSU - SENSO DE PADRONIZAÇÃO', itens: [
+                    { cod: '4.1', label: '4.1. Qual o nível de organização e asseio dos funcionários?', lembrete: 'Uniforme, crachá, EPIs, cabelos presos, barba...' },
+                    { cod: '4.2', label: '4.2. As condições de Higiene e Segurança são mantidas?', lembrete: 'Banheiros, bebedouros, refeitório e áreas comuns...' }
+                ]},
+                { id: 'auto', nome: '5. SHITSUKE - SENSO DE AUTO DISCIPLINA', itens: [
+                    { cod: '5.1', label: '5.1. O lixo é descartado de forma correta?', lembrete: 'Lixeiros conforme identificação (orgânico, reciclável)...' },
+                    { cod: '5.3', label: '5.3. Informações e indicadores atualizados?', lembrete: 'Quadros de metas, OTIF, qualidade, auditoria 5S...' },
+                    { cod: '5.4', label: '5.4. Tratativa de problemas anteriores?', lembrete: 'Ações do plano anterior executadas ou em andamento...' },
+                    { cod: '5.5', label: '5.5. As ROs do setor são apresentadas dentro do prazo?', lembrete: 'Verificação automática das ROs que estavam em atraso na data da auditoria.' }
+                ]}
+            ];
+            let html = '';
+            checklist.forEach(senso => {
+                html += `<div class="senso-card"><div class="senso-header"><span class="senso-title">${senso.nome}</span><span class="senso-score" id="score-${senso.id}">0%</span></div>`;
+                senso.itens.forEach(it => {
+                    if (it.cod === '5.5') {
+                        html += `
+                        <div class="item" id="item-5.5" style="border-left: 4px solid #2563eb; background: #f8fbff;">
+                            <div class="item-label">${it.label}</div>
+                            <div class="item-lembrete">${it.lembrete}</div>
+                            <div class="radio-group">
+                                <label class="radio-wrapper"><input type="radio" name="5.5" value="0" disabled onchange="calcularScore('auto')"><div class="radio-label">🔴 Não atende</div></label>
+                                <label class="radio-wrapper"><input type="radio" name="5.5" value="3" disabled onchange="calcularScore('auto')"><div class="radio-label">🟢 Atende</div></label>
+                            </div>
+                            <input type="text" class="obs-input" data-cod="5.5" placeholder="ROs em atraso / observação..." readonly>
+                            <div id="ros-5.5" style="font-size:12px; margin-top:8px; color:#475569; line-height:1.55;">Selecione o setor para verificar as ROs.</div>
+                        </div>`;
+                        return;
+                    }
+
+                    html += `
+                    <div class="item">
+                        <div class="item-label">${it.label}</div>
+                        <div class="item-lembrete">${it.lembrete}</div>
+                        <div class="radio-group">
+                            <label class="radio-wrapper"><input type="radio" name="${it.cod}" value="0" onchange="calcularScore('${senso.id}')"><div class="radio-label">🔴 Ruim</div></label>
+                            <label class="radio-wrapper"><input type="radio" name="${it.cod}" value="1" onchange="calcularScore('${senso.id}')"><div class="radio-label">🟡 Regular</div></label>
+                            <label class="radio-wrapper"><input type="radio" name="${it.cod}" value="2" onchange="calcularScore('${senso.id}')"><div class="radio-label">🟢 Bom</div></label>
+                            <label class="radio-wrapper"><input type="radio" name="${it.cod}" value="3" onchange="calcularScore('${senso.id}')"><div class="radio-label">⭐ Excelente</div></label>
+                        </div>
+                        <input type="text" class="obs-input" data-cod="${it.cod}" placeholder="Observação...">
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '${it.cod}')"><div class="photo-preview" id="preview-${it.cod}"></div></div>
+                    </div>`;
+                });
+                if(senso.id === 'auto') {
+                    html += `
+                    <div class="item" style="border-left: 4px solid var(--primary); background: #fdfdfd;">
+                        <div class="item-label">5.2. Conhecimento sobre Qualidade e Valores (Entrevista)</div>
+                        <select id="pergunta-5.2" style="margin-bottom: 10px;">
+                            <option value="">Selecione a pergunta...</option>
+                            <option value="Quem é responsável pela qualidade?">1. Quem é responsável pela qualidade?</option>
+                            <option value="Sua participação na qualidade?">2. Sua participação na qualidade?</option>
+                            <option value="Valores da SETA?">3. Valores da SETA?</option>
+                            <option value="Explique um indicador.">4. Explique um indicador.</option>
+                        </select>
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px;">
+                            <input type="text" id="auditado-5.2" placeholder="Nome do colaborador">
+                            <div class="radio-group" style="margin-bottom: 0;">
+                                <label class="radio-wrapper"><input type="radio" name="5.2" value="0" onchange="calcularScore('auto')"><div class="radio-label">🔴 Ruim</div></label>
+                                <label class="radio-wrapper"><input type="radio" name="5.2" value="1" onchange="calcularScore('auto')"><div class="radio-label">🟡 Regular</div></label>
+                                <label class="radio-wrapper"><input type="radio" name="5.2" value="2" onchange="calcularScore('auto')"><div class="radio-label">🟢 Bom</div></label>
+                                <label class="radio-wrapper"><input type="radio" name="5.2" value="3" onchange="calcularScore('auto')"><div class="radio-label">⭐ Excelente</div></label>
+                            </div>
+                        </div>
+                        <textarea id="resposta-5.2" placeholder="Resposta do colaborador..." style="min-height: 60px; margin-bottom: 10px;"></textarea>
+                        <div class="photo-section"><label class="photo-btn" onclick="this.nextElementSibling.click()">📸 FOTO</label><input type="file" accept="image/*" capture="environment" style="display:none" onchange="addPhoto(this, '5.2')"><div class="photo-preview" id="preview-5.2"></div></div>
+                    </div>`;
+                }
+                html += `</div>`;
+            });
+            document.getElementById('checklistContent').innerHTML = html;
+        }
+
+        function openAdmin() { openModal('adminModal'); }
+        function checkLogin() {
+            if (document.getElementById('adminPass').value === "gabrielly2026") {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('configSection').style.display = 'block';
+                document.getElementById('configUrl').value = URL_PLANILHA;
+            } else alert("Senha incorreta!");
+        }
+        async function testConnection() {
+            const url = document.getElementById('configUrl').value.trim();
+            if (!/^https:\/\/script\.google\.com\/macros\/s\//.test(url)) return alert('Informe uma URL válida de implantação do Google Apps Script.');
+            URL_PLANILHA = url;
+            const salvo = gravarConfiguracaoLocal(url);
+            const aviso = document.getElementById('setupWarning');
+            if (aviso) aviso.style.display = 'none';
+            alert(salvo ? 'Configuração salva neste dispositivo.' : 'URL aplicada nesta sessão. O navegador bloqueou o armazenamento permanente.');
+            closeModal('adminModal');
+        }
+        function copyDirectLink() {
+            const url = window.location.href.split('?')[0] + '?config=' + encodeURIComponent(URL_PLANILHA);
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url);
+            alert('Link direto gerado. Compartilhe este endereço: ' + url);
+        }
+        function limparFormulario() { if(confirm("Deseja limpar todos os campos?")) location.reload(); }
+        
+        function calcularScore(sid) {
+            const sensoMap = { 'utilizacao': ['1.1','1.2','1.3'], 'ordenacao': ['2.1','2.2','2.3','2.4'], 'limpeza': ['3.1','3.2'], 'padronizacao': ['4.1','4.2'], 'auto': ['5.1','5.2','5.3','5.4','5.5'] };
+            const ids = sensoMap[sid]; let total = 0, count = 0;
+            ids.forEach(id => { const v = document.querySelector(`input[name="${id}"]:checked`); if(v) { total += parseFloat(v.value); count++; } });
+            const perc = count ? (total / (ids.length * 3) * 100).toFixed(1) : 0;
+            const el = document.getElementById(`score-${sid}`); el.textContent = perc + "%";
+            el.style.color = perc >= 90 ? '#16a34a' : perc >= 75 ? '#ca8a04' : '#dc2626';
+        }
+
+        function adicionarAcaoMemoria() {
+            const desc = document.getElementById('descricaoAcao').value;
+            if(!desc) return alert("Por favor, descreva a ação!");
+            novasAcoesParaEnviar.push({ descricao: desc });
+            document.getElementById('listaNovasAcoes').innerHTML += `<div style="padding:10px; background:#f0f9ff; border-radius:8px; margin-bottom:5px; border:1px solid #bae6fd; font-size:12px;"><strong>✅ ${desc}</strong></div>`;
+            document.getElementById('descricaoAcao').value = '';
+        }
+
+        async function addPhoto(input, cod) {
+            if(input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = new Image();
+                    img.onload = function() {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 600; const scaleSize = MAX_WIDTH / img.width;
+                        canvas.width = MAX_WIDTH; canvas.height = img.height * scaleSize;
+                        const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+                        const preview = document.getElementById(`preview-${cod}`);
+                        const div = document.createElement('div'); div.className = 'photo-item';
+                        div.innerHTML = `<img src="${dataUrl}"><button class="photo-remove" onclick="this.parentElement.remove()">X</button>`;
+                        preview.appendChild(div);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+    </script>
+
+
+    <script>
+        // PWA: instalação e atualização do aplicativo
+        let deferredInstallPrompt = null;
+        const installAppBtn = document.getElementById('installAppBtn');
+
+        window.addEventListener('beforeinstallprompt', (event) => {
+            event.preventDefault();
+            deferredInstallPrompt = event;
+            if (installAppBtn) installAppBtn.classList.add('show');
+        });
+
+        if (installAppBtn) {
+            installAppBtn.addEventListener('click', async () => {
+                if (!deferredInstallPrompt) return;
+                deferredInstallPrompt.prompt();
+                await deferredInstallPrompt.userChoice;
+                deferredInstallPrompt = null;
+                installAppBtn.classList.remove('show');
+            });
+        }
+
+        window.addEventListener('appinstalled', () => {
+            deferredInstallPrompt = null;
+            if (installAppBtn) installAppBtn.classList.remove('show');
+        });
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js').catch((err) => {
+                    console.error('Falha ao registrar o Service Worker:', err);
+                });
+            });
+        }
+    </script>
+
+
+    <script>
+      window.addEventListener('DOMContentLoaded',function(){
+        try{
+          const q=new URLSearchParams(location.search);
+          if(q.get('embedded')!=='1')return;
+          document.querySelectorAll('.admin-link,.about-btn-footer,#setupWarning').forEach(function(el){
+            if(el)el.style.display='none';
+          });
+        }catch(e){}
+      });
+    </script>
+    
+</body></html>

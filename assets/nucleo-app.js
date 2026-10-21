@@ -16521,7 +16521,7 @@ function restoreSideModules(){
 }
 function openModuleForNav(id){const m={navNewRo:'moduleRo',navMySubmittedRos:'moduleRo',navAssignedRos:'moduleRo',navSent:'moduleRo',navActions:'moduleRo',navPendingActions:'moduleRo',navTriage:'moduleRo',navContests:'moduleRo',navNewExternalRo:'moduleRo',navExternalRoControl:'moduleSac',navMySacs:'moduleSac',navSacTracking:'moduleSac',navPendingHub:'modulePersonal',navDocumentRequests:'modulePersonal',navIndicators:'moduleManagement',navAnnouncements:'moduleManagement',navEquipment:'moduleManagement',navTraining:'moduleManagement',navNcCapa:'moduleManagement',navDocuments:'moduleManagement',navProcesses:'moduleManagement'};if(m[id])setSideModuleOpen(m[id],true)}
 function setNav(which){
-  ['navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navAdmin'].forEach(function(id){
+  ['navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navAudit5s','navAdmin'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.classList.remove('active');
   });
@@ -16539,6 +16539,7 @@ function setNav(which){
     indicators:'navIndicators',
     pending:'navPendingActions',
     profile:'navProfile',
+    audit5s:'navAudit5s',
     admin:'navAdmin'
   };
 
@@ -16560,6 +16561,7 @@ function setNav(which){
       indicators:'Indicadores SGQ',
       pending:'Ações pendentes',
       profile:'Meu perfil',
+      audit5s:'Auditoria 5S',
       admin:'Administração'
     };
     crumb.textContent=labels[which] || 'Minhas R.O.s';
@@ -17620,7 +17622,7 @@ function view(id){
   const sacModal=document.getElementById('externalRoControlModalOverlay');
   if(sacModal)sacModal.classList.remove('open');
   document.body.style.overflow='';
-  ['pdcaImportView','listView','roListView','adminModuleView','mySubmittedRosView','detailView','pdcaView','sentView','pdcaReportView','pendingHubView','actionsDashboardView','triageView','externalRoControlView','mySacsView','sacTrackingView','contestationsView','sgqIndicatorsView','managementView','pendingActionsView','profileView','announcementsView','settingsView'].forEach(function(x){
+  ['pdcaImportView','listView','roListView','audit5sView','adminModuleView','mySubmittedRosView','detailView','pdcaView','sentView','pdcaReportView','pendingHubView','actionsDashboardView','triageView','externalRoControlView','mySacsView','sacTrackingView','contestationsView','sgqIndicatorsView','managementView','pendingActionsView','profileView','announcementsView','settingsView'].forEach(function(x){
     var el=document.getElementById(x);
     if(el) el.classList.add('hidden');
   });
@@ -18313,6 +18315,74 @@ function renderCurrentOverview(){
     renderOverviewPriorities([]);
     renderCustomOverviewQuickLinks();
   }
+}
+
+
+function nucleo5sNormalizeUnit(value){
+  const n=normalizeAnswer(String(value||''));
+  if(n.includes('linhares')||n.includes('seta es')||n==='filial')return 'filial';
+  return 'matriz';
+}
+
+function nucleo5sSessionUnit(){
+  const s=getSession()||{};
+  return nucleo5sNormalizeUnit(s.unit||s.unidade||'matriz');
+}
+
+function nucleo5sConfig(unit){
+  const cfg=window.NUCLEO_RUNTIME_CONFIG||{};
+  const isFilial=unit==='filial';
+  return {
+    unit,
+    url:isFilial
+      ? String(cfg.audit5sEsUrl||'').trim()
+      : String(cfg.audit5sScUrl||'').trim(),
+    page:isFilial?'assets/5s/es/index.html':'assets/5s/sc/index.html'
+  };
+}
+
+function nucleoOpen5SUnit(unit){
+  unit=unit==='filial'?'filial':'matriz';
+  const cfg=nucleo5sConfig(unit);
+  const frame=document.getElementById('audit5sFrame');
+  const notice=document.getElementById('audit5sConfigNotice');
+  const matrizBtn=document.getElementById('audit5sMatrizBtn');
+  const filialBtn=document.getElementById('audit5sFilialBtn');
+
+  if(matrizBtn)matrizBtn.className='btn '+(unit==='matriz'?'primary':'secondary');
+  if(filialBtn)filialBtn.className='btn '+(unit==='filial'?'primary':'secondary');
+
+  if(!cfg.url){
+    if(frame)frame.removeAttribute('src');
+    if(notice){
+      notice.classList.remove('hidden');
+      notice.innerHTML='<b>Integração 5S da '+(unit==='filial'?'Filial':'Matriz')+' ainda não configurada.</b>'+
+        '<div class="small" style="margin-top:5px">Configure a URL central do Apps Script desta auditoria no GitHub e publique novamente. Nenhuma configuração por navegador será solicitada.</div>';
+    }
+    return;
+  }
+
+  if(notice)notice.classList.add('hidden');
+
+  const src=new URL(cfg.page,document.baseURI);
+  src.searchParams.set('embedded','1');
+  src.searchParams.set('config',cfg.url);
+  src.searchParams.set('nucleoUnit',unit);
+  const session=getSession()||{};
+  if(session.name)src.searchParams.set('auditor',String(session.name));
+
+  if(frame)frame.src=src.toString();
+}
+
+function showAudit5S(){
+  view('audit5sView');
+  setNav('audit5s');
+
+  const switcher=document.getElementById('audit5sUnitSwitcher');
+  if(switcher)switcher.style.display=isAdmin()?'flex':'none';
+
+  nucleoOpen5SUnit(nucleo5sSessionUnit());
+  window.scrollTo({top:0,behavior:'instant'});
 }
 
 function showList(){

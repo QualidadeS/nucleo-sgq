@@ -1,1 +1,1 @@
-window.NUCLEO_RUNTIME_CONFIG = Object.freeze({ apiUrl: '' });
+window.NUCLEO_RUNTIME_CONFIG = Object.freeze({ apiUrl: '', audit5sScUrl: '', audit5sEsUrl: "https://script.google.com/macros/s/AKfycbyAJJYri_gEOzPmj6gQXz97srltW9oS68wSHRmnuJwyCvF7pLDtuw6rAJl33ctFX7WJpw/exec" });
