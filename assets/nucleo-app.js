@@ -16437,6 +16437,21 @@ function currentUserCanRespondAssignedRo(ro,tri){
 
 let roListVisibleLimit=60;
 let roListFilterSignature='';
+let assignedLifecycle='active';
+function setAssignedLifecycle(mode){
+  assignedLifecycle=mode==='history'?'history':'active';
+  const active=document.getElementById('assignedActiveTab');
+  const history=document.getElementById('assignedHistoryTab');
+  if(active)active.className='btn '+(assignedLifecycle==='active'?'primary':'secondary');
+  if(history)history.className='btn '+(assignedLifecycle==='history'?'primary':'secondary');
+  const f=document.getElementById('filter');
+  if(f)f.value='todas';
+  render();
+}
+function assignedTerminalStatus(status){
+  const s=normalizeAnswer(status||'');
+  return ['cancelada','cancelado','registro','somente para registro','obsoleto','obsoleta'].includes(s);
+}
 function showMoreRos(){roListVisibleLimit+=60;render()}
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
@@ -16448,7 +16463,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
-  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit]);
+  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit,assignedLifecycle]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
 
@@ -16533,11 +16548,18 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
-        // R.O. que já possui PDCA recebido/importado não é mais pendência de
-        // "R.O.s atribuídas". Ela passa a ser acompanhada em PDCAs recebidos/Ações.
-        // A checagem considera tanto pdca_sent quanto PDCA externo/arquivo central.
-        const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
-        if(pdcaJaRecebido)return false;
+        const displayStatusNow=assignedRoStatus(r,renderTriageMap);
+        const encerrada=assignedTerminalStatus(displayStatusNow);
+
+        // Em andamento: não mostra encerradas e nem R.O. que já avançou para PDCA.
+        // Histórico: mostra somente Cancelada / Registro / Obsoleto.
+        if(assignedLifecycle==='history'){
+          if(!encerrada)return false;
+        }else{
+          if(encerrada)return false;
+          const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
+          if(pdcaJaRecebido)return false;
+        }
 
         const tri=getRoTriageRecord(r,renderTriageMap);
         const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
@@ -17470,8 +17492,11 @@ function populateAssignedRoFilters(){
 function showAssignedRos(){
   if(!nucleoFeatureRequire('ros','assigned'))return;
   roListMode='assigned';
+  assignedLifecycle='active';
   view('roListView');
   setNav('assigned');
+  const activeTab=document.getElementById('assignedActiveTab');if(activeTab)activeTab.className='btn primary';
+  const historyTab=document.getElementById('assignedHistoryTab');if(historyTab)historyTab.className='btn secondary';
   const extra=document.getElementById('assignedExtraFilters');
   if(extra)extra.style.display='flex';
   populateAssignedRoFilters();
