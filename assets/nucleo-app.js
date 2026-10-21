@@ -1449,8 +1449,31 @@ async function syncPortalBackend(showMessage=false,options={}){
   updateBackendStatus(null,'Sincronizando...');
   if(foreground)await showNucleoLoading(options.loadingMessage||'Carregando dados da base central...','Carregando NÚCLEO');
   try{
-    const res=await portalJsonp({acao:'portal_load'});
-    if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
+    // A base central hoje reúne R.O.s, PDCAs, usuários, auditoria, histórico de
+    // e-mails, equipamentos etc. Em produção esta resposta pode ultrapassar 60 s.
+    // Não transformar um timeout curto em "dados locais — atualização falhou".
+    let res=null;
+    let lastCentralError=null;
+
+    for(let attempt=1;attempt<=2;attempt++){
+      try{
+        res=await portalJsonp({acao:'portal_load'},180000);
+        if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
+        if(res)break;
+      }catch(loadErr){
+        lastCentralError=loadErr;
+        if(attempt<2){
+          updateBackendStatus(null,'Base central demorou para responder. Confirmando novamente...');
+          nucleoSetCentralSyncState(
+            'syncing',
+            'As R.O.s já foram atualizadas. Confirmando os demais dados da base central...'
+          );
+          await new Promise(resolve=>setTimeout(resolve,1800));
+        }
+      }
+    }
+
+    if(!res)throw (lastCentralError||new Error('A base central não retornou os dados.'));
     applyPortalBackendSnapshot(res);
     nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',res?.atualizadoEm||'');
     updateBackendStatus(true,'Base central conectada.');
@@ -1487,9 +1510,23 @@ async function syncPortalBackend(showMessage=false,options={}){
     if(showMessage)alert('Base central sincronizada.');
     return true;
   }catch(e){
-    nucleoSetCentralSyncState('error','Falha ao confirmar a base central: '+(e.message||String(e)));
-    updateBackendStatus(false,e.message||String(e));
-    if(showMessage)alert('Não foi possível sincronizar: '+(e.message||e));
+    const roStatusText=String(document.getElementById('syncMsg')?.textContent||'');
+    const freshRos=/R\.O\.s.*atualizad|carregada\(s\)/i.test(roStatusText);
+
+    if(freshRos){
+      nucleoSetCentralSyncState(
+        'syncing',
+        'As R.O.s estão atualizadas. Os demais dados da base central ainda estão sendo confirmados: '+(e.message||String(e))
+      );
+      updateBackendStatus(null,'R.O.s atualizadas; confirmação complementar pendente.');
+      // Uma nova confirmação acontece em segundo plano sem bloquear a tela.
+      setTimeout(()=>syncPortalBackend(false,{foreground:false}).catch(()=>{}),5000);
+    }else{
+      nucleoSetCentralSyncState('error','Falha ao confirmar a base central: '+(e.message||String(e)));
+      updateBackendStatus(false,e.message||String(e));
+    }
+
+    if(showMessage&&!freshRos)alert('Não foi possível sincronizar: '+(e.message||e));
     return false;
   }finally{
     if(foreground)hideNucleoLoading(true);
