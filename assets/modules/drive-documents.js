@@ -85,14 +85,17 @@ async function nucleoDriveIdentify(bytes,name){
 function nucleoDriveParse(text,name){
  const lines=String(text||'').split('\n'),filename=String(name||'').replace(/\.pdf$/i,'');
  const fileMatch=filename.match(/^(.*?)\bR\.?\s*O\.?[-_ ]+([\d\s,;eE]+)[-_ ]+(intern[oa]|extern[oa])(?:[-_ ]+(.*))?$/i);
+ const looseFileRo=filename.match(/^(.*?)\bR\.?\s*O\.?[-_ ]+([\d\s,;eE]+?)(?=[-_ ]+\d{1,2}[-_.]\d{1,2}[-_.]\d{2,4}|$)/i);
  const field=label=>{const line=lines.find(l=>new RegExp(label,'i').test(l))||'';const match=line.match(new RegExp(label+'\\s*:?\\s*(.*?)(?=\\s+(?:Setor|Tipo de|R\\.?O|Cliente|Data|Respons[aá]vel)\\s*:?|$)','i'));const value=match?.[1]?.trim()||'';return /^(?:Setor:?|Tipo de.*|Cliente:?|Respons[aá]vel:?)$/i.test(value)?'':value;};
- let numberText=fileMatch?.[2]||'';
+ let numberText=fileMatch?.[2]||looseFileRo?.[2]||'';
  if(!numberText){const line=lines.find(l=>/\bR\.?\s*O\.?[-_ ]*:?\s*\d/i.test(l))||'';const match=line.match(/\bR\.?\s*O\.?[-_ ]*:?\s*([\d\s,;eE]+)/i);numberText=match?.[1]||'';}
  const numbers=[...new Set((numberText.match(/\d+/g)||[]).map(x=>String(Number(x))))];
  const source=fileMatch?.[3]||text+' '+name;
  const origin=/\bextern[oa]\b|\bRO[-_ ]EX[-_ ]/i.test(source)?'Externa':/\bintern[oa]\b|\bRO[-_ ]IN[-_ ]/i.test(source)?'Interna':'';
- const fileSector=fileMatch?fileMatch[1].replace(/[-_,\s]+$/,''):'';
- return {numbers,origin,sector:fileSector||field('Setor'),responsible:fileMatch?.[4]?.trim()||field('Respons[aá]vel'),client:field('Cliente'),date:field('Data')};
+ const fileSector=(fileMatch?.[1]||looseFileRo?.[1]||'').replace(/[-_,\s]+$/,'');
+ const fileDate=(filename.match(/(?:^|[-_ ])(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})(?:$|[-_ ])/)||[]);
+ const dateFromName=fileDate.length?fileDate[1].padStart(2,'0')+'/'+fileDate[2].padStart(2,'0')+'/'+fileDate[3]:'';
+ return {numbers,origin,sector:fileSector||field('Setor'),responsible:fileMatch?.[4]?.trim()||field('Respons[aá]vel'),client:field('Cliente'),date:field('Data')||dateFromName};
 }
 function nucleoDriveCandidates(){return getAllRoRecords().filter(r=>explicitRecordUnit(r)===nucleoDriveState.unit);}
 function nucleoDriveRoIdentity(r){
@@ -105,19 +108,33 @@ function nucleoDriveRoIdentity(r){
 }
 function nucleoDrivePrepareLinks(){
  if(nucleoDriveState.previousId)return;
- const p=nucleoDriveState.parsed,candidates=nucleoDriveCandidates();nucleoDriveState.links=[];
+ const p=nucleoDriveState.parsed||{},candidates=nucleoDriveCandidates();nucleoDriveState.links=[];
+ const addNumber=n=>{
+  const matches=new Map();
+  candidates.forEach(r=>{const id=nucleoDriveRoIdentity(r);if(id.number===Number(n)&&(!p.origin||id.origin===p.origin))matches.set(id.key,r);});
+  let match=null;
+  if(matches.size===1)match=[...matches.values()][0];
+  else if(matches.size>1&&nucleoDriveState.preselectedRo){
+   const preferred=[...matches.values()].find(r=>String(r.numero||r.id||r.codigo)===String(nucleoDriveState.preselectedRo));
+   if(preferred)match=preferred;
+  }
+  const ro=match?(match.numero||match.id||match.codigo):'';
+  const directed=ro?nucleoDriveSectors(String(ro)):[];
+  let sector=(String(ro)===String(nucleoDriveState.preselectedRo)?nucleoDriveState.preselectedSector:'')||p.sector||((directed.length===1)?directed[0]:'');
+  const warn=match?'':matches.size>1?'Mais de uma R.O. encontrada. Selecione o vínculo correto.':'R.O. não encontrada nos dados carregados desta unidade. Confira a unidade e a sincronização antes de selecionar.';
+  nucleoDriveState.links.push({ro,sector,sectorConfirmed:Boolean(sector),identifiedNumber:String(n),identifiedOrigin:p.origin||'',matchWarning:warn});
+ };
+ const numbers=[...new Set((p.numbers||[]).map(x=>String(Number(x))).filter(x=>x&&x!=='NaN'))];
  if(nucleoDriveState.preselectedRo){
+  const pre=nucleoDriveRoIdentity({numero:nucleoDriveState.preselectedRo});
+  if(pre.number!=null&&!numbers.includes(String(pre.number)))numbers.unshift(String(pre.number));
+ }
+ if(numbers.length)numbers.forEach(addNumber);
+ else if(nucleoDriveState.preselectedRo){
   const directed=nucleoDriveSectors(nucleoDriveState.preselectedRo);
   const sector=nucleoDriveState.preselectedSector||((directed.length===1)?directed[0]:'');
   nucleoDriveState.links.push({ro:nucleoDriveState.preselectedRo,sector,sectorConfirmed:Boolean(sector)});
-  return;
  }
- p.numbers.forEach(n=>{
-  const matches=new Map();
-  candidates.forEach(r=>{const id=nucleoDriveRoIdentity(r);if(id.number===Number(n)&&(!p.origin||id.origin===p.origin))matches.set(id.key,r);});
-  const match=matches.size===1?[...matches.values()][0]:null;
-  nucleoDriveState.links.push({ro:match?(match.numero||match.id||match.codigo):'',sector:p.sector,identifiedNumber:n,identifiedOrigin:p.origin,matchWarning:match?'':matches.size>1?'Mais de uma R.O. encontrada. Selecione o vínculo correto.':'R.O. não encontrada nos dados carregados desta unidade. Confira a unidade e a sincronização antes de selecionar.'});
- });
 }
 function nucleoDriveSectors(ro){
  const sectors=getTriageRecordsForRoNumber(ro).map(t=>t.responsibleSector||t.sector||t.setor||t.directedSector||'');
