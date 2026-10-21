@@ -16533,6 +16533,12 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
+        // R.O. que já possui PDCA recebido/importado não é mais pendência de
+        // "R.O.s atribuídas". Ela passa a ser acompanhada em PDCAs recebidos/Ações.
+        // A checagem considera tanto pdca_sent quanto PDCA externo/arquivo central.
+        const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
+        if(pdcaJaRecebido)return false;
+
         const tri=getRoTriageRecord(r,renderTriageMap);
         const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
         const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
