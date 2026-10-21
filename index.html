@@ -2805,6 +2805,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
         <button class="side-item side-independent-module" id="navTraining" onclick="showAdminOperationalModule('training')"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><path d="m3 8 9-4 9 4-9 4-9-4Z"/><path d="M7 10.5V15c3 2 7 2 10 0v-4.5M21 8v7"/></svg></span><span><b>Treinamentos e competências</b><small>Treinamentos, reciclagens e histórico</small></span></button>
         <button class="side-item side-independent-module" id="navNcCapa" onclick="showAdminOperationalModule('nccapa')"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><span><b>Não conformidades e CAPA</b><small>Relatório independente e ações</small></span></button>
         <button class="side-item side-independent-module" id="navProcesses" onclick="showAdminOperationalModule('processes')"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M7 8l4 8M17 8l-4 8"/></svg></span><span><b>Gestão de processos</b><small>IT, GSP, POP, LPP e documentos internos</small></span></button>
+        <button class="side-item side-independent-module" id="navAudit5s" type="button" onclick="showAudit5S()"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="m8 9 2 2 4-4M8 15h8"/></svg></span><span><b>Auditoria 5S</b><small>Auditorias, ações e resultados</small></span></button>
         <button class="side-item side-independent-module" id="navIndicators" type="button" onclick="showSgqIndicators()" style="display:none"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span><b>Indicadores SGQ</b><small>Visão consolidada</small></span></button>
         <button class="side-item side-independent-module" id="navAnnouncements" type="button" onclick="showAnnouncementsAdmin()" style="display:none"><span class="side-num side-icon"><svg viewBox="0 0 24 24"><path d="M4 10v4h4l8 4V6l-8 4H4Z"/><path d="M8 14l2 6M19 9c1 1 1 5 0 6"/></svg></span><span><b>Comunicados</b><small>Avisos gerais do SGQ</small></span></button>
       
@@ -2909,6 +2910,23 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th aria-label="Visualizar R.O."></th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
   <div id="roListMore" class="small" style="margin-top:12px;text-align:center"></div>
 </section>
+
+<section id="audit5sView" class="card hidden" style="padding:0;overflow:hidden">
+  <div style="padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <div>
+      <div class="overview-eyebrow">QUALIDADE</div>
+      <h2 style="margin:4px 0 0">Auditoria 5S</h2>
+      <p class="small" style="margin:5px 0 0">Realize a auditoria da unidade e acompanhe ações diretamente no Núcleo.</p>
+    </div>
+    <div id="audit5sUnitSwitcher" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button id="audit5sMatrizBtn" class="btn secondary" type="button" onclick="nucleoOpen5SUnit('matriz')">Matriz</button>
+      <button id="audit5sFilialBtn" class="btn secondary" type="button" onclick="nucleoOpen5SUnit('filial')">Filial</button>
+    </div>
+  </div>
+  <div id="audit5sConfigNotice" class="hidden" style="margin:16px;padding:14px;border:1px solid #f3c86b;background:#fff8e6;border-radius:12px"></div>
+  <iframe id="audit5sFrame" title="Auditoria 5S" style="width:100%;height:calc(100vh - 165px);min-height:760px;border:0;background:#fff"></iframe>
+</section>
+
 <section id="mySubmittedRosView" class="card hidden">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
     <div>
