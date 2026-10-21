@@ -8442,20 +8442,44 @@ function nucleoPdcaReviewHasEvidence2026(ro){
   if(!target)return false;
   return getAllSentPdcas().some(p=>nucleoPdcaReviewCanonical2026(p?.ro||p?.roId||'',p?.origin||p?.origemBase||'')===target);
 }
+function nucleoPdcaReviewOwnTerminal2026(ro){
+  const status=normalizeAnswer(ro?.statusPlanilha||ro?.status||ro?.raw?.__statusOperacional||'');
+  return status.includes('registro')||status.includes('cancel')||status.includes('obsolet');
+}
+function nucleoPdcaReviewGroupKey2026(ro){
+  const canonical=nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(ro),String(ro?.origemBase||ro?.raw?.__origemBase||''));
+  const unit=normalizePortalUnit(explicitRecordUnit(ro)||ro?.unidade||'');
+  return canonical+(unit?'|'+unit:'');
+}
+function nucleoPdcaPreferredRo2026(items,triageMap=null){
+  const list=(items||[]).filter(Boolean);if(!list.length)return null;
+  const active=list.filter(r=>!nucleoPdcaReviewOwnTerminal2026(r));
+  const pool=active.length?active:list;
+  return pool.slice().sort((a,b)=>{
+    const sectorScore=r=>{const v=String(r?.setorResponsavelPlanilha||r?.raw?.__setorResponsavel||r?.setor||'').trim();return v&&!['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(v))?1:0;};
+    const evidenceScore=r=>nucleoPdcaReviewHasEvidence2026(r)?1:0;
+    const da=nucleoPdcaReviewDate2026(a)?.getTime()||0,db=nucleoPdcaReviewDate2026(b)?.getTime()||0;
+    return (evidenceScore(b)-evidenceScore(a))||(sectorScore(b)-sectorScore(a))||(db-da);
+  })[0];
+}
 function nucleoPdcaReviewCandidates2026(){
   const cutoff=new Date(2026,0,1,0,0,0,0),triageMap=getSavedTriageMap(),review=nucleoPdcaReviewMap2026();
-  const seen=new Set(),out=[];
+  const groups=new Map(),out=[];
   getAllRoRecords().forEach(ro=>{
     const key=nucleoPdcaReviewRoKey2026(ro);if(!key)return;
     const d=nucleoPdcaReviewDate2026(ro);if(!d||d<cutoff)return;
+    const groupKey=nucleoPdcaReviewGroupKey2026(ro);if(!groupKey)return;
+    const arr=groups.get(groupKey)||[];arr.push(ro);groups.set(groupKey,arr);
+  });
+  groups.forEach(items=>{
+    const ro=nucleoPdcaPreferredRo2026(items,triageMap);if(!ro)return;
+    const key=nucleoPdcaReviewRoKey2026(ro),d=nucleoPdcaReviewDate2026(ro);
     const canonical=nucleoPdcaReviewCanonical2026(key,String(ro?.origemBase||ro?.raw?.__origemBase||''));
-    if(!canonical||seen.has(canonical))return;seen.add(canonical);
-    if(nucleoPdcaReviewTerminal2026(ro,triageMap))return;
+    const hasActiveDuplicate=items.some(x=>!nucleoPdcaReviewOwnTerminal2026(x));
+    if(!hasActiveDuplicate&&nucleoPdcaReviewTerminal2026(ro,triageMap))return;
     const manual=review[canonical];
     const hasEvidence=nucleoPdcaReviewHasEvidence2026(ro);
-    if(hasEvidence && manual?.decision!=='yes'){
-      review[canonical]={decision:'yes',automatic:true,at:new Date().toISOString(),by:'Núcleo',ro:key};
-    }
+    if(hasEvidence && manual?.decision!=='yes')review[canonical]={decision:'yes',automatic:true,at:new Date().toISOString(),by:'Núcleo',ro:key};
     if(!review[canonical])out.push({ro,key,canonical,date:d});
   });
   nucleoSavePdcaReviewMap2026(review);
@@ -8479,7 +8503,9 @@ async function nucleoPdcaReviewPersist2026(ro,decision){
 }
 async function nucleoMarkPdcaReview2026(roKey,origin,decision){
   if(!nucleoFeatureRequire('pdca','import'))return;
-  const ro=findRoByAnyNumber(roKey,origin)||getAllRoRecords().find(r=>nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''))===nucleoPdcaReviewCanonical2026(roKey,origin));
+  const target=nucleoPdcaReviewCanonical2026(roKey,origin);
+  const matches=getAllRoRecords().filter(r=>nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''))===target);
+  const ro=nucleoPdcaPreferredRo2026(matches,getSavedTriageMap())||findRoByAnyNumber(roKey,origin);
   if(!ro){alert('R.O. não encontrada. Sincronize e tente novamente.');return;}
   try{
     await nucleoPdcaReviewPersist2026(ro,decision);
@@ -16321,7 +16347,16 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     });
   }
 
-  const assignedSource = roListMode==='assigned' ? ros.flatMap(r=>{
+  const assignedBaseRos = roListMode==='assigned' ? (()=>{
+    const grouped=new Map();
+    ros.forEach(r=>{
+      const k=nucleoPdcaReviewGroupKey2026(r)||[String(r.numero||r.id||r.codigo||''),String(r.origemBase||''),String(r.unidade||'')].join('|');
+      const arr=grouped.get(k)||[];arr.push(r);grouped.set(k,arr);
+    });
+    return [...grouped.values()].map(items=>nucleoPdcaPreferredRo2026(items,renderTriageMap)).filter(Boolean);
+  })() : ros;
+
+  const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
     const confirmed=resolvedTriageForRo(r,renderTriageMap);
@@ -16410,6 +16445,19 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const pdcaSituation=pdcaSituationLabel(r,renderTriageMap);
     const displayStatus=assignedRoStatus(r,renderTriageMap);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus,renderTriageMap);
+    const reviewCanonical=nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''));
+    const reviewState=nucleoPdcaReviewMap2026()[reviewCanonical];
+    const reviewDate=nucleoPdcaReviewDate2026(r);
+    const review2026Eligible=admin&&reviewDate&&reviewDate>=new Date(2026,0,1)&&!nucleoPdcaReviewOwnTerminal2026(r);
+    const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
+    const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
+    const pdcaReviewAction=review2026Eligible&&!reviewDecision
+      ? `<div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn primary" style="padding:5px 8px;font-size:11px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${escapeHtml(nucleoPdcaReviewRoKey2026(r))}','${escapeHtml(String(r.origemBase||r.raw?.__origemBase||''))}','yes')">Tem PDCA</button><button class="btn secondary" style="padding:5px 8px;font-size:11px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${escapeHtml(nucleoPdcaReviewRoKey2026(r))}','${escapeHtml(String(r.origemBase||r.raw?.__origemBase||''))}','no')">Não tem PDCA</button></div>`
+      : review2026Eligible&&reviewDecision==='no'
+        ? '<span class="status-badge answered">Sem PDCA</span>'
+        : review2026Eligible&&reviewDecision==='yes'
+          ? '<span class="status-badge answered">Tem PDCA</span>'
+          : '';
 
     let operationalActions='';
     const canRespondHere=currentUserCanRespondAssignedRo(r,tri);
@@ -16448,7 +16496,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r,renderTriageMap))}</td>
       <td>${statusControl}</td>
-      <td class="ro-eye-cell"><div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
+      <td class="ro-eye-cell"><div class="ro-row-actions" style="align-items:center;flex-wrap:wrap">${pdcaReviewAction}<button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
       ${operationalActions}
     </tr>`;
   }).join('');
