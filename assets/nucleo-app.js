@@ -1176,6 +1176,11 @@ const NUCLEO_SHARED_USER_KEYS=new Set([
   'portal-sgq-pdca-started-v1'
 ]);
 let nucleoApplyingCentralState=false;
+// Estado operacional de PDCA em memória, sempre vindo da base central.
+// localStorage pode existir para preferências/cache de outros módulos, mas não é fonte de verdade para PDCAs recebidos/entregues.
+let nucleoCentralPdcaSent=[];
+let nucleoCentralPdcaDispatches=[];
+let nucleoCentralPdcaSnapshotReady=false;
 const nucleoNativeStorageSetItem=Storage.prototype.setItem;
 function nucleoSharedStateUserKey(){
   try{return String(notificationUserKey?.()||getSession?.()?.email||getSession?.()?.name||'anon').trim().toLowerCase()||'anon'}catch(e){return 'anon'}
@@ -1223,7 +1228,7 @@ function applyPortalBackendSnapshot(snapshot){
   if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
   if(Array.isArray(data.unitConfigs))localStorage.setItem('nucleo-unit-configs',JSON.stringify(data.unitConfigs));
   if(Array.isArray(data.fixedEmailCopies)){localStorage.setItem('nucleo-fixed-email-copies',JSON.stringify(data.fixedEmailCopies));loadFixedEmailCopies();}
-  if(Array.isArray(data.pdcaDispatches))localStorage.setItem('nucleo-pdca-dispatches-v1',JSON.stringify(data.pdcaDispatches));
+  if(Array.isArray(data.pdcaDispatches))nucleoCentralPdcaDispatches=data.pdcaDispatches.map(x=>({...x}));
   if(Array.isArray(data.claimantBindings))localStorage.setItem('nucleo-claimant-bindings-v1',JSON.stringify(data.claimantBindings));
   // A base central vence qualquer cache antigo deste navegador.
   nucleoApplySharedState(data.sharedState);
@@ -1308,7 +1313,7 @@ function applyPortalBackendSnapshot(snapshot){
     localStorage.setItem(PDCA_DRAFTS_KEY,JSON.stringify(map));
   }
   if(Array.isArray(data.savedFilters))localStorage.setItem(SAVED_FILTERS_KEY,JSON.stringify(data.savedFilters));
-  if(Array.isArray(data.pdcaSent)){localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent));try{localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data.pdcaSent))}catch(e){}}
+  if(Array.isArray(data.pdcaSent)){nucleoCentralPdcaSent=data.pdcaSent.map(x=>({...x}));nucleoCentralPdcaSnapshotReady=true;}
   if(Array.isArray(data.favorites)){
     const mine=data.favorites.find(x=>String(x.userKey||x.id||'')===notificationUserKey());
     if(mine&&Array.isArray(mine.items))localStorage.setItem(FAVORITES_KEY,JSON.stringify(mine.items));
@@ -4294,16 +4299,10 @@ function removeOperationalUser(i){
   users.splice(i,1);saveOperationalUsers(users);
 }
 function getSentPdcas(){
-  let data;
-  try{data=JSON.parse(localStorage.getItem(SENT_PDCA_KEY)||'null');}catch(e){}
-  if(!Array.isArray(data)){
-    data=[
-      {id:'PDCA-00031',ro:'RO-00131',responsavel:'Responsável Produção',email:'responsavel@empresa.com',unidade:'Matriz',setor:'Produção',cliente:'Cliente Alfa',envio:'01/09/2026 14:22',status:'Concluído',answers:{"p1": "Foi identificada variação dimensional na embalagem durante a inspeção final.", "p2": "Risco de reprovação do lote, retrabalho e atraso na expedição.", "p3": "Linha de produção 02, etapa de selagem.", "p4": "Ocorreu em 3 lotes no período de duas semanas.", "p5": "Método de ajuste não padronizado e variação no parâmetro da seladora.", "p6": "O ajuste dependia da experiência do operador e não havia faixa de referência visível no equipamento.", "p7": "Ausência de padrão documentado e visual para regulagem do parâmetro crítico.", "p8": "Padronizar a regulagem e reduzir a zero as ocorrências do mesmo desvio nos próximos 30 dias.", "p9": "30 dias.", "p10": "Concluída.", "p11": "Criar padrão visual de regulagem, revisar instrução de trabalho e treinar os operadores.", "p12": "Até 31/08/2026.", "p13": "Liderança da Produção.", "p14": "Risco de redução de produtividade durante o período inicial de adaptação.", "d1": "Sim. Todos os operadores dos turnos envolvidos participaram do treinamento.", "d2": "Sim. Foi realizada verificação prática após o treinamento.", "d3": "Concluído.", "d4": "Sim. Materiais, tempo de parada e suporte da manutenção foram disponibilizados.", "d5": "Checklist de regulagem por turno e registro de desvios na folha de processo.", "c1": "Sim. Não houve reincidência nos lotes acompanhados após a implantação.", "c2": "Sim. O processo permaneceu dentro do padrão durante o período de verificação.", "c3": "Não foram identificados efeitos colaterais relevantes.", "a1": "Sim. A instrução de trabalho foi revisada e o padrão visual foi fixado no equipamento.", "a2": "Auditoria semanal durante 30 dias e, depois, verificação mensal do cumprimento do padrão.", "a3": "Sim.", "a4": "Padronizações visuais próximas ao ponto de operação reduzem dependência de conhecimento informal."}},
-      {id:'PDCA-00028',ro:'RO-00128',responsavel:'Usuário Logística',email:'logistica@empresa.com',unidade:'Filial',setor:'Logística',cliente:'Cliente Beta',envio:'28/08/2026 09:10',status:'Em análise',answers:{"p1": "Resposta registrada para demonstração.", "p2": "Resposta registrada para demonstração.", "p3": "Resposta registrada para demonstração.", "p4": "Resposta registrada para demonstração.", "p5": "Resposta registrada para demonstração.", "p6": "Resposta registrada para demonstração.", "p7": "Resposta registrada para demonstração.", "p8": "Resposta registrada para demonstração.", "p9": "Resposta registrada para demonstração.", "p10": "Resposta registrada para demonstração.", "p11": "Resposta registrada para demonstração.", "p12": "Resposta registrada para demonstração.", "p13": "Resposta registrada para demonstração.", "p14": "Resposta registrada para demonstração.", "d1": "Resposta registrada para demonstração.", "d2": "Resposta registrada para demonstração.", "d3": "Resposta registrada para demonstração.", "d4": "Resposta registrada para demonstração.", "d5": "Resposta registrada para demonstração.", "c1": "Resposta registrada para demonstração.", "c2": "Resposta registrada para demonstração.", "c3": "Resposta registrada para demonstração.", "a1": "Resposta registrada para demonstração.", "a2": "Resposta registrada para demonstração.", "a3": "Resposta registrada para demonstração.", "a4": "Resposta registrada para demonstração."}}
-    ];
-    localStorage.setItem(SENT_PDCA_KEY,JSON.stringify(data));
-  }
-  return data;
+  // Fonte oficial: snapshot mais recente carregado da base central.
+  // Nunca reconstruir PDCAs recebidos a partir de localStorage nem dados de demonstração.
+  if(!nucleoCentralPdcaSnapshotReady)return [];
+  return nucleoCentralPdcaSent.map(x=>({...x}));
 }
 
 
@@ -11541,14 +11540,25 @@ function escapeHtml(text){
 function refreshPdcaSidebarBadge(){
   try{refreshMenuNotificationBadges()}catch(e){console.warn('Falha ao atualizar indicador de PDCA:',e)}
 }
-function showSentPdcas(){
+async function showSentPdcas(){
   if(!nucleoFeatureRequire('pdca','received'))return;
-  // A abertura da tela não pode depender de nenhum indicador lateral.
+  // PDCAs recebidos não podem depender somente do cache/localStorage.
+  // Sempre consulta a base central antes de renderizar a tela.
   view('sentView');
   setNav('sent');
-  const lifecycle=document.getElementById('sentLifecycleFilter');if(lifecycle){lifecycle.value=isAdmin()?'active':'all';lifecycle.style.display=isAdmin()?'':'none';}
-  renderSentPdcas();
-  refreshPdcaSidebarBadge();
+  const lifecycle=document.getElementById('sentLifecycleFilter');
+  if(lifecycle){lifecycle.value=isAdmin()?'active':'all';lifecycle.style.display=isAdmin()?'':'none';}
+  const body=document.getElementById('sentRows');
+  if(body)body.innerHTML='<tr><td colspan="8" class="small">Atualizando PDCAs recebidos com a base central…</td></tr>';
+  try{
+    const ok=await syncPortalBackend(false,{foreground:false});
+    if(!ok||!nucleoCentralPdcaSnapshotReady)throw new Error('A base central não confirmou os PDCAs recebidos.');
+    renderSentPdcas();
+    refreshPdcaSidebarBadge();
+  }catch(e){
+    console.warn('Falha ao atualizar PDCAs recebidos antes da exibição.',e);
+    if(body)body.innerHTML='<tr><td colspan="8" class="small" style="color:#a12f2f">Não foi possível consultar a base central. Nenhum cache local foi usado. Tente sincronizar novamente.</td></tr>';
+  }
 }
 function renderSentPdcas(){
  refreshPdcaSidebarBadge();
@@ -19012,7 +19022,7 @@ function nucleoRoSearchMatches(ro,query){
  return normalizeAnswer([number,ro.cliente||'',ro.origemBase||''].join(' ')).includes(normalizeAnswer(q));
 }
 
-function nucleoPdcaDelivery(p){let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}return deliveries.find(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));}
+function nucleoPdcaDelivery(p){const deliveries=Array.isArray(nucleoCentralPdcaDispatches)?nucleoCentralPdcaDispatches:[];return deliveries.find(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));}
 
 function nucleoConsultPdcaClaimant(id){const p=getAllSentPdcas().find(p=>p.id===id);if(!p)return;const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===p.ro&&explicitRecordUnit(r)===explicitRecordUnit(p));const binding=ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro));const user=ro&&resolveRoClaimant(ro);alert('Reclamante confirmado: '+(user?personDisplayName(user):'Cadastro indisponível')+(binding?.confirmedBy?'\nConfirmado por: '+binding.confirmedBy:'')+(binding?.confirmedAt?'\nData: '+new Date(binding.confirmedAt).toLocaleString('pt-BR'):''));}
 
@@ -19165,7 +19175,7 @@ function nucleoKpiExtraCounts(){
  const map=getSavedTriageMap(),classNames=nucleoKpiClassificationNames(),ros=getAllRoRecords().filter(r=>canViewRO(r)&&nucleoManagerScopeAllows(r)),pdcas=getAllSentPdcas().filter(p=>canViewPdca(p)&&nucleoManagerScopeAllows(p)),byRo=new Map();pdcas.forEach(p=>{const key=String(p.ro||p.roId||'').split('::')[0];if(!byRo.has(key))byRo.set(key,[]);byRo.get(key).push(p);});
  const triageByRo=new Map();map.forEach(t=>{const key=String(t.roNumber||t.roKey||'').split('::')[0],old=triageByRo.get(key);if(!old||old.importedFromSheet&&!t.importedFromSheet||old.importedFromSheet===t.importedFromSheet&&String(t.triagedAt||'')>String(old.triagedAt||''))triageByRo.set(key,t);});
  const counts={ro_total:ros.length,ro_pending:0,ro_answered:0,ro_presented:0,ro_finalized:0,ro_record:0,ro_cancelled:0,ro_obsolete:0,ro_box:0,pdca_received:pdcas.length,pdca_dispatch:0,actions_ontime:0,actions_late:0,actions_done:0,sacs_done:0,docs_done:0};
- let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}const delivered=p=>deliveries.some(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId&&d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));
+ const deliveries=Array.isArray(nucleoCentralPdcaDispatches)?nucleoCentralPdcaDispatches:[];const delivered=p=>deliveries.some(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId&&d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));
  ros.forEach(ro=>{const key=String(ro.numero||ro.id||ro.codigo||'').split('::')[0],tri=triageByRo.get(key)||map.get(key)||{},decision=tri.decision||baseTriageSituation(ro)?.decision;const ps=byRo.get(String(ro.numero||ro.id||ro.codigo||'').split('::')[0])||[];
   if(decision==='record')counts.ro_record++;if(decision==='cancelled')counts.ro_cancelled++;if(decision==='obsolete')counts.ro_obsolete++;if(tri.decisionId==='falta_caixa'||/falta de caixas?/i.test(tri.decisionLabel||ro.statusPlanilha||ro.status||''))counts.ro_box++;
   if(ps.length)counts.ro_answered++;if(ps.some(p=>p.apresentadoEm||p.presented||p.presentedAt))counts.ro_presented++;if(ps.some(delivered))counts.ro_finalized++;if(decision==='directed'&&tri.pdcaRequired!==false&&!ps.length)counts.ro_pending++;
