@@ -1,3 +1,22 @@
+
+// Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
+window.NUCLEO_BUILD_VERSION = '20261021-0945-unified';
+(function nucleoBuildConsistencyGuard(){
+  try {
+    var meta=document.querySelector('meta[name="nucleo-build"]');
+    var htmlBuild=meta&&meta.getAttribute('content')||'';
+    if(htmlBuild && htmlBuild!==window.NUCLEO_BUILD_VERSION){
+      var k='nucleo-build-reload-'+window.NUCLEO_BUILD_VERSION;
+      if(!sessionStorage.getItem(k)){
+        sessionStorage.setItem(k,'1');
+        var u=new URL(location.href);
+        u.searchParams.set('_build',window.NUCLEO_BUILD_VERSION);
+        location.replace(u.toString());
+      }
+    }
+  } catch(e) {}
+})();
+
 // Recuperação explícita: preserva cadastros, rascunhos e caches.
 if(new URLSearchParams(location.search).get('recuperar')==='1'){
   try{localStorage.removeItem('ro-pdca-session-v63')}catch(e){}
@@ -14,7 +33,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261020-v59-no-fill',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261021-0945-unified',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -11540,10 +11559,34 @@ function escapeHtml(text){
 function refreshPdcaSidebarBadge(){
   try{refreshMenuNotificationBadges()}catch(e){console.warn('Falha ao atualizar indicador de PDCA:',e)}
 }
+async function nucleoEnsureCentralPdcaSnapshot(){
+  // Se uma sincronização geral já estiver em andamento, não iniciar outra em paralelo.
+  // Aguarda a sincronização corrente concluir e reaproveita o snapshot confirmado.
+  if(portalBackendSyncInProgress){
+    const started=Date.now();
+    while(portalBackendSyncInProgress && Date.now()-started<45000){
+      await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    if(nucleoCentralPdcaSnapshotReady)return true;
+  }
+
+  const ok=await syncPortalBackend(false,{foreground:false});
+  if(ok&&nucleoCentralPdcaSnapshotReady)return true;
+
+  // Última tentativa direta: evita falso erro quando a sincronização geral terminou
+  // entre a abertura da tela e a chamada acima.
+  try{
+    const res=await portalJsonp({acao:'portal_load'},60000);
+    if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
+    applyPortalBackendSnapshot(res);
+    return !!nucleoCentralPdcaSnapshotReady;
+  }catch(e){
+    console.warn('Falha na leitura direta dos PDCAs recebidos.',e);
+    return false;
+  }
+}
 async function showSentPdcas(){
   if(!nucleoFeatureRequire('pdca','received'))return;
-  // PDCAs recebidos não podem depender somente do cache/localStorage.
-  // Sempre consulta a base central antes de renderizar a tela.
   view('sentView');
   setNav('sent');
   const lifecycle=document.getElementById('sentLifecycleFilter');
@@ -11551,13 +11594,13 @@ async function showSentPdcas(){
   const body=document.getElementById('sentRows');
   if(body)body.innerHTML='<tr><td colspan="8" class="small">Atualizando PDCAs recebidos com a base central…</td></tr>';
   try{
-    const ok=await syncPortalBackend(false,{foreground:false});
-    if(!ok||!nucleoCentralPdcaSnapshotReady)throw new Error('A base central não confirmou os PDCAs recebidos.');
+    const ok=await nucleoEnsureCentralPdcaSnapshot();
+    if(!ok)throw new Error('A base central não confirmou os PDCAs recebidos.');
     renderSentPdcas();
     refreshPdcaSidebarBadge();
   }catch(e){
     console.warn('Falha ao atualizar PDCAs recebidos antes da exibição.',e);
-    if(body)body.innerHTML='<tr><td colspan="8" class="small" style="color:#a12f2f">Não foi possível consultar a base central. Nenhum cache local foi usado. Tente sincronizar novamente.</td></tr>';
+    if(body)body.innerHTML='<tr><td colspan="8" class="small" style="color:#a12f2f">Não foi possível consultar a base central agora. Nenhum cache local foi usado. Clique em Sincronizar e tente novamente.</td></tr>';
   }
 }
 function renderSentPdcas(){
@@ -18646,7 +18689,7 @@ function applySettingsUnitSelection(){
 
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
-function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261009-mutation-fix1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
+function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261021-0945-unified',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
 async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
