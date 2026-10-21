@@ -744,7 +744,7 @@ function processDeadlineAlerts(showMessage=false){
   });
   localStorage.setItem(DEADLINE_ALERTS_KEY,JSON.stringify(state));if(showMessage)alert(created?created+' alerta(s) atualizado(s).':'Nenhum novo alerta de prazo.');refreshNotificationBell();
 }
-const NUCLEO_DEFAULT_API_URL=''; // Produção: a URL do backend deve ser configurada explicitamente
+const NUCLEO_DEFAULT_API_URL=String(window.NUCLEO_RUNTIME_CONFIG?.apiUrl||'').trim(); // Configuração central gerada pelo GitHub Actions
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
@@ -832,9 +832,10 @@ function nucleoPersistedApiUrl(){
   return valid||'';
 }
 function portalApiBase(){
+  // A URL do backend é global para o Núcleo inteiro.
+  // Não depende mais de localStorage, conta, navegador ou computador.
   return String(
     nucleoConfirmedApiUrl||
-    nucleoPersistedApiUrl()||
     NUCLEO_DEFAULT_API_URL||
     ''
   ).trim().replace(/\/+$/,'');
@@ -861,43 +862,18 @@ async function nucleoCheckApiUrl(url){
 }
 
 async function nucleoEnsureApiConfigured(){
-  const current=portalApiBase();
+  const current=String(NUCLEO_DEFAULT_API_URL||'').trim();
 
-  if(current){
-    try{
-      const confirmed=await nucleoCheckApiUrl(current);
-      nucleoConfirmedApiUrl=current;
-      return {url:current,result:confirmed};
-    }catch(e){
-      console.warn('A URL salva não foi aceita como backend de produção.',e);
-      nucleoConfirmedApiUrl='';
-    }
+  if(!current){
+    throw new Error(
+      'A URL central do Apps Script de produção não foi publicada pelo GitHub Actions. '+
+      'Configure a variável NUCLEO_API_URL no repositório e execute o deploy novamente.'
+    );
   }
 
-  const informed=window.prompt(
-    'Configuração inicial do Núcleo\n\nCole a URL do aplicativo da Web do Apps Script de PRODUÇÃO (terminada em /exec).\n\nA URL será validada antes de ser salva. URLs explicitamente marcadas como TESTE serão recusadas.',
-    ''
-  );
-
-  if(informed===null)throw new Error('Configuração da URL do Apps Script cancelada.');
-
-  const candidate=String(informed||'').trim();
-  const confirmed=await nucleoCheckApiUrl(candidate);
-
-  let dedicated={};
-  let admin={};
-  try{dedicated=JSON.parse(localStorage.getItem(INTEGRATION_PERSIST_KEY)||'{}')||{}}catch(e){}
-  try{admin=JSON.parse(localStorage.getItem(ADMIN_CONFIG_KEY)||'{}')||{}}catch(e){}
-
-  dedicated={...dedicated,apiUrl:candidate,savedAt:new Date().toISOString()};
-  admin={...admin,apiUrl:candidate};
-
-  localStorage.setItem(INTEGRATION_PERSIST_KEY,JSON.stringify(dedicated));
-  localStorage.setItem('ro-sync-settings',JSON.stringify(dedicated));
-  localStorage.setItem(ADMIN_CONFIG_KEY,JSON.stringify(admin));
-
-  nucleoConfirmedApiUrl=candidate;
-  return {url:candidate,result:confirmed};
+  const confirmed=await nucleoCheckApiUrl(current);
+  nucleoConfirmedApiUrl=current;
+  return {url:current,result:confirmed};
 }
 function portalBackendEnabled(){
   return /^https:\/\/script\.google\.com\/macros\/s\//i.test(portalApiBase());
@@ -8537,16 +8513,12 @@ async function nucleoMarkPdcaReview2026(roKey,origin,decision){
   }catch(e){alert('Não foi possível salvar a definição de PDCA.\n\n'+String(e?.message||e));}
 }
 
-function nucleoPdcaPdfSummaryData(){
+
+function nucleoPdcaPdfSummaryRows(){
   const all=getSentPdcas()||[];
   const visible=isAdmin()?all:all.filter(p=>String(p.email||'').toLowerCase()===currentEmail());
 
-  let withPdf=0;
-  let pendingPdf=0;
-  let presentedNoPdf=0;
-  let respondedNoPdf=0;
-
-  visible.forEach(p=>{
+  return visible.map(p=>{
     const pending=!!(p.pdfPending||p.legacyMissingPdf||p.controlImported);
     const hasPdf=!pending&&!!(
       p.externalPdf===true||
@@ -8555,22 +8527,99 @@ function nucleoPdcaPdfSummaryData(){
       p.pdfUrl||
       p.driveFileId
     );
-
-    if(hasPdf)withPdf++;
-    if(pending){
-      pendingPdf++;
-      if(String(p.status||'').toLowerCase().includes('apresent'))presentedNoPdf++;
-      else respondedNoPdf++;
-    }
+    const status=String(p.status||'').trim();
+    const presentedNoPdf=pending&&status.toLowerCase().includes('apresent');
+    const respondedNoPdf=pending&&!presentedNoPdf;
+    return {p,pending,hasPdf,presentedNoPdf,respondedNoPdf};
   });
+}
 
+function nucleoPdcaPdfSummaryData(){
+  const rows=nucleoPdcaPdfSummaryRows();
   return {
-    total:visible.length,
-    withPdf,
-    pendingPdf,
-    presentedNoPdf,
-    respondedNoPdf
+    total:rows.length,
+    withPdf:rows.filter(x=>x.hasPdf).length,
+    pendingPdf:rows.filter(x=>x.pending).length,
+    presentedNoPdf:rows.filter(x=>x.presentedNoPdf).length,
+    respondedNoPdf:rows.filter(x=>x.respondedNoPdf).length
   };
+}
+
+function nucleoPdcaSummaryCategoryRows(category){
+  const rows=nucleoPdcaPdfSummaryRows();
+  if(category==='withPdf')return rows.filter(x=>x.hasPdf);
+  if(category==='pendingPdf')return rows.filter(x=>x.pending);
+  if(category==='presentedNoPdf')return rows.filter(x=>x.presentedNoPdf);
+  if(category==='respondedNoPdf')return rows.filter(x=>x.respondedNoPdf);
+  return rows;
+}
+
+function nucleoPdcaSummaryCategoryTitle(category){
+  if(category==='withPdf')return 'PDCAs com PDF';
+  if(category==='pendingPdf')return 'PDCAs com PDF pendente';
+  if(category==='presentedNoPdf')return 'Apresentados sem PDF';
+  if(category==='respondedNoPdf')return 'Respondidos sem PDF';
+  return 'PDCAs no Núcleo';
+}
+
+function nucleoOpenPdcaSummary(category){
+  const rows=nucleoPdcaSummaryCategoryRows(category);
+  const title=nucleoPdcaSummaryCategoryTitle(category);
+
+  let modal=document.getElementById('pdcaSummaryDetailModal');
+  if(modal)modal.remove();
+
+  modal=document.createElement('div');
+  modal.id='pdcaSummaryDetailModal';
+  modal.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+
+  const tableRows=rows.map(({p,pending,hasPdf})=>{
+    const ro=String(p.ro||'').trim();
+    const setor=String(p.setor||'').trim()||'—';
+    const status=String(p.status||'').trim()||'—';
+    const unidade=canonicalUnitName(p.unidade||p.unit||'')||'—';
+    const recebido=p.sentAt||p.envio||'';
+    let when='—';
+    if(recebido){
+      const d=new Date(recebido);
+      when=Number.isNaN(d.getTime())?String(recebido):d.toLocaleString('pt-BR');
+    }
+    const fileName=String(p.fileName||'').trim();
+    const pdfLabel=hasPdf?(fileName||'PDF disponível'):'PDF pendente';
+    const action=pending
+      ? `<button class="btn primary" type="button" onclick="event.stopPropagation();document.getElementById('pdcaSummaryDetailModal')?.remove();nucleoUploadPendingPdcaPdf('${escapeHtml(p.id||'')}')">Subir PDF</button>`
+      : `<button class="btn secondary" type="button" onclick="event.stopPropagation();document.getElementById('pdcaSummaryDetailModal')?.remove();openPdcaReport('${escapeHtml(p.id||'')}')">Abrir PDCA</button>`;
+
+    return `<tr>
+      <td><b>${escapeHtml(ro||'—')}</b></td>
+      <td>${escapeHtml(setor)}</td>
+      <td>${escapeHtml(unidade)}</td>
+      <td>${escapeHtml(status)}</td>
+      <td>${escapeHtml(pdfLabel)}</td>
+      <td>${escapeHtml(when)}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+
+  modal.innerHTML=`
+    <div style="background:#fff;width:min(1250px,96vw);max-height:90vh;overflow:auto;border-radius:16px;box-shadow:0 22px 60px rgba(15,23,42,.28);padding:20px">
+      <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <h2 style="margin:0">${escapeHtml(title)}</h2>
+          <p class="small" style="margin:5px 0 0">${rows.length} R.O.${rows.length===1?'':'s'} nesta categoria.</p>
+        </div>
+        <button class="btn secondary" type="button" onclick="document.getElementById('pdcaSummaryDetailModal')?.remove()">Fechar</button>
+      </div>
+      <div style="overflow:auto">
+        <table class="action-table" style="min-width:920px">
+          <thead><tr><th>R.O.</th><th>Setor</th><th>Unidade</th><th>Status</th><th>PDF</th><th>Recebimento</th><th></th></tr></thead>
+          <tbody>${tableRows||'<tr><td colspan="7" style="text-align:center;padding:24px">Nenhuma R.O. nesta categoria.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove()});
 }
 
 function renderPdcaPdfSummary(){
@@ -8585,20 +8634,24 @@ function renderPdcaPdfSummary(){
     btn.style.display=isAdmin()?'':'none';
   }
 
-  const card=(label,value,detail,cls='')=>`
-    <div style="min-width:150px;flex:1;border:1px solid #dfe7ef;border-radius:12px;padding:10px 12px;background:#fff">
+  const card=(category,label,value,detail)=>`
+    <button type="button"
+      onclick="nucleoOpenPdcaSummary('${category}')"
+      title="Clique para ver as R.O.s"
+      style="min-width:150px;flex:1;border:1px solid #dfe7ef;border-radius:12px;padding:10px 12px;background:#fff;text-align:left;cursor:pointer;font:inherit">
       <div class="small" style="margin-bottom:4px">${escapeHtml(label)}</div>
       <div style="font-size:21px;font-weight:800;line-height:1">${value}</div>
-      <div class="small ${cls}" style="margin-top:5px">${escapeHtml(detail)}</div>
-    </div>`;
+      <div class="small" style="margin-top:5px">${escapeHtml(detail)}</div>
+      <div class="small" style="margin-top:6px;font-weight:700">Ver R.O.s →</div>
+    </button>`;
 
   box.innerHTML=`
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${card('PDCAs no Núcleo',d.total,'Total reconhecido')}
-      ${card('Com PDF',d.withPdf,'Arquivo já disponível')}
-      ${card('PDF pendente',d.pendingPdf,'Falta anexar o arquivo',d.pendingPdf?'':'')}
-      ${card('Apresentados sem PDF',d.presentedNoPdf,'Status já confirmado')}
-      ${card('Respondidos sem PDF',d.respondedNoPdf,'Status já confirmado')}
+      ${card('total','PDCAs no Núcleo',d.total,'Total reconhecido')}
+      ${card('withPdf','Com PDF',d.withPdf,'Arquivo já disponível')}
+      ${card('pendingPdf','PDF pendente',d.pendingPdf,'Falta anexar o arquivo')}
+      ${card('presentedNoPdf','Apresentados sem PDF',d.presentedNoPdf,'Status já confirmado')}
+      ${card('respondedNoPdf','Respondidos sem PDF',d.respondedNoPdf,'Status já confirmado')}
     </div>`;
 }
 
@@ -13829,7 +13882,7 @@ function openIntegrationApi(){
     if(result){
       result.className='statusline';
       result.classList.remove('hidden');
-      result.textContent='Informe e salve a URL /exec do Apps Script.';
+      result.textContent='A URL do Apps Script é definida centralmente pelo GitHub Actions.';
     }
     return;
   }
@@ -13880,7 +13933,7 @@ async function testConnection(){
   const settings=saveIntegrationSettings(true);
   const result=document.getElementById('testResult');
   if(!settings.apiUrl){
-    if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='Informe a URL /exec do Apps Script.';}
+    if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='A URL do Apps Script é definida centralmente pelo GitHub Actions.';}
     return;
   }
   if(result){result.className='statusline';result.classList.remove('hidden');result.textContent='Testando a resposta da API...';}
