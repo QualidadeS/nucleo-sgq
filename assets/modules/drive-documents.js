@@ -84,11 +84,11 @@ async function nucleoDriveIdentify(bytes,name){
 }
 function nucleoDriveParse(text,name){
  const lines=String(text||'').split('\n'),filename=String(name||'').replace(/\.pdf$/i,'');
- const fileMatch=filename.match(/^(.*?)\bR\.?\s*O\.?[-_ ]+([\d\s,;eE]+)[-_ ]+(intern[oa]|extern[oa])(?:[-_ ]+(.*))?$/i);
- const looseFileRo=filename.match(/^(.*?)\bR\.?\s*O\.?[-_ ]+([\d\s,;eE]+?)(?=[-_ ]+\d{1,2}[-_.]\d{1,2}[-_.]\d{2,4}|$)/i);
+ const fileMatch=filename.match(/^(.*?)(?:^|[-_\s])R\.?\s*O\.?[-_ :]+([\d\s,;eE&+\/]+)[-_ ]+(intern[oa]|extern[oa])(?:[-_ ]+(.*))?$/i);
+ const looseFileRo=filename.match(/^(.*?)(?:^|[-_\s])R\.?\s*O\.?[-_ :]+([\d\s,;eE&+\/]+?)(?=[-_ ]+\d{1,2}[-_.]\d{1,2}[-_.]\d{2,4}|$)/i);
  const field=label=>{const line=lines.find(l=>new RegExp(label,'i').test(l))||'';const match=line.match(new RegExp(label+'\\s*:?\\s*(.*?)(?=\\s+(?:Setor|Tipo de|R\\.?O|Cliente|Data|Respons[aá]vel)\\s*:?|$)','i'));const value=match?.[1]?.trim()||'';return /^(?:Setor:?|Tipo de.*|Cliente:?|Respons[aá]vel:?)$/i.test(value)?'':value;};
  let numberText=fileMatch?.[2]||looseFileRo?.[2]||'';
- if(!numberText){const line=lines.find(l=>/\bR\.?\s*O\.?[-_ ]*:?\s*\d/i.test(l))||'';const match=line.match(/\bR\.?\s*O\.?[-_ ]*:?\s*([\d\s,;eE]+)/i);numberText=match?.[1]||'';}
+ if(!numberText){const line=lines.find(l=>/(?:^|[^A-Z0-9_])R\.?\s*O\.?[-_ :]*\s*\d/i.test(l))||'';const match=line.match(/(?:^|[^A-Z0-9_])R\.?\s*O\.?[-_ :]*\s*([\d\s,;eE&+\/]+)/i);numberText=match?.[1]||'';}
  const numbers=[...new Set((numberText.match(/\d+/g)||[]).map(x=>String(Number(x))))];
  const source=fileMatch?.[3]||text+' '+name;
  const origin=/\bextern[oa]\b|\bRO[-_ ]EX[-_ ]/i.test(source)?'Externa':/\bintern[oa]\b|\bRO[-_ ]IN[-_ ]/i.test(source)?'Interna':'';
@@ -163,7 +163,12 @@ async function nucleoDriveSavePdca(){if(!nucleoFeatureRequire('pdca','import'))r
   else{params.fileData=await fileToBase64(selected.file);params.fileName=selected.name;result=await nucleoDriveMutation('nucleo_drive_pdca',params);}
   if(!result?.record||result.record.importComplete!==true||!Array.isArray(result.sentRecords)||!result.sentRecords.length)throw new Error('A base não confirmou a inclusão em PDCAs recebidos. Confira se a versão atual do Apps Script foi publicada antes de tentar novamente.');
   stored=true;
-  const existing=getSentPdcas(),byId=new Map(existing.map(x=>[x.id,x]));result.sentRecords.forEach(x=>byId.set(x.id,x));localStorage.setItem(SENT_PDCA_KEY,JSON.stringify([...byId.values()]));
+  // O upload só é considerado concluído na interface depois que a base central
+  // devolver e recarregar o registro. Não gravar PDCAs recebidos em localStorage.
+  const synced=await syncPortalBackend(false,{foreground:false});
+  if(!synced||!nucleoCentralPdcaSnapshotReady)throw new Error('O PDCA foi recebido pelo servidor, mas a tela não conseguiu confirmar a atualização da base central. Sincronize novamente antes de continuar.');
+  const confirmedIds=new Set(getSentPdcas().map(x=>String(x.id||'')));
+  if(!result.sentRecords.every(x=>confirmedIds.has(String(x.id||''))))throw new Error('A base central ainda não devolveu todos os vínculos do PDCA importado. Sincronize novamente antes de continuar.');
   const files=nucleoDriveState.pdcaFiles.filter(x=>x.id!==result.record.id);files.push(result.record);nucleoDriveState.pdcaFiles=files;nucleoDriveState.previousId='';nucleoDriveState.selectedPdf=null;nucleoDriveState.links=[];nucleoDriveState.parsed=null;nucleoDriveState.preselectedRo='';nucleoDriveState.preselectedSector='';
   nucleoDriveRenderPdca();nucleoDriveSavedNotice(savedRos,result.record.fileName,result.record.id);nucleoDriveStatus(result.alreadyLinked?'Este PDF já estava vinculado. Registro localizado em PDCAs recebidos.':'PDCA confirmado em PDCAs recebidos.');
  }catch(e){status.textContent='Não foi possível concluir: '+e.message;status.style.color='#b42318';status.scrollIntoView({behavior:'smooth',block:'center'});nucleoDriveStatus(e.message);}
@@ -262,10 +267,10 @@ async function nucleoDriveSendPdca(id,selectedRo){if(!nucleoFeatureRequire('pdca
   try{
    const result=await nucleoDriveMutation('nucleo_drive_dispatch_pdca',{id,ro:roKey,personId:select.value,registrant,confirmed:'1'});
    if(!result?.record||result.record.ro!==roKey||!result.record.recipientPersonId||result.selectedRecipientKey!==select.value)throw new Error('A base central não confirmou o destinatário desta resposta. Confira antes de tentar novamente.');
-   let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}deliveries=deliveries.filter(d=>d.id!==result.record.id);deliveries.push(result.record);localStorage.setItem('nucleo-pdca-dispatches-v1',JSON.stringify(deliveries));
+   const synced=await syncPortalBackend(false,{foreground:false});
+   if(!synced)throw new Error('A disponibilização foi salva, mas a tela não conseguiu confirmar a base central. Sincronize novamente.');
    saved=true;renderSentPdcas();show((result.alreadyDispatched?'Esta resposta já estava disponibilizada':'Resposta disponibilizada com sucesso')+' para '+(result.record.recipientName||select.options[select.selectedIndex].text)+'. O reclamante pode abrir o PDF em Respostas. Nenhum e-mail foi enviado.','success');
    btn.textContent='Disponibilização confirmada';cancel.textContent='Concluir';
-   Promise.resolve().then(()=>syncPortalBackend(false)).catch(e=>console.warn('A resposta foi disponibilizada; atualização da tela pendente.',e));
   }catch(e){show('Não foi possível confirmar a disponibilização: '+e.message,'error');}
   finally{cancel.disabled=false;if(!saved){btn.disabled=false;select.disabled=false;checked.disabled=false;btn.textContent='Tentar novamente';}}
  };
