@@ -4535,13 +4535,14 @@ Cancelada</textarea></label>
     <div id="adminCleanupPreview" class="statusline" style="margin-top:10px">Selecione uma R.O. para verificar o que existe vinculado.</div>
 
     <div class="actions" style="margin-top:12px;gap:8px;flex-wrap:wrap">
+      <button class="btn secondary" type="button" onclick="adminCorrectRoSend()">Corrigir envio</button>
       <button class="btn secondary" type="button" onclick="adminDeleteTriageForRo()">Excluir direcionamento / triagem</button>
       <button class="btn secondary" type="button" onclick="adminDeletePdcaForRo()">Excluir PDCA</button>
       <button class="btn danger" type="button" onclick="adminDeleteTestDataForRo()">Excluir os dois</button>
     </div>
 
     <div class="small" style="margin-top:10px;color:#8a3b12">
-      Esta é uma exclusão real na base central. Ao excluir direcionamento, a R.O. volta para <b>Aguardando triagem</b>. Ao excluir PDCA, as ações e a apresentação vinculadas àquele PDCA também são removidas do NÚCLEO.
+      <b>Corrigir envio</b> preserva a triagem e o PDCA: volta o envio para <b>Não enviado</b>, limpa a data do envio e registra a correção no Resultado quando essa coluna existir. As opções de exclusão continuam removendo somente os vínculos indicados.
     </div>
   </div>
 </div>
