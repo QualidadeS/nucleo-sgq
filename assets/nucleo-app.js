@@ -11591,6 +11591,22 @@ async function nucleoEnsureCentralPdcaSnapshot(){
     return false;
   }
 }
+
+async function nucleoUploadPendingPdcaPdf(pdcaId){
+  const p=getSentPdcas().find(x=>String(x.id||'')===String(pdcaId||''));
+  if(!p)return;
+  try{
+    await nucleoDriveLoad();
+    if(typeof nucleoDriveOpenForRo==='function'){
+      await nucleoDriveOpenForRo(String(p.ro||''),String(p.unidade||p.unit||''),String(p.setor||''));
+    }else{
+      await nucleoDriveOpen('pdca');
+    }
+  }catch(e){
+    alert('Não foi possível abrir a importação do PDF.\n\n'+String(e?.message||e));
+  }
+}
+
 async function showSentPdcas(){
   if(!nucleoFeatureRequire('pdca','received'))return;
   view('sentView');
@@ -11623,8 +11639,14 @@ function renderSentPdcas(){
   const date=new Date(p.sentAt||p.envio),when=Number.isNaN(date.getTime())?p.envio:date.toLocaleString('pt-BR');
   const claimant=user?personDisplayName(user):(ro?roRegistrantName(ro):'');
   const delivery=nucleoPdcaDelivery(p),confirmed=!!delivery||!!(ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro))?.confirmedAt);
-  const detail=delivery?'Encerrada — entregue ao reclamante':confirmed?'Reclamante confirmado — falta entregar a resposta':user?'Cadastro identificado — confirmar':'Reclamante a confirmar';
-  return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
+  const pdfPending=!!(p.pdfPending||p.legacyMissingPdf||p.controlImported);
+  const detail=pdfPending
+    ? (String(p.status||'').toLowerCase().includes('apresent')?'Já apresentado — falta subir o PDF no Núcleo':'Já respondido — falta subir o PDF no Núcleo')
+    : delivery?'Encerrada — entregue ao reclamante'
+    : confirmed?'Reclamante confirmado — falta entregar a resposta'
+    : user?'Cadastro identificado — confirmar'
+    :'Reclamante a confirmar';
+  return '<tr class="click" onclick="'+(pdfPending?'event.stopPropagation()':'openPdcaReport(\''+escapeHtml(p.id)+'\')')+'"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+(pdfPending?'<div class="small">'+escapeHtml(p.setor||'')+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(pdfPending?'<div style="margin-top:6px"><span class="status-badge pending">PDF pendente</span> <button class="btn primary" type="button" onclick="event.stopPropagation();nucleoUploadPendingPdcaPdf(\''+escapeHtml(p.id)+'\')">Subir PDF</button></div>':'')+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(pdfPending?(String(p.status||'').toLowerCase().includes('apresent')?'Apresentado':'Respondido'):delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">'+(pdfPending?'Subir PDF':'Ver PDCA →')+'</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
 
@@ -16630,7 +16652,7 @@ function nucleoAssignedExportMeta(r,triageMap){
   ).trim();
 
   const origin=String(r?.origemBase||r?.raw?.__origemBase||'').trim();
-  const unit=String(r?.unidade||'').trim();
+  const unit=nucleoCanonicalUnitLabel(r?.unidade||'');
   const classification=String(
     tri?.classification||
     tri?.classificacaoSGQ||
@@ -16660,6 +16682,39 @@ function nucleoAssignedExportMeta(r,triageMap){
   };
 }
 
+
+function nucleoCanonicalUnitLabel(value){
+  const raw=String(value||'').trim();
+  const n=normalizeAnswer(raw);
+  if(!n)return 'Matriz — São Bento do Sul (SC)';
+
+  // MATRIZ: todos os nomes históricos/legados usados para São Bento do Sul e Piên.
+  if(
+    n==='matriz'||
+    n==='seta sc'||
+    n==='seta pr'||
+    n==='rl'||
+    n==='unidade sao bento do sul'||
+    n==='sao bento do sul'||
+    n==='unidade pien'||
+    n==='pien'||
+    n.includes('sao bento do sul')||
+    n.includes('pien')
+  ) return 'Matriz — São Bento do Sul (SC)';
+
+  // FILIAL: Linhares / ES.
+  if(
+    n==='filial'||
+    n==='seta es'||
+    n==='unidade linhares'||
+    n==='linhares'||
+    n.includes('linhares')
+  ) return 'Filial — Linhares (ES)';
+
+  // Valores históricos não reconhecidos não viram nova unidade no filtro.
+  return 'Matriz — São Bento do Sul (SC)';
+}
+
 function nucleoAssignedExportUnique(rows, getter){
   return [...new Set(rows.map(getter).map(v=>String(v||'').trim()).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'pt-BR',{sensitivity:'base'}));
@@ -16685,7 +16740,8 @@ function nucleoOpenAssignedExcelExport(){
   const currentLifecycle=typeof assignedLifecycle==='string'?assignedLifecycle:'active';
   const currentSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const currentOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
-  const currentUnit=document.getElementById('assignedUnitFilter')?.value||'all';
+  const currentUnitRaw=document.getElementById('assignedUnitFilter')?.value||'all';
+  const currentUnit=currentUnitRaw==='all'?'all':nucleoCanonicalUnitLabel(currentUnitRaw);
   const currentStatus=document.getElementById('filter')?.value||'todas';
   const currentSearch=document.getElementById('search')?.value||'';
 
@@ -16816,7 +16872,7 @@ function nucleoAssignedExportFiltered(){
   return rows.map(r=>({r,m:nucleoAssignedExportMeta(r,triageMap)})).filter(({r,m})=>{
     if(filters.scope!=='all'&&m.lifecycle!==filters.scope)return false;
     if(filters.origin!=='all'&&m.origin!==filters.origin)return false;
-    if(filters.unit!=='all'&&!sameCanonicalUnit(m.unit,filters.unit))return false;
+    if(filters.unit!=='all'&&nucleoCanonicalUnitLabel(m.unit)!==nucleoCanonicalUnitLabel(filters.unit))return false;
     if(filters.sector!=='all'&&m.sector!==filters.sector)return false;
     if(filters.person!=='all'&&m.person!==filters.person)return false;
     if(filters.status!=='all'&&m.status!==filters.status)return false;
