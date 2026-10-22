@@ -19780,10 +19780,23 @@ function enforceAdminVisibility(){
     el.classList.toggle('hidden',!allowed);
   });
 
+  // O Centro 5S fica dentro do bloco visual de Gestão, mas não é exclusivo do SGQ.
+  // Usuários vinculados a um setor precisam enxergar o 5S para consultar os resultados
+  // do próprio setor. Auditores também acessam o mesmo módulo e o backend decide se
+  // o botão "Realizar auditoria" será liberado conforme o cronograma do mês.
+  const session5s=getSession()||{};
+  const canSee5s=allowed || !!String(session5s.sector||'').trim();
+
   const module=document.getElementById('moduleManagement');
   if(module){
-    module.style.display=allowed?'':'none';
-    module.classList.toggle('hidden',!allowed);
+    module.style.display=canSee5s?'':'none';
+    module.classList.toggle('hidden',!canSee5s);
+  }
+
+  const navAudit5s=document.getElementById('navAudit5s');
+  if(navAudit5s){
+    navAudit5s.style.display=canSee5s?'':'none';
+    navAudit5s.classList.toggle('hidden',!canSee5s);
   }
 
   const adminIds=[
