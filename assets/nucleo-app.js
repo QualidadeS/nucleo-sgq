@@ -20824,3 +20824,190 @@ function renderSupplierIndicatorsWorkspace(){
   const host=document.getElementById('adminModuleContent');if(!host)return;const rows=getSupplierProfiles().map(p=>({p,buy:supplierPurchasesTotal(p),rncs:supplierRncs(p).length,idx:supplierIndicator(p),reinc:supplierReincidenceCount(p),agreements:supplierOpenAgreements(p)})).sort((a,b)=>(b.idx??-1)-(a.idx??-1));
   host.innerHTML=`<div style="grid-column:1/-1"><button class="btn secondary" type="button" onclick="showAdminOperationalModule('nccapa')">← Voltar ao módulo</button><div class="card" style="margin-top:14px;padding:20px"><div><h3 style="margin:0">Indicadores de fornecedores</h3><div class="small" style="margin-top:5px">Comparação de volume comprado, RNCs, reincidências e acordos pendentes.</div></div><div style="overflow:auto;margin-top:16px">${rows.length?`<table style="width:100%"><thead><tr><th>Fornecedor</th><th>Comprado</th><th>RNCs</th><th>Índice / R$ 100 mil</th><th>Reincid.</th><th>Acordos pend.</th><th>Última compra</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${escapeHtml(x.p.supplier||'Fornecedor')}</b><div class="small">${escapeHtml([x.p.supplierCode,x.p.category].filter(Boolean).join(' · '))}</div></td><td>${supplierMoneyBR(x.buy)}</td><td>${x.rncs}</td><td><b>${x.idx==null?'—':x.idx.toFixed(2)}</b></td><td>${x.reinc}</td><td>${x.agreements.length}</td><td>${escapeHtml(supplierLatestPurchaseMonth(x.p).split('-').reverse().join('/')||'—')}</td><td><button class="btn secondary" onclick="openSupplierProfile('${escapeHtml(x.p.id)}')">Abrir</button></td></tr>`).join('')}</tbody></table>`:'<div>Nenhum fornecedor cadastrado.</div>'}</div></div></div>`;
 }
+window.NUCLEO_5S_ACCESS_CACHE = window.NUCLEO_5S_ACCESS_CACHE || {};
+
+function nucleo5sAccessCacheKey(unit,month){
+  return String(unit||'matriz')+'|'+String(month||'');
+}
+
+async function nucleo5sGetAccess(force=false,month=''){
+  const now=new Date();
+  const m=month || (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+  const key=nucleo5sAccessCacheKey(nucleo5sCurrentUnit,m);
+  if(!force && window.NUCLEO_5S_ACCESS_CACHE[key]) return window.NUCLEO_5S_ACCESS_CACHE[key];
+  const data=await nucleo5sBackend('nucleo_5s_access',{month:m});
+  if(!data?.sucesso) throw new Error(data?.erro||'Não foi possível validar o acesso ao 5S.');
+  window.NUCLEO_5S_ACCESS_CACHE[key]=data;
+  return data;
+}
+
+function nucleo5sEquivalentSectorClient(a,b){
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[º°ª]/g,'').replace(/[^a-z0-9]+/g,'').trim();
+  const alias=v=>{
+    const n=norm(v);
+    const m={
+      mecanica:'manutencao',manutencao:'manutencao',mecanicamanutencao:'manutencao',manutencaomecanica:'manutencao',
+      clicheria:'clicheria',clicheriasaladetintas:'clicheria',
+      recebimento:'recebimentoalmoxarifado',almoxarifado:'recebimentoalmoxarifado',recebimentoalmoxarifado:'recebimentoalmoxarifado',
+      servicosgerais:'servicosgerais',servicosgeraiscozinhaelimpeza:'servicosgerais',
+      administrativorh:'administrativorh',rh:'administrativorh'
+    };
+    return m[n]||n;
+  };
+  const x=alias(a),y=alias(b);
+  if(!x||!y)return false;
+  if(x===y)return true;
+  return Math.min(x.length,y.length)>=6&&(x.includes(y)||y.includes(x));
+}
+
+function nucleo5sCurrentAccess(){
+  const now=new Date();
+  const m=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  return window.NUCLEO_5S_ACCESS_CACHE[nucleo5sAccessCacheKey(nucleo5sCurrentUnit,m)]||null;
+}
+
+function nucleo5sApplyHubAccess(access){
+  const auditButton=document.querySelector("#audit5sHubCards [onclick=\"nucleo5sShowPanel('audit')\"]");
+  if(auditButton) auditButton.style.display=access?.canAudit?'':'none';
+  const tutorialButton=document.querySelector("#audit5sHubCards [onclick=\"nucleo5sShowPanel('tutorial')\"]");
+  if(tutorialButton) tutorialButton.style.display=(access?.canAudit||access?.canSeeAllResults)?'':'none';
+  const switcher=document.getElementById('audit5sUnitSwitcher');
+  if(switcher) switcher.style.display=isAdmin()?'flex':'none';
+}
+
+async function nucleoOpen5SUnit(unit){
+  unit=unit==='filial'?'filial':'matriz';
+  nucleo5sCurrentUnit=unit;
+  nucleo5sSetUnitButtons(unit);
+  try{
+    const access=await nucleo5sGetAccess(true);
+    nucleo5sApplyHubAccess(access);
+    nucleo5sShowPanel('home');
+  }catch(e){
+    const host=document.getElementById('audit5sPanel');
+    if(host)host.innerHTML='<div class="notice danger">Não foi possível validar seu acesso ao 5S: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+}
+
+async function showAudit5S(){
+  view('audit5sView');
+  setNav('audit5s');
+  nucleo5sCurrentUnit=nucleo5sSessionUnit();
+  nucleo5sSetUnitButtons(nucleo5sCurrentUnit);
+  nucleo5sConfigReady();
+  try{
+    const access=await nucleo5sGetAccess(true);
+    nucleo5sApplyHubAccess(access);
+    nucleo5sShowPanel('home');
+  }catch(e){
+    const host=document.getElementById('audit5sPanel');
+    if(host)host.innerHTML='<div class="notice danger">Não foi possível carregar suas permissões do 5S: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+  window.scrollTo({top:0,behavior:'instant'});
+}
+
+async function nucleo5sShowPanel(panel){
+  const host=document.getElementById('audit5sPanel');
+  if(!host)return;
+  let access;
+  try{ access=await nucleo5sGetAccess(false); }
+  catch(e){ host.innerHTML='<div class="notice danger">Não foi possível validar seu acesso ao 5S: '+escapeHtml(e.message||String(e))+'</div>'; return; }
+
+  if(panel==='home'){
+    nucleo5sApplyHubAccess(access);
+    const auditInfo=access.canAudit
+      ? 'Você está escalado(a) neste mês para: <b>'+access.auditSectors.map(escapeHtml).join(', ')+'</b>.'
+      : 'Você não está escalado(a) como auditor(a) neste mês.';
+    const resultInfo=access.canSeeAllResults
+      ? 'Você possui visão administrativa dos resultados desta unidade.'
+      : 'Resultados disponíveis somente para: <b>'+access.resultSectors.map(escapeHtml).join(', ')+'</b>.';
+    host.innerHTML='<div class="small" style="padding:8px 2px">'+auditInfo+'<br>'+resultInfo+'</div>';
+    return;
+  }
+
+  if(panel==='audit'){
+    if(!access.canAudit){
+      host.innerHTML='<div class="notice">A opção de realizar auditoria fica disponível somente para os auditores escalados no cronograma do mês.</div>';
+      return;
+    }
+    return nucleo5sRenderAudit(host,access);
+  }
+  if(panel==='tutorial')return nucleo5sRenderTutorial(host);
+  if(panel==='schedule')return nucleo5sRenderSchedule(host);
+  if(panel==='actions')return nucleo5sRenderActions(host);
+  if(panel==='history')return nucleo5sRenderHistory(host);
+  if(panel==='cycle')return nucleo5sRenderCycle(host);
+}
+
+function nucleo5sRestrictAuditIframe(frame,access){
+  try{
+    const doc=frame.contentDocument||frame.contentWindow?.document;
+    if(!doc)return;
+    const allowed=Array.isArray(access?.auditSectors)?access.auditSectors:[];
+    const sector=doc.getElementById('setor');
+    if(sector){
+      [...sector.options].forEach(opt=>{
+        if(!opt.value)return;
+        const ok=allowed.some(a=>nucleo5sEquivalentSectorClient(opt.value,a));
+        if(!ok)opt.remove();
+      });
+      if(allowed.length===1){
+        const match=[...sector.options].find(o=>o.value&&nucleo5sEquivalentSectorClient(o.value,allowed[0]));
+        if(match){ sector.value=match.value; sector.disabled=true; try{frame.contentWindow.aoMudarSetor?.()}catch(_){} }
+      }
+    }
+    const a1=doc.getElementById('auditor1');
+    const a2=doc.getElementById('auditor2');
+    if(a1)a1.readOnly=true;
+    if(a2)a2.readOnly=true;
+    if(sector && allowed.length>1)sector.disabled=false;
+    frame.dataset.nucleo5sRestricted='1';
+  }catch(e){ console.error('Falha ao restringir formulário 5S:',e); }
+}
+
+function nucleo5sRenderAudit(host,access){
+  if(!nucleo5sConfigReady())return;
+  access=access||nucleo5sCurrentAccess();
+  if(!access?.canAudit){ host.innerHTML='<div class="notice">Você não está escalado(a) como auditor(a) neste mês.</div>'; return; }
+  const cfg=nucleo5sConfig(nucleo5sCurrentUnit);
+  const src=new URL(cfg.page,document.baseURI);
+  src.searchParams.set('embedded','1');
+  src.searchParams.set('config',cfg.url);
+  src.searchParams.set('nucleoUnit',nucleo5sCurrentUnit);
+  const session=getSession()||{};
+  if(session.name)src.searchParams.set('auditor',String(session.name));
+  host.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+      <div>
+        <h3 style="margin:0">Realizar auditoria 5S</h3>
+        <div class="small">${escapeHtml(nucleo5sUnitLabel(nucleo5sCurrentUnit))}</div>
+        <div class="small" style="margin-top:4px">Setor(es) atribuídos: <b>${access.auditSectors.map(escapeHtml).join(', ')}</b></div>
+      </div>
+      <button class="btn secondary" type="button" onclick="nucleo5sShowPanel('home')">Voltar</button>
+    </div>
+    <iframe id="audit5sFrame" title="Auditoria 5S" src="${escapeHtml(src.toString())}" style="width:100%;height:calc(100vh - 205px);min-height:760px;border:1px solid var(--line);border-radius:12px;background:#fff"></iframe>`;
+  const frame=document.getElementById('audit5sFrame');
+  if(frame)frame.addEventListener('load',()=>nucleo5sRestrictAuditIframe(frame,access));
+}
+
+function nucleo5sLockSectorSelect(selectId){
+  const el=document.getElementById(selectId);
+  const access=nucleo5sCurrentAccess();
+  if(!el||!access||access.canSeeAllResults)return;
+  const allowed=Array.isArray(access.resultSectors)?access.resultSectors:[];
+  [...el.options].forEach(opt=>{ if(opt.value&&!allowed.some(a=>nucleo5sEquivalentSectorClient(opt.value,a)))opt.remove(); });
+  if(allowed.length===1){
+    const match=[...el.options].find(o=>o.value&&nucleo5sEquivalentSectorClient(o.value,allowed[0]));
+    if(match)el.value=match.value;
+    el.disabled=true;
+  }
+}
+
+const __nucleo5sRenderScheduleOriginal=nucleo5sRenderSchedule;
+nucleo5sRenderSchedule=function(host){ __nucleo5sRenderScheduleOriginal(host); nucleo5sLockSectorSelect('nucleo5sScheduleSector'); };
+const __nucleo5sRenderActionsOriginal=nucleo5sRenderActions;
+nucleo5sRenderActions=function(host){ __nucleo5sRenderActionsOriginal(host); nucleo5sLockSectorSelect('nucleo5sActionsSector'); };
+const __nucleo5sRenderHistoryOriginal=nucleo5sRenderHistory;
+nucleo5sRenderHistory=function(host){ __nucleo5sRenderHistoryOriginal(host); nucleo5sLockSectorSelect('nucleo5sHistorySector'); };
+const __nucleo5sRenderCycleOriginal=nucleo5sRenderCycle;
+nucleo5sRenderCycle=function(host){ __nucleo5sRenderCycleOriginal(host); nucleo5sLockSectorSelect('nucleo5sCycleSector'); };
