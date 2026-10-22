@@ -21102,102 +21102,114 @@ async function nucleo5sSaveAuditorLinks(links){
   return true;
 }
 
-async function nucleo5sRenderAuditorLinks(host,month){
+function nucleo5sRenderAuditorLinks(host){
   if(!host)return;
   if(!nucleo5sIsLinkAdmin()){
     host.innerHTML='<div class="notice">Somente o SGQ pode editar os vínculos dos auditores.</div>';
     return;
   }
 
-  const now=new Date();
-  month=String(month||now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
-  host.innerHTML='<div class="small">Carregando nomes do cronograma...</div>';
+  const unit=nucleo5sCurrentUnit;
+  const links=nucleo5sReadAuditorLinks().filter(x=>x.unit===unit);
+  const users=(getOperationalUsers()||[])
+    .filter(u=>String(u.approvalStatus||'approved').toLowerCase()==='approved')
+    .filter(u=>nucleo5sUserMatchesUnitForLink(u,unit))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 
-  try{
-    const schedule=await nucleo5sBackend('nucleo_5s_schedule',{month});
-    if(!schedule?.sucesso)throw new Error(schedule?.erro||'Não foi possível consultar o cronograma.');
+  const opts=['<option value="">Selecione a pessoa do Núcleo...</option>']
+    .concat(users.map(u=>{
+      const key=nucleo5sUserKeyForLink(u);
+      const label=[u.name,u.sector,u.email].filter(Boolean).join(' · ');
+      return '<option value="'+escapeHtml(key)+'">'+escapeHtml(label)+'</option>';
+    })).join('');
 
-    const names=[];
-    (schedule.rows||[]).forEach(r=>{
-      [r.auditor1,r.auditor2].forEach(n=>{
-        n=String(n||'').trim();
-        if(n && !names.some(x=>nucleo5sLinkNorm(x)===nucleo5sLinkNorm(n))) names.push(n);
-      });
-    });
-    names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const saved=links.length
+    ? '<div style="overflow:auto;margin-top:18px"><table><thead><tr><th>Nome no cronograma</th><th>Vinculado a</th><th></th></tr></thead><tbody>'+
+      links.map((x,i)=>'<tr>'+
+        '<td><b>'+escapeHtml(x.scheduleName||'-')+'</b></td>'+
+        '<td>'+escapeHtml([x.userName,x.email].filter(Boolean).join(' · ')||'-')+'</td>'+
+        '<td><button class="btn danger" type="button" onclick="nucleo5sRemoveAuditorLink('+JSON.stringify(x.scheduleName||'')+')">Remover</button></td>'+
+      '</tr>').join('')+
+      '</tbody></table></div>'
+    : '<div class="small" style="margin-top:16px">Nenhum vínculo manual cadastrado para esta unidade.</div>';
 
-    const unit=nucleo5sCurrentUnit;
-    const allLinks=nucleo5sReadAuditorLinks();
-    const users=(getOperationalUsers()||[])
-      .filter(u=>String(u.approvalStatus||'approved').toLowerCase()==='approved')
-      .filter(u=>nucleo5sUserMatchesUnitForLink(u,unit))
-      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-
-    const rows=names.length?names.map((name,idx)=>{
-      const linked=allLinks.find(x=>x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(name));
-      const selected=nucleo5sUserKeyForLink(linked||{});
-      const opts=['<option value="">— Sem vínculo manual —</option>']
-        .concat(users.map(u=>{
-          const key=nucleo5sUserKeyForLink(u);
-          const label=[u.name,u.sector,u.email].filter(Boolean).join(' · ');
-          return '<option value="'+escapeHtml(key)+'" '+(key===selected?'selected':'')+'>'+escapeHtml(label)+'</option>';
-        })).join('');
-      return '<tr>'+
-        '<td><b>'+escapeHtml(name)+'</b></td>'+
-        '<td><select id="nucleo5sLinkUser_'+idx+'" style="min-width:280px">'+opts+'</select></td>'+
-        '<td><button class="btn primary" type="button" onclick="nucleo5sSaveOneAuditorLink('+JSON.stringify(name)+','+idx+','+JSON.stringify(month)+')">Salvar vínculo</button></td>'+
-      '</tr>';
-    }).join(''):'<tr><td colspan="3">Nenhum auditor foi encontrado no cronograma deste mês.</td></tr>';
-
-    host.innerHTML=
-      '<div class="card" style="padding:18px">'+
-        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap">'+
-          '<div><div class="overview-eyebrow">ADMINISTRAÇÃO 5S</div><h3 style="margin:5px 0">Vínculo de auditores</h3>'+
-          '<div class="small">O cronograma continua definindo quem audita. Aqui você só informa qual cadastro do Núcleo corresponde ao nome escrito na planilha.</div></div>'+
-          '<label><span class="small">Mês do cronograma</span><input id="nucleo5sLinksMonth" type="month" value="'+escapeHtml(month)+'" onchange="nucleo5sRenderAuditorLinks(document.getElementById(\'audit5sPanel\'),this.value)"></label>'+
-        '</div>'+
-        '<div style="overflow:auto;margin-top:16px"><table><thead><tr><th>Nome no cronograma</th><th>Usuário do Núcleo</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
-        '<div id="nucleo5sLinkStatus" class="small" style="margin-top:12px"></div>'+
-      '</div>';
-  }catch(e){
-    host.innerHTML='<div class="notice danger">Não foi possível carregar os vínculos: '+escapeHtml(e.message||String(e))+'</div>';
-  }
+  host.innerHTML=
+    '<div class="card" style="padding:18px">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap">'+
+        '<div><div class="overview-eyebrow">ADMINISTRAÇÃO 5S</div><h3 style="margin:5px 0">Vincular auditor</h3>'+
+        '<div class="small">Digite exatamente o nome que aparece no cronograma e escolha a pessoa correspondente no Núcleo.</div></div>'+
+        '<button class="btn secondary" type="button" onclick="nucleo5sShowPanel(\'home\')">Voltar</button>'+
+      '</div>'+
+      '<div class="grid" style="margin-top:16px;align-items:end">'+
+        '<label><span class="small">Nome no cronograma</span><input id="nucleo5sLinkScheduleName" placeholder="Ex.: Andreia"></label>'+
+        '<label><span class="small">Pessoa no Núcleo</span><select id="nucleo5sLinkUser">'+opts+'</select></label>'+
+      '</div>'+
+      '<div class="actions"><button id="nucleo5sLinkSaveBtn" class="btn primary" type="button" onclick="nucleo5sSaveManualAuditorLink()">Salvar vínculo</button></div>'+
+      '<div id="nucleo5sLinkStatus" class="small" style="margin-top:12px"></div>'+
+      saved+
+    '</div>';
 }
 
-async function nucleo5sSaveOneAuditorLink(scheduleName,index,month){
+async function nucleo5sSaveManualAuditorLink(){
   const status=document.getElementById('nucleo5sLinkStatus');
-  const select=document.getElementById('nucleo5sLinkUser_'+index);
-  if(!select)return;
+  const btn=document.getElementById('nucleo5sLinkSaveBtn');
+  const scheduleName=String(document.getElementById('nucleo5sLinkScheduleName')?.value||'').trim();
+  const userKey=String(document.getElementById('nucleo5sLinkUser')?.value||'').trim();
+
+  if(!scheduleName){
+    if(status)status.textContent='Digite o nome exatamente como aparece no cronograma.';
+    return;
+  }
+  if(!userKey){
+    if(status)status.textContent='Selecione a pessoa correspondente no Núcleo.';
+    return;
+  }
+
   try{
-    if(status)status.textContent='Salvando vínculo...';
+    if(btn){btn.disabled=true;btn.textContent='Salvando...';}
+    if(status)status.textContent='Salvando vínculo na base central...';
 
     const unit=nucleo5sCurrentUnit;
-    const userKey=String(select.value||'').trim();
+    const user=(getOperationalUsers()||[]).find(u=>nucleo5sUserKeyForLink(u)===userKey);
+    if(!user)throw new Error('O usuário selecionado não foi encontrado.');
+
     let links=nucleo5sReadAuditorLinks().filter(x=>!(
       x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(scheduleName)
     ));
-
-    if(userKey){
-      const user=(getOperationalUsers()||[]).find(u=>nucleo5sUserKeyForLink(u)===userKey);
-      if(!user)throw new Error('O usuário selecionado não foi encontrado.');
-      links.push({
-        unit,
-        scheduleName:String(scheduleName||'').trim(),
-        personId:String(user.personId||'').trim(),
-        email:String(user.email||'').trim().toLowerCase(),
-        userName:String(user.name||'').trim(),
-        updatedAt:new Date().toISOString(),
-        updatedBy:getSession()?.name||'SGQ'
-      });
-    }
+    links.push({
+      unit,
+      scheduleName,
+      personId:String(user.personId||'').trim(),
+      email:String(user.email||'').trim().toLowerCase(),
+      userName:String(user.name||'').trim(),
+      updatedAt:new Date().toISOString(),
+      updatedBy:getSession()?.name||'SGQ'
+    });
 
     await nucleo5sSaveAuditorLinks(links);
-    if(status)status.innerHTML=userKey
-      ? 'Vínculo salvo. O nome <b>'+escapeHtml(scheduleName)+'</b> já pode ser reconhecido pelo Núcleo.'
-      : 'Vínculo manual removido para <b>'+escapeHtml(scheduleName)+'</b>.';
-    await nucleo5sGetAccess(true,month);
+    if(status)status.textContent='Vínculo salvo.';
+    nucleo5sRenderAuditorLinks(document.getElementById('audit5sPanel'));
   }catch(e){
     if(status)status.textContent='Erro ao salvar: '+(e.message||e);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Salvar vínculo';}
+  }
+}
+
+async function nucleo5sRemoveAuditorLink(scheduleName){
+  if(!nucleo5sIsLinkAdmin())return;
+  if(!confirm('Remover o vínculo de "'+scheduleName+'"?'))return;
+  const status=document.getElementById('nucleo5sLinkStatus');
+  try{
+    if(status)status.textContent='Removendo vínculo...';
+    const unit=nucleo5sCurrentUnit;
+    const links=nucleo5sReadAuditorLinks().filter(x=>!(
+      x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(scheduleName)
+    ));
+    await nucleo5sSaveAuditorLinks(links);
+    nucleo5sRenderAuditorLinks(document.getElementById('audit5sPanel'));
+  }catch(e){
+    if(status)status.textContent='Erro ao remover: '+(e.message||e);
   }
 }
 
