@@ -2715,6 +2715,9 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <div class="login-actions">
         <button id="loginEnterBtn" class="btn primary" onclick="loginUser()">Entrar</button>
       </div>
+
+      <div id="loginMessage" class="small hidden" role="status" aria-live="polite"
+        style="margin-top:12px;padding:10px 12px;border-radius:10px;font-weight:700;line-height:1.4"></div>
     </div>
 
     <div id="registerMode" class="hidden">
@@ -2744,8 +2747,6 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
         <button id="registerSubmitBtn" class="btn primary" onclick="registerUser()">Enviar cadastro</button>
       </div>
     </div>
-
-    .
     </div>
   </div>
 </div>
