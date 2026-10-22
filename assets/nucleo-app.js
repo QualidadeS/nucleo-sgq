@@ -21139,6 +21139,9 @@ function nucleo5sRenderAuditorLinks(host){
       return '<option value="'+escapeHtml(key)+'">'+escapeHtml(label)+'</option>';
     })).join('');
 
+  const now=new Date();
+  const currentMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+
   const rows=links.length
     ? '<div style="overflow:auto;margin-top:18px"><table><thead><tr><th>Nome no cronograma</th><th>Usuário Núcleo</th><th></th></tr></thead><tbody>'+
       links.map(x=>'<tr><td><b>'+escapeHtml(x.scheduleName||'-')+'</b></td><td>'+
@@ -21151,18 +21154,104 @@ function nucleo5sRenderAuditorLinks(host){
     '<div class="card" style="padding:18px">'+
       '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
         '<div><div class="overview-eyebrow">ADMINISTRAÇÃO 5S</div><h3 style="margin:5px 0">Vincular auditor</h3>'+
-        '<div class="small">Digite o nome exatamente como aparece no cronograma e escolha a pessoa correspondente.</div></div>'+
+        '<div class="small">Escolha o nome que aparece no cronograma e vincule à pessoa correspondente no Núcleo.</div></div>'+
         '<button class="btn secondary" type="button" onclick="nucleo5sShowPanel(\'home\')">Voltar</button>'+
       '</div>'+
+
       '<div class="grid" style="margin-top:16px;align-items:end">'+
-        '<label><span class="small">Nome no cronograma</span><input id="nucleo5sLinkScheduleName" placeholder="Ex.: Andreia"></label>'+
-        '<label><span class="small">Pessoa no Núcleo</span><select id="nucleo5sLinkUser">'+options+'</select></label>'+
+        '<label><span class="small">Mês do cronograma</span>'+
+          '<input id="nucleo5sLinkMonth" type="month" value="'+escapeHtml(currentMonth)+'" onchange="nucleo5sLoadAuditorNamesFromSchedule()">'+
+        '</label>'+
+
+        '<label><span class="small">Nome no cronograma</span>'+
+          '<select id="nucleo5sLinkScheduleSelect" onchange="nucleo5sSelectScheduleAuditorName()">'+
+            '<option value="">Carregando nomes do cronograma...</option>'+
+          '</select>'+
+        '</label>'+
+
+        '<label><span class="small">Pessoa no Núcleo</span>'+
+          '<select id="nucleo5sLinkUser">'+options+'</select>'+
+        '</label>'+
       '</div>'+
-      '<div class="actions"><button id="nucleo5sLinkSaveBtn" class="btn primary" type="button" onclick="nucleo5sSaveManualAuditorLink()">Salvar vínculo</button></div>'+
+
+      '<div style="margin-top:10px">'+
+        '<label><span class="small">Ou digite manualmente</span>'+
+          '<input id="nucleo5sLinkScheduleName" placeholder="Ex.: Andreia">'+
+        '</label>'+
+      '</div>'+
+
+      '<div class="actions">'+
+        '<button id="nucleo5sLinkSaveBtn" class="btn primary" type="button" onclick="nucleo5sSaveManualAuditorLink()">Salvar vínculo</button>'+
+        '<button class="btn secondary" type="button" onclick="nucleo5sLoadAuditorNamesFromSchedule(true)">↻ Atualizar nomes</button>'+
+      '</div>'+
+
       '<div id="nucleo5sLinkStatus" class="small" style="margin-top:12px"></div>'+
       rows+
     '</div>';
+
+  setTimeout(()=>nucleo5sLoadAuditorNamesFromSchedule(false),0);
 }
+
+function nucleo5sSelectScheduleAuditorName(){
+  const select=document.getElementById('nucleo5sLinkScheduleSelect');
+  const input=document.getElementById('nucleo5sLinkScheduleName');
+  if(!select||!input)return;
+  if(select.value)input.value=select.value;
+}
+
+async function nucleo5sLoadAuditorNamesFromSchedule(force=false){
+  const select=document.getElementById('nucleo5sLinkScheduleSelect');
+  const monthEl=document.getElementById('nucleo5sLinkMonth');
+  const status=document.getElementById('nucleo5sLinkStatus');
+
+  if(!select||!monthEl)return;
+
+  const month=String(monthEl.value||'').trim();
+  select.disabled=true;
+  select.innerHTML='<option value="">Carregando nomes do cronograma...</option>';
+
+  if(status && force)status.textContent='Atualizando nomes do cronograma...';
+
+  try{
+    const timeout=new Promise((_,reject)=>setTimeout(
+      ()=>reject(new Error('O cronograma demorou mais de 12 segundos para responder.')),
+      12000
+    ));
+
+    const data=await Promise.race([
+      nucleo5sBackend('nucleo_5s_schedule',{month}),
+      timeout
+    ]);
+
+    if(!data?.sucesso)throw new Error(data?.erro||'Não foi possível consultar o cronograma.');
+
+    const names=[];
+    (Array.isArray(data.rows)?data.rows:[]).forEach(row=>{
+      [row.auditor1,row.auditor2].forEach(name=>{
+        name=String(name||'').trim();
+        if(!name)return;
+        if(!names.some(x=>nucleo5sLinkNorm(x)===nucleo5sLinkNorm(name)))names.push(name);
+      });
+    });
+
+    names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    if(names.length){
+      select.innerHTML='<option value="">Selecione um nome do cronograma...</option>'+
+        names.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');
+      if(status)status.textContent=names.length+' nome(s) encontrado(s) no cronograma de '+month+'.';
+    }else{
+      select.innerHTML='<option value="">Nenhum auditor encontrado neste mês</option>';
+      if(status)status.textContent='Nenhum auditor foi encontrado no cronograma desse mês. Você ainda pode digitar o nome manualmente.';
+    }
+  }catch(e){
+    select.innerHTML='<option value="">Não foi possível carregar o cronograma</option>';
+    if(status)status.textContent='Não foi possível carregar os nomes automaticamente: '+(e.message||e)+'. Você ainda pode digitar o nome manualmente.';
+  }finally{
+    select.disabled=false;
+  }
+}
+
 async function nucleo5sSaveManualAuditorLink(){
   const status=document.getElementById('nucleo5sLinkStatus');
   const btn=document.getElementById('nucleo5sLinkSaveBtn');
