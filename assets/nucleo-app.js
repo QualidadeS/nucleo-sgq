@@ -1246,7 +1246,8 @@ const NUCLEO_SHARED_GLOBAL_KEYS=new Set([
   'nucleo-hidden-assigned-directions-v1',
   'nucleo-deleted-triage-keys-v1',
   'nucleo-unified-actions-v1',
-  'nucleo-pdca-review-2026-v1'
+  'nucleo-pdca-review-2026-v1',
+  'nucleo-5s-auditor-links-v1'
 ]);
 const NUCLEO_SHARED_USER_KEYS=new Set([
   'ro-pdca-notifications-v1',
@@ -19780,10 +19781,8 @@ function enforceAdminVisibility(){
     el.classList.toggle('hidden',!allowed);
   });
 
-  // O Centro 5S fica dentro do bloco visual de Gestão, mas não é exclusivo do SGQ.
-  // Usuários vinculados a um setor precisam enxergar o 5S para consultar os resultados
-  // do próprio setor. Auditores também acessam o mesmo módulo e o backend decide se
-  // o botão "Realizar auditoria" será liberado conforme o cronograma do mês.
+  // O Centro 5S não é exclusivo do SGQ. Usuários vinculados a um setor
+  // precisam enxergar o módulo para consultar os resultados do próprio setor.
   const session5s=getSession()||{};
   const canSee5s=allowed || !!String(session5s.sector||'').trim();
 
@@ -21024,3 +21023,206 @@ const __nucleo5sRenderHistoryOriginal=nucleo5sRenderHistory;
 nucleo5sRenderHistory=function(host){ __nucleo5sRenderHistoryOriginal(host); nucleo5sLockSectorSelect('nucleo5sHistorySector'); };
 const __nucleo5sRenderCycleOriginal=nucleo5sRenderCycle;
 nucleo5sRenderCycle=function(host){ __nucleo5sRenderCycleOriginal(host); nucleo5sLockSectorSelect('nucleo5sCycleSector'); };
+
+
+/* ============================================================
+   NÚCLEO 5S — VÍNCULO DO NOME DO CRONOGRAMA COM USUÁRIO NÚCLEO
+   Fonte de auditoria continua sendo o cronograma mensal.
+   O vínculo apenas resolve nomes abreviados/diferentes.
+   ============================================================ */
+const NUCLEO_5S_AUDITOR_LINKS_KEY='nucleo-5s-auditor-links-v1';
+
+function nucleo5sIsLinkAdmin(){
+  return String(getSession()?.role||'').trim().toLowerCase()==='admin';
+}
+
+function nucleo5sReadAuditorLinks(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(NUCLEO_5S_AUDITOR_LINKS_KEY)||'[]');
+    return Array.isArray(parsed)?parsed:[];
+  }catch(e){ return []; }
+}
+
+function nucleo5sLinkNorm(v){
+  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function nucleo5sUserKeyForLink(u){
+  return String(u?.personId||u?.email||u?.name||'').trim();
+}
+
+function nucleo5sUserMatchesUnitForLink(u,unit){
+  const raw=String(u?.unit||'').toLowerCase();
+  if(raw.includes('todas'))return true;
+  try{return explicitPortalUnit(u?.unit)===unit}catch(e){}
+  return unit==='filial'?raw.includes('filial')||raw.includes('linhares'):raw.includes('matriz')||raw.includes('são bento')||raw.includes('sao bento');
+}
+
+function nucleo5sEnsureAuditorLinkCard(){
+  const cards=document.getElementById('audit5sHubCards');
+  if(!cards)return;
+  let btn=document.getElementById('audit5sAuditorLinksBtn');
+  if(!nucleo5sIsLinkAdmin()){
+    if(btn)btn.remove();
+    return;
+  }
+  if(btn)return;
+  btn=document.createElement('button');
+  btn.id='audit5sAuditorLinksBtn';
+  btn.className='card';
+  btn.type='button';
+  btn.style.cssText='text-align:left;padding:16px;cursor:pointer';
+  btn.onclick=()=>nucleo5sShowPanel('auditor-links');
+  btn.innerHTML='<div class="overview-eyebrow">VÍNCULOS</div><h3 style="margin:6px 0">Vincular auditores</h3><div class="small">Ligue o nome do cronograma ao cadastro correto do Núcleo.</div>';
+  cards.appendChild(btn);
+}
+
+async function nucleo5sSaveAuditorLinks(links){
+  if(!nucleo5sIsLinkAdmin())throw new Error('Somente o SGQ pode alterar vínculos de auditores.');
+  const now=new Date().toISOString();
+  const record={
+    id:'global:'+NUCLEO_5S_AUDITOR_LINKS_KEY,
+    key:NUCLEO_5S_AUDITOR_LINKS_KEY,
+    value:JSON.stringify(links||[]),
+    scope:'global',
+    userKey:'',
+    updatedAt:now,
+    updatedBy:getSession()?.name||'SGQ'
+  };
+  await portalBackendSaveConfirmed('shared_state',record.id,record);
+  try{
+    if(typeof nucleoNativeStorageSetItem==='function'){
+      nucleoNativeStorageSetItem.call(localStorage,NUCLEO_5S_AUDITOR_LINKS_KEY,record.value);
+    }else{
+      localStorage.setItem(NUCLEO_5S_AUDITOR_LINKS_KEY,record.value);
+    }
+  }catch(e){}
+  window.NUCLEO_5S_ACCESS_CACHE={};
+  return true;
+}
+
+async function nucleo5sRenderAuditorLinks(host,month){
+  if(!host)return;
+  if(!nucleo5sIsLinkAdmin()){
+    host.innerHTML='<div class="notice">Somente o SGQ pode editar os vínculos dos auditores.</div>';
+    return;
+  }
+
+  const now=new Date();
+  month=String(month||now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+  host.innerHTML='<div class="small">Carregando nomes do cronograma...</div>';
+
+  try{
+    const schedule=await nucleo5sBackend('nucleo_5s_schedule',{month});
+    if(!schedule?.sucesso)throw new Error(schedule?.erro||'Não foi possível consultar o cronograma.');
+
+    const names=[];
+    (schedule.rows||[]).forEach(r=>{
+      [r.auditor1,r.auditor2].forEach(n=>{
+        n=String(n||'').trim();
+        if(n && !names.some(x=>nucleo5sLinkNorm(x)===nucleo5sLinkNorm(n))) names.push(n);
+      });
+    });
+    names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    const unit=nucleo5sCurrentUnit;
+    const allLinks=nucleo5sReadAuditorLinks();
+    const users=(getOperationalUsers()||[])
+      .filter(u=>String(u.approvalStatus||'approved').toLowerCase()==='approved')
+      .filter(u=>nucleo5sUserMatchesUnitForLink(u,unit))
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+
+    const rows=names.length?names.map((name,idx)=>{
+      const linked=allLinks.find(x=>x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(name));
+      const selected=nucleo5sUserKeyForLink(linked||{});
+      const opts=['<option value="">— Sem vínculo manual —</option>']
+        .concat(users.map(u=>{
+          const key=nucleo5sUserKeyForLink(u);
+          const label=[u.name,u.sector,u.email].filter(Boolean).join(' · ');
+          return '<option value="'+escapeHtml(key)+'" '+(key===selected?'selected':'')+'>'+escapeHtml(label)+'</option>';
+        })).join('');
+      return '<tr>'+
+        '<td><b>'+escapeHtml(name)+'</b></td>'+
+        '<td><select id="nucleo5sLinkUser_'+idx+'" style="min-width:280px">'+opts+'</select></td>'+
+        '<td><button class="btn primary" type="button" onclick="nucleo5sSaveOneAuditorLink('+JSON.stringify(name)+','+idx+','+JSON.stringify(month)+')">Salvar vínculo</button></td>'+
+      '</tr>';
+    }).join(''):'<tr><td colspan="3">Nenhum auditor foi encontrado no cronograma deste mês.</td></tr>';
+
+    host.innerHTML=
+      '<div class="card" style="padding:18px">'+
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap">'+
+          '<div><div class="overview-eyebrow">ADMINISTRAÇÃO 5S</div><h3 style="margin:5px 0">Vínculo de auditores</h3>'+
+          '<div class="small">O cronograma continua definindo quem audita. Aqui você só informa qual cadastro do Núcleo corresponde ao nome escrito na planilha.</div></div>'+
+          '<label><span class="small">Mês do cronograma</span><input id="nucleo5sLinksMonth" type="month" value="'+escapeHtml(month)+'" onchange="nucleo5sRenderAuditorLinks(document.getElementById(\'audit5sPanel\'),this.value)"></label>'+
+        '</div>'+
+        '<div style="overflow:auto;margin-top:16px"><table><thead><tr><th>Nome no cronograma</th><th>Usuário do Núcleo</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+        '<div id="nucleo5sLinkStatus" class="small" style="margin-top:12px"></div>'+
+      '</div>';
+  }catch(e){
+    host.innerHTML='<div class="notice danger">Não foi possível carregar os vínculos: '+escapeHtml(e.message||String(e))+'</div>';
+  }
+}
+
+async function nucleo5sSaveOneAuditorLink(scheduleName,index,month){
+  const status=document.getElementById('nucleo5sLinkStatus');
+  const select=document.getElementById('nucleo5sLinkUser_'+index);
+  if(!select)return;
+  try{
+    if(status)status.textContent='Salvando vínculo...';
+
+    const unit=nucleo5sCurrentUnit;
+    const userKey=String(select.value||'').trim();
+    let links=nucleo5sReadAuditorLinks().filter(x=>!(
+      x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(scheduleName)
+    ));
+
+    if(userKey){
+      const user=(getOperationalUsers()||[]).find(u=>nucleo5sUserKeyForLink(u)===userKey);
+      if(!user)throw new Error('O usuário selecionado não foi encontrado.');
+      links.push({
+        unit,
+        scheduleName:String(scheduleName||'').trim(),
+        personId:String(user.personId||'').trim(),
+        email:String(user.email||'').trim().toLowerCase(),
+        userName:String(user.name||'').trim(),
+        updatedAt:new Date().toISOString(),
+        updatedBy:getSession()?.name||'SGQ'
+      });
+    }
+
+    await nucleo5sSaveAuditorLinks(links);
+    if(status)status.innerHTML=userKey
+      ? 'Vínculo salvo. O nome <b>'+escapeHtml(scheduleName)+'</b> já pode ser reconhecido pelo Núcleo.'
+      : 'Vínculo manual removido para <b>'+escapeHtml(scheduleName)+'</b>.';
+    await nucleo5sGetAccess(true,month);
+  }catch(e){
+    if(status)status.textContent='Erro ao salvar: '+(e.message||e);
+  }
+}
+
+// Acopla a tela nova sem alterar o HTML do index.
+(function nucleo5sAuditorLinksBootstrap(){
+  const originalApply=nucleo5sApplyHubAccess;
+  nucleo5sApplyHubAccess=function(access){
+    const r=originalApply.apply(this,arguments);
+    try{nucleo5sEnsureAuditorLinkCard()}catch(e){}
+    return r;
+  };
+
+  const originalPanel=nucleo5sShowPanel;
+  nucleo5sShowPanel=async function(panel){
+    if(panel==='auditor-links'){
+      const host=document.getElementById('audit5sPanel');
+      return nucleo5sRenderAuditorLinks(host);
+    }
+    return originalPanel.apply(this,arguments);
+  };
+
+  const originalShow=showAudit5S;
+  showAudit5S=async function(){
+    const r=await originalShow.apply(this,arguments);
+    try{nucleo5sEnsureAuditorLinkCard()}catch(e){}
+    return r;
+  };
+})();
