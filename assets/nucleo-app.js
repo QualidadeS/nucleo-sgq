@@ -16917,7 +16917,6 @@ function nucleoAssignedExportDataset(){
       const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
       const pdcaExists=
         reviewDecision==='yes'||
-        triNow?.pdcaRequired===true||
         !!getPdcaReturnForRo(r)||
         pdcaExternalExists(r,triageMap);
       if(pdcaExists)return false;
@@ -17453,11 +17452,12 @@ function render(){
         );
         const reviewDecision=nucleoPdcaReviewMap2026()[reviewCanonical]?.decision||'';
         const triNow=getRoTriageRecord(r,renderTriageMap);
-        const pdcaMarcadoComoTem=reviewDecision==='yes'||triNow?.pdcaRequired===true;
+        const pdcaMarcadoComoTem=reviewDecision==='yes';
         const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
 
-        // Esta tela é para cobrança/acompanhamento de resposta.
-        // Se a R.O. já tem PDCA, ela saiu desta etapa e não aparece aqui.
+        // pdcaRequired=true significa que o setor AINDA precisa responder.
+        // Só sai desta tela quando já existe PDCA real/externo ou quando
+        // a revisão histórica confirmou que já havia PDCA.
         if(pdcaMarcadoComoTem||pdcaJaRecebido)return false;
 
         if(assignedLifecycle==='history'){
@@ -18286,7 +18286,7 @@ function renderUserOverview(){
   const k=document.getElementById('overviewKpis');
   if(k){
     const cards=[
-      overviewKpi(d.summary.pending,'PDCAs que aguardam sua resposta',d.summary.overdue?'danger':'','showAssignedRos()','Ver R.O.s'),
+      overviewKpi(d.summary.pending,'R.O.s aguardando sua resposta',d.summary.overdue?'danger':'','showAssignedRos()','Ver R.O.s'),
       overviewKpi(d.actions.length,'Ações do seu setor',d.overdueActions?'danger':'','showActionsDashboard()','Ver ações'),
       overviewKpi(d.submittedWaiting,'R.O.s que você abriu aguardando triagem',d.submittedWaiting?'warn':'','showMySubmittedRos()','Acompanhar'),
       overviewKpi(d.activeSacs,'SACs em acompanhamento',d.activeSacs?'':'','showMySacs()','Ver SACs')
@@ -18298,9 +18298,9 @@ function renderUserOverview(){
   }
 
   const priorities=[];
-  if(d.summary.overdue)priorities.push(overviewPriority(`${d.summary.overdue} PDCA(s) em atraso`,'Há respostas com prazo vencido que dependem do seu setor.','showAssignedRos()','danger'));
+  if(d.summary.overdue)priorities.push(overviewPriority(`${d.summary.overdue} R.O.(s) com resposta em atraso`,'Há respostas com prazo vencido que dependem do seu setor.','showAssignedRos()','danger'));
   if(d.overdueActions)priorities.push(overviewPriority(`${d.overdueActions} ação(ões) atrasada(s)`,'Ações atribuídas ao seu setor ultrapassaram o prazo.','showActionsDashboard()','danger'));
-  if(d.summary.pending)priorities.push(overviewPriority(`${d.summary.pending} PDCA(s) aguardando resposta`,'R.O.s direcionadas ao seu setor ainda precisam de resposta.','showAssignedRos()','warn'));
+  if(d.summary.pending)priorities.push(overviewPriority(`${d.summary.pending} R.O.(s) aguardando resposta`,'R.O.s direcionadas ao seu setor ainda precisam de resposta.','showAssignedRos()','warn'));
   if(d.actions.length-d.overdueActions>0)priorities.push(overviewPriority(`${d.actions.length-d.overdueActions} ação(ões) em andamento`,'Existem ações do seu setor ainda não concluídas.','showActionsDashboard()',''));
   if(d.submittedWaiting)priorities.push(overviewPriority(`${d.submittedWaiting} R.O.(s) aguardando triagem`,'Ocorrências registradas por você ainda estão na análise inicial do SGQ.','showMySubmittedRos()',''));
   if(d.activeSacs)priorities.push(overviewPriority(`${d.activeSacs} SAC(s) em acompanhamento`,'Há reclamações vinculadas a você ainda abertas.','showMySacs()',''));
@@ -18333,7 +18333,7 @@ function renderAdminOverview(){
   if(d.sacToClassify)priorities.push(overviewPriority(`${d.sacToClassify} SAC(s) sem classificação completa`,'Defina tratativa, setor responsável e prazo antes do início.','showExternalRoControl()','warn'));
   if(d.actionReview)priorities.push(overviewPriority(`${d.actionReview} ação(ões) exigem atenção`,'Há ações atrasadas ou aguardando conferência do SGQ.','showPendingActions()','danger'));
   if(d.contests.length)priorities.push(overviewPriority(`${d.contests.length} contestação(ões) pendente(s)`,'Existem solicitações aguardando decisão administrativa.','showContestations()','warn'));
-  if(d.summary.overdue)priorities.push(overviewPriority(`${d.summary.overdue} PDCA(s) em atraso`,'Há PDCAs direcionados com prazo vencido.','showPendingHub()','danger'));
+  if(d.summary.overdue)priorities.push(overviewPriority(`${d.summary.overdue} R.O.(s) com resposta em atraso`,'Há PDCAs direcionados com prazo vencido.','showPendingHub()','danger'));
   if(d.registrations.length)priorities.push(overviewPriority(`${d.registrations.length} cadastro(s) aguardando aprovação`,'Novos usuários precisam de análise.','showPendingHub()',''));
   if(d.docs.length)priorities.push(overviewPriority(`${d.docs.length} solicitação(ões) de documentos aberta(s)`,'Pedidos enviados ao SGQ ainda precisam de atendimento.',"showAdminOperationalModule('documents')",''));
 
@@ -20452,7 +20452,7 @@ document.addEventListener('DOMContentLoaded',()=>{nucleoManagerScopeControl();nu
 
 function nucleoHasManagedScope(){return isManager()||managedSectorsForCurrentUser().length>0;}
 
-function nucleoKpiCatalog(){return (isAdmin()?[['triage','R.O.s aguardando triagem','ros','triage'],['sac_classify','SACs aguardando classificação','sac','edit'],['action_review','Ações para atenção do SGQ','pdca','reviewActions'],['contests','Contestações pendentes','ros','reviewContests'],['registrations','Cadastros aguardando aprovação','users','approve'],['documents','Solicitações de documentos abertas','documents','consult']]:[['pdca_pending','PDCAs que aguardam sua resposta','ros','assigned'],['sector_actions','Ações do seu setor','pdca','actions'],['submitted','R.O.s que você abriu aguardando triagem','ros','submitted'],['sacs','SACs em acompanhamento','sac','consult'],['documents','Solicitações de documentos abertas','documents','consult']]).concat(nucleoKpiExtraCatalog());}
+function nucleoKpiCatalog(){return (isAdmin()?[['triage','R.O.s aguardando triagem','ros','triage'],['sac_classify','SACs aguardando classificação','sac','edit'],['action_review','Ações para atenção do SGQ','pdca','reviewActions'],['contests','Contestações pendentes','ros','reviewContests'],['registrations','Cadastros aguardando aprovação','users','approve'],['documents','Solicitações de documentos abertas','documents','consult']]:[['pdca_pending','R.O.s aguardando sua resposta','ros','assigned'],['sector_actions','Ações do seu setor','pdca','actions'],['submitted','R.O.s que você abriu aguardando triagem','ros','submitted'],['sacs','SACs em acompanhamento','sac','consult'],['documents','Solicitações de documentos abertas','documents','consult']]).concat(nucleoKpiExtraCatalog());}
 function nucleoKpiOrder(available,saved){return Array.isArray(saved)?[...new Set(saved)].filter(id=>available.includes(id)):available;}
 function nucleoRenderKpiChoices(cards,ids){const host=document.getElementById('overviewKpis');if(!host)return;const extra=nucleoKpiExtraCatalog();if((getSession()?.overviewIndicators||[]).some(id=>extra.some(x=>x[0]===id))){const counts=nucleoKpiExtraCounts();extra.forEach(x=>{if(!ids.includes(x[0])){ids.push(x[0]);cards.push(overviewKpi(counts[x[0]]||0,x[1],'',null));}});}const allowed=nucleoKpiCatalog().filter(x=>nucleoPersonFeatureCan(x[2],x[3])).map(x=>x[0]),order=Array.isArray(getSession()?.overviewIndicators)?nucleoKpiOrder(ids.filter(id=>allowed.includes(id)),getSession().overviewIndicators):ids.filter(id=>allowed.includes(id)&&nucleoKpiDefaultIds().includes(id));host.innerHTML=order.map(id=>cards[ids.indexOf(id)]).join('')||'<p class="small">Nenhum indicador selecionado. Use Personalizar indicadores.</p>';let toolbar=document.getElementById('overviewIndicatorToolbar');if(!toolbar){toolbar=document.createElement('div');toolbar.id='overviewIndicatorToolbar';toolbar.className='actions';toolbar.style.cssText='justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0';toolbar.innerHTML='<button class="btn secondary" type="button" onclick="nucleoOpenKpiEditor()">⚙ Personalizar indicadores</button>';host.before(toolbar);}const refresh=document.getElementById('overviewRefreshButton');if(refresh)toolbar.appendChild(refresh);nucleoEnsureInlineTeam();}
 var nucleoKpiDraft;
