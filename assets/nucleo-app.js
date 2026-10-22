@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261022-1815-5s-live-users';
+window.NUCLEO_BUILD_VERSION = '20261022-1855-5s-users-exact-source';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -21120,11 +21120,10 @@ async function nucleo5sSaveAuditorLinks(links){
 }
 
 function nucleo5sCurrentLinkUsers(){
+  // Usa exatamente a mesma fonte da tela Administração > Usuários.
+  // Não aplica filtro extra de status/unidade, para que qualquer cadastro
+  // exibido na administração também possa ser localizado para vínculo 5S.
   return (getOperationalUsers()||[])
-    .filter(u=>{
-      const status=String(u.approvalStatus||u.status||'approved').trim().toLowerCase();
-      return !['rejected','disabled','inactive','deleted','excluido','excluída','excluida'].includes(status);
-    })
     .filter(u=>String(u.name||u.email||'').trim())
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
