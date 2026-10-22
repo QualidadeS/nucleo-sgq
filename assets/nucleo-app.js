@@ -891,6 +891,7 @@ function nucleoRequireCentralData(action='continuar'){
 function nucleoActionNeedsCentralConfirmation(action){
   action=String(action||'').toLowerCase();
   if(!action)return false;
+  if(action.indexOf('nucleo_5s_')===0)return false;
   if(['portal_login','portal_login_jsonp','portal_auth_v2','portal_register_user','portal_public_config','portal_load','portal_ro_page','portal_get_record','portal_save_status','portal_delete_status'].includes(action))return false;
   if(/(?:^|_)(load|get|read|list|overview|status|search|public|diagnostic|pdf)(?:_|$)/.test(action))return false;
   return /(?:^|_)(save|delete|update|create|upload|finalize|present|approve|reject|confirm|send|schedule|cancel|archive|remove|set|change)(?:_|$)/.test(action);
