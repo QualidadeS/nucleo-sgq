@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261022-1445-5s-auditor-links';
+window.NUCLEO_BUILD_VERSION = '20261022-1535-5s-schedule-fast';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -21214,25 +21214,20 @@ async function nucleo5sLoadAuditorNamesFromSchedule(force=false){
 
   try{
     const timeout=new Promise((_,reject)=>setTimeout(
-      ()=>reject(new Error('O cronograma demorou mais de 12 segundos para responder.')),
-      12000
+      ()=>reject(new Error('O cronograma demorou mais de 30 segundos para responder.')),
+      30000
     ));
 
     const data=await Promise.race([
-      nucleo5sBackend('nucleo_5s_schedule',{month}),
+      nucleo5sBackend('nucleo_5s_schedule_names',{month}),
       timeout
     ]);
 
     if(!data?.sucesso)throw new Error(data?.erro||'Não foi possível consultar o cronograma.');
 
-    const names=[];
-    (Array.isArray(data.rows)?data.rows:[]).forEach(row=>{
-      [row.auditor1,row.auditor2].forEach(name=>{
-        name=String(name||'').trim();
-        if(!name)return;
-        if(!names.some(x=>nucleo5sLinkNorm(x)===nucleo5sLinkNorm(name)))names.push(name);
-      });
-    });
+    const names=Array.isArray(data.names)
+      ? data.names.map(name=>String(name||'').trim()).filter(Boolean)
+      : [];
 
     names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
 
