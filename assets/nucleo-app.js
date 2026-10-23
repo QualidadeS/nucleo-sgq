@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261022-1905-5s-users-central';
+window.NUCLEO_BUILD_VERSION = '20261023-0635-user-login-status';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -4250,6 +4250,7 @@ function renderOperationalUsers(){
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
           <span class="role-tag">${u.permissions?'Acesso personalizado':u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
+          ${(()=>{const s=nucleoUserLoginState(u);return `<span class="status-badge ${s.className}" style="margin-left:6px">${escapeHtml(s.label)}</span>`})()}
           ${u.role==='manager'||(u.managedSectors||[]).length?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
         </div>
       </div>
@@ -4258,6 +4259,9 @@ function renderOperationalUsers(){
         <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">Editar gestão</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
         <button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button>
+        ${u.approvalStatus!=='pending'&&u.approvalStatus!=='rejected'
+          ? `<button id="userLoginToggle_${btoa(unescape(encodeURIComponent(String(u.email||u.name)))).replace(/=+$/,'')}" class="btn secondary" type="button" onclick="toggleOperationalUserLogin('${escapeHtml(u.email||u.name)}')">${nucleoUserLoginState(u).active?'Desativar login':'Ativar login'}</button>`
+          : ''}
         <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Excluir login</button>
       </div>
     </div>`).join(''):'';
@@ -4265,6 +4269,93 @@ function renderOperationalUsers(){
   box.innerHTML=filtered.length?pendingHtml+approvedHtml+(users.length<filtered.length?'<div class="actions"><button class="btn secondary" type="button" onclick="showMoreOperationalUsers()">Mostrar mais 5</button></div>':''):'<div class="small">Nenhum cadastro encontrado com estes filtros.</div>';
   box.querySelectorAll('.admin-user-row').forEach(row=>{const button=row.querySelector("button[onclick^='openUnitUserAccess']"),actions=row.querySelector('.actions');if(button&&actions)actions.prepend(button);});
 }
+
+function nucleoUserLoginState(u){
+  const approval=String(u?.approvalStatus||'approved').trim().toLowerCase();
+  const status=String(u?.status||'').trim().toLowerCase();
+  const inactive=u?.active===false || approval==='inactive' || approval==='disabled' || status==='inactive' || status==='disabled';
+  if(inactive)return {active:false,label:'Desativado',className:'rejected'};
+  if(approval==='pending')return {active:false,label:'Aguardando aprovação',className:'pending'};
+  if(approval==='rejected')return {active:false,label:'Recusado',className:'rejected'};
+  return {active:true,label:'Ativo',className:'approved'};
+}
+
+async function toggleOperationalUserLogin(key){
+  if(!nucleoFeatureRequire('users','approve'))return;
+  if(!isAdmin())return;
+
+  const users=getOperationalUsers();
+  const idx=users.findIndex(u=>String(u.email||u.name)===String(key));
+  if(idx<0){alert('Usuário não encontrado.');return}
+
+  const user=users[idx];
+  const currentEmail=String(getSession()?.email||'').trim().toLowerCase();
+  const targetEmail=String(user.email||'').trim().toLowerCase();
+
+  if(targetEmail && targetEmail===currentEmail){
+    alert('Você não pode desativar o login da conta que está usando.');
+    return;
+  }
+
+  const state=nucleoUserLoginState(user);
+  const next=state.active?'inactive':'approved';
+  const action=state.active?'desativar':'ativar';
+
+  if(!confirm(`Deseja ${action} o login de ${user.name||user.email||'este usuário'}?`))return;
+
+  const original={...user};
+  const now=new Date().toISOString();
+
+  users[idx]={
+    ...user,
+    approvalStatus:next,
+    active:next==='approved',
+    status:next==='approved'?'active':'inactive',
+    updatedAt:now,
+    ...(next==='approved'
+      ? {reactivatedAt:now,reactivatedBy:getSession()?.name||'SGQ'}
+      : {disabledAt:now,disabledBy:getSession()?.name||'SGQ'})
+  };
+
+  const button=document.getElementById('userLoginToggle_'+btoa(unescape(encodeURIComponent(String(key)))).replace(/=+$/,''));
+  if(button)button.disabled=true;
+
+  try{
+    if(portalBackendEnabled()){
+      const res=await portalJsonp({
+        acao:'portal_update_user_status',
+        userId:String(user.email||user.name),
+        status:next,
+        ator:getSession()?.name||'SGQ'
+      },25000);
+
+      if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a alteração.');
+
+      const verify=await portalJsonp({acao:'portal_pending_users'},25000);
+      const remote=Array.isArray(verify?.users)?verify.users:[];
+      const saved=remote.find(u=>String(u.email||u.name)===String(user.email||user.name));
+      if(!saved || String(saved.approvalStatus||'').toLowerCase()!==next){
+        throw new Error('A alteração não foi confirmada na base central.');
+      }
+    }
+
+    localStorage.setItem(USERS_KEY,JSON.stringify(users));
+    claimantIdentityCache=null;
+    renderOperationalUsers();
+    try{renderAdminUsers()}catch(e){}
+    try{nucleo5sPopulateLinkUsers?.(true)}catch(e){}
+    addPortalAuditEvent(next==='approved'?'ativar_login_usuario':'desativar_login_usuario',
+      user.email||user.name,
+      {name:user.name,email:user.email,status:next}
+    );
+  }catch(e){
+    users[idx]=original;
+    localStorage.setItem(USERS_KEY,JSON.stringify(users));
+    renderOperationalUsers();
+    alert('Não foi possível '+action+' o login: '+(e.message||e));
+  }
+}
+
 async function approvePortalUser(key){
   if(!nucleoFeatureRequire('users','approve'))return;
   if(!isAdmin())return;
@@ -4694,6 +4785,8 @@ function unifiedActionIsActiveUser(u){
     normalizeAnswer(u.status||'')!=='inactive' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
+    u.approvalStatus!=='inactive' &&
+    u.approvalStatus!=='disabled' &&
     !nucleoPersonPermissions(u).sgq;
 }
 function unifiedActionAssignableUsers(){
@@ -8950,6 +9043,8 @@ function activeOperationalUsers(){
     normalizeAnswer(u.status||'')!=='inactive' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
+    u.approvalStatus!=='inactive' &&
+    u.approvalStatus!=='disabled' &&
     String(u.name||'').trim() &&
     String(u.email||'').trim()
   );
@@ -12135,6 +12230,8 @@ function managersForSector(sector){
     u.role==='manager' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
+    u.approvalStatus!=='inactive' &&
+    u.approvalStatus!=='disabled' &&
     (Array.isArray(u.managedSectors)?u.managedSectors:[]).some(s=>normalizeAnswer(s)===wanted)
   );
 }
