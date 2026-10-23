@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261021-0945-unified';
+window.NUCLEO_BUILD_VERSION = '20261023-1600-pdca-readable-display';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -11950,21 +11950,27 @@ async function showSentPdcas(){
   }
 }
 // Nome amigável apenas para exibição: preserva o ID técnico na base e nas ações.
-function nucleoPdcaReceivedDisplayName(id,fileName){
- const original=String(id||'').trim();
- // Nos registros importados o identificador técnico também pode estar em fileName.
- const found=[original,String(fileName||'').trim()].map(v=>v.match(/^CTRL-PDCA-RO-(?:EX|IN)-(\d+)-(.+)$/i)).find(Boolean);
- if(!found)return String(fileName||'').trim()||original;
- const numero=String(Number(found[1]));
- const setor=String(found[2]||'').replace(/-/g,' ').trim().toUpperCase();
- return 'PDCA — R.O. '+numero+(setor?' ('+setor+')':'');
+function nucleoPdcaReceivedDisplayName(id,fileName,ro,setor){
+  // Nome exibido, independente do identificador técnico ou nome físico do PDF.
+  const candidates=[String(id||''),String(fileName||'')];
+  const imported=candidates.some(v=>/CTRL[-_ ]PDCA[-_ ]RO[-_ ](?:EX|IN)[-_ ]\d+/i.test(v));
+  if(!imported)return String(fileName||'').trim()||String(id||'').trim()||'PDCA';
+  const matched=candidates.map(v=>v.match(/CTRL[-_ ]PDCA[-_ ]RO[-_ ](?:EX|IN)[-_ ]0*(\d+)(?:[-_ ](.+?))?(?:\.pdf)?$/i)).find(Boolean);
+  const roMatch=String(ro||'').match(/(?:RO[-_ ](?:EX|IN)[-_ ])?0*(\d+)$/i);
+  const rawNum=roMatch?.[1]||matched?.[1]||'';
+  const numero=rawNum?String(Number(rawNum)):'';
+  const rawSector=String(setor||matched?.[2]||'').replace(/\.pdf$/i,'').replace(/[-_]+/g,' ').trim();
+  const sector=rawSector.toUpperCase();
+  return numero?'PDCA — R.O. '+numero+(sector?' ('+sector+')':''):
+    (String(fileName||'').trim()||String(id||'').trim()||'PDCA');
 }
+
 function renderSentPdcas(){
  refreshPdcaSidebarBadge();
  renderPdcaPdfSummary();
  const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase(),sf=document.getElementById('sentStatusFilter')?.value||'todos';
  let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
- const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:nucleoPdcaReceivedDisplayName(p.id,p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):'')};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
+ const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:nucleoPdcaReceivedDisplayName(p.id,p.fileName,p.ro,p.setor)};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
  const body=document.getElementById('sentRows');if(!body)return;
  const lifecycle=isAdmin()?(document.getElementById('sentLifecycleFilter')?.value||'active'):'all';
  nucleoRenderPdcaLifecycle(data,lifecycle);
@@ -11980,7 +11986,7 @@ function renderSentPdcas(){
     : confirmed?'Reclamante confirmado — falta entregar a resposta'
     : user?'Cadastro identificado — confirmar'
     :'Reclamante a confirmar';
-  return '<tr class="click" onclick="'+(pdfPending?'event.stopPropagation()':'openPdcaReport(\''+escapeHtml(p.id)+'\')')+'"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+(pdfPending&&!/^CTRL-PDCA-RO-(?:EX|IN)-\d+-/i.test(String(p.id||p.fileName||''))?'<div class="small">'+escapeHtml(p.setor||'')+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(pdfPending?'<div style="margin-top:6px"><span class="status-badge pending">PDF pendente</span></div>':'')+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(pdfPending?(String(p.status||'').toLowerCase().includes('apresent')?'Apresentado':'Respondido'):delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">'+(pdfPending?'<button class="btn primary" type="button" onclick="event.stopPropagation();nucleoUploadPendingPdcaPdf(\''+escapeHtml(p.id)+'\')">Subir PDF</button>':'Ver PDCA →')+'</td></tr>';
+  return '<tr class="click" onclick="'+(pdfPending?'event.stopPropagation()':'openPdcaReport(\''+escapeHtml(p.id)+'\')')+'"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf&&!/^PDCA — R\.O\./.test(name)?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+(pdfPending&&!/^PDCA — R\.O\./.test(name)?'<div class="small">'+escapeHtml(p.setor||'')+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(pdfPending?'<div style="margin-top:6px"><span class="status-badge pending">PDF pendente</span></div>':'')+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(pdfPending?(String(p.status||'').toLowerCase().includes('apresent')?'Apresentado':'Respondido'):delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">'+(pdfPending?'<button class="btn primary" type="button" onclick="event.stopPropagation();nucleoUploadPendingPdcaPdf(\''+escapeHtml(p.id)+'\')">Subir PDF</button>':'Ver PDCA →')+'</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
 
@@ -21042,3 +21048,5 @@ const __nucleo5sRenderHistoryOriginal=nucleo5sRenderHistory;
 nucleo5sRenderHistory=function(host){ __nucleo5sRenderHistoryOriginal(host); nucleo5sLockSectorSelect('nucleo5sHistorySector'); };
 const __nucleo5sRenderCycleOriginal=nucleo5sRenderCycle;
 nucleo5sRenderCycle=function(host){ __nucleo5sRenderCycleOriginal(host); nucleo5sLockSectorSelect('nucleo5sCycleSector'); };
+
+console.info("[NUCLEO] PDF PDCA nome legível ativo: 20261023-1600-pdca-readable-display");
