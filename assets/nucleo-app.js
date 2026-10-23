@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-1505-ro-pdf-compact';
+window.NUCLEO_BUILD_VERSION = '20261021-0945-unified';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -1246,8 +1246,7 @@ const NUCLEO_SHARED_GLOBAL_KEYS=new Set([
   'nucleo-hidden-assigned-directions-v1',
   'nucleo-deleted-triage-keys-v1',
   'nucleo-unified-actions-v1',
-  'nucleo-pdca-review-2026-v1',
-  'nucleo-5s-auditor-links-v1'
+  'nucleo-pdca-review-2026-v1'
 ]);
 const NUCLEO_SHARED_USER_KEYS=new Set([
   'ro-pdca-notifications-v1',
@@ -1479,7 +1478,6 @@ async function syncPortalBackend(showMessage=false,options={}){
     applyPortalBackendSnapshot(res);
     nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',res?.atualizadoEm||'');
     updateBackendStatus(true,'Base central conectada.');
-    try{nucleo5sPopulateLinkUsers?.(true)}catch(e){}
 
     // Atualizações leves acontecem imediatamente. Renderizações grandes ficam fora
     // do caminho crítico para o navegador não congelar a cada sincronização automática.
@@ -3976,7 +3974,7 @@ async function refreshPendingRegistrations(showMessage=false){
     const res=await portalJsonp({acao:'portal_pending_users'});
     if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar cadastros.');
 
-    const remote=nucleoApplyUserLoginStatusGuards(Array.isArray(res.users)?res.users:[]);
+    const remote=Array.isArray(res.users)?res.users:[];
     const local=getOperationalUsers();
     const map=new Map();
 
@@ -4250,7 +4248,6 @@ function renderOperationalUsers(){
           <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
           <span class="role-tag">${u.permissions?'Acesso personalizado':u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
-          ${(()=>{const s=nucleoUserLoginState(u);return `<span class="status-badge ${s.className}" style="margin-left:6px">${escapeHtml(s.label)}</span>`})()}
           ${u.role==='manager'||(u.managedSectors||[]).length?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
         </div>
       </div>
@@ -4259,9 +4256,6 @@ function renderOperationalUsers(){
         <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">Editar gestão</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
         <button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button>
-        ${u.approvalStatus!=='pending'&&u.approvalStatus!=='rejected'
-          ? `<button id="userLoginToggle_${btoa(unescape(encodeURIComponent(String(u.email||u.name)))).replace(/=+$/,'')}" class="btn secondary" type="button" onclick="toggleOperationalUserLogin('${escapeHtml(u.email||u.name)}')">${nucleoUserLoginState(u).active?'Desativar login':'Ativar login'}</button>`
-          : ''}
         <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Excluir login</button>
       </div>
     </div>`).join(''):'';
@@ -4269,135 +4263,6 @@ function renderOperationalUsers(){
   box.innerHTML=filtered.length?pendingHtml+approvedHtml+(users.length<filtered.length?'<div class="actions"><button class="btn secondary" type="button" onclick="showMoreOperationalUsers()">Mostrar mais 5</button></div>':''):'<div class="small">Nenhum cadastro encontrado com estes filtros.</div>';
   box.querySelectorAll('.admin-user-row').forEach(row=>{const button=row.querySelector("button[onclick^='openUnitUserAccess']"),actions=row.querySelector('.actions');if(button&&actions)actions.prepend(button);});
 }
-
-function nucleoUserLoginState(u){
-  const approval=String(u?.approvalStatus||'approved').trim().toLowerCase();
-  const status=String(u?.status||'').trim().toLowerCase();
-  const inactive=u?.active===false || approval==='inactive' || approval==='disabled' || status==='inactive' || status==='disabled';
-  if(inactive)return {active:false,label:'Desativado',className:'rejected'};
-  if(approval==='pending')return {active:false,label:'Aguardando aprovação',className:'pending'};
-  if(approval==='rejected')return {active:false,label:'Recusado',className:'rejected'};
-  return {active:true,label:'Ativo',className:'approved'};
-}
-
-
-window.__nucleoUserLoginStatusGuard=window.__nucleoUserLoginStatusGuard||{};
-
-function nucleoRememberUserLoginStatus(key,status){
-  const k=String(key||'').trim().toLowerCase();
-  if(!k)return;
-  window.__nucleoUserLoginStatusGuard[k]={
-    status:String(status||'').trim().toLowerCase(),
-    until:Date.now()+60000
-  };
-}
-
-function nucleoApplyUserLoginStatusGuards(users){
-  const now=Date.now();
-  const guards=window.__nucleoUserLoginStatusGuard||{};
-  Object.keys(guards).forEach(k=>{
-    if(!guards[k] || guards[k].until<=now)delete guards[k];
-  });
-
-  return (users||[]).map(u=>{
-    const keys=[
-      String(u?.email||'').trim().toLowerCase(),
-      String(u?.name||'').trim().toLowerCase()
-    ].filter(Boolean);
-
-    const guard=keys.map(k=>guards[k]).find(Boolean);
-    if(!guard)return u;
-
-    const active=guard.status==='approved';
-    return {
-      ...u,
-      approvalStatus:guard.status,
-      active,
-      status:active?'active':'inactive'
-    };
-  });
-}
-
-async function toggleOperationalUserLogin(key){
-  if(!nucleoFeatureRequire('users','approve'))return;
-  if(!isAdmin())return;
-
-  const users=getOperationalUsers();
-  const idx=users.findIndex(u=>String(u.email||u.name)===String(key));
-  if(idx<0){alert('Usuário não encontrado.');return}
-
-  const user=users[idx];
-  const currentEmail=String(getSession()?.email||'').trim().toLowerCase();
-  const targetEmail=String(user.email||'').trim().toLowerCase();
-
-  if(targetEmail && targetEmail===currentEmail){
-    alert('Você não pode desativar o login da conta que está usando.');
-    return;
-  }
-
-  const state=nucleoUserLoginState(user);
-  const next=state.active?'inactive':'approved';
-  const action=state.active?'desativar':'ativar';
-
-  if(!confirm(`Deseja ${action} o login de ${user.name||user.email||'este usuário'}?`))return;
-
-  const original={...user};
-  const now=new Date().toISOString();
-
-  users[idx]={
-    ...user,
-    approvalStatus:next,
-    active:next==='approved',
-    status:next==='approved'?'active':'inactive',
-    updatedAt:now,
-    ...(next==='approved'
-      ? {reactivatedAt:now,reactivatedBy:getSession()?.name||'SGQ'}
-      : {disabledAt:now,disabledBy:getSession()?.name||'SGQ'})
-  };
-
-  const button=document.getElementById('userLoginToggle_'+btoa(unescape(encodeURIComponent(String(key)))).replace(/=+$/,''));
-  if(button)button.disabled=true;
-
-  try{
-    if(portalBackendEnabled()){
-      const res=await portalJsonp({
-        acao:'portal_update_user_status',
-        userId:String(user.email||user.name),
-        status:next,
-        ator:getSession()?.name||'SGQ'
-      },25000);
-
-      if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a alteração.');
-
-      // A própria rota portal_update_user_status grava o cadastro e devolve o
-      // status efetivamente salvo. Não fazemos uma segunda leitura imediata,
-      // porque a coleção central pode levar alguns segundos para refletir a
-      // alteração e isso gerava falso erro de confirmação.
-      const confirmedStatus=String(res.approvalStatus||next).trim().toLowerCase();
-      if(confirmedStatus!==next){
-        throw new Error('A base central confirmou um status diferente do solicitado.');
-      }
-      nucleoRememberUserLoginStatus(user.email||user.name,next);
-    }
-
-    localStorage.setItem(USERS_KEY,JSON.stringify(users));
-    claimantIdentityCache=null;
-    renderOperationalUsers();
-    try{renderAdminUsers()}catch(e){}
-    try{nucleo5sPopulateLinkUsers?.(true)}catch(e){}
-    addPortalAuditEvent(next==='approved'?'ativar_login_usuario':'desativar_login_usuario',
-      user.email||user.name,
-      {name:user.name,email:user.email,status:next}
-    );
-
-  }catch(e){
-    users[idx]=original;
-    localStorage.setItem(USERS_KEY,JSON.stringify(users));
-    renderOperationalUsers();
-    alert('Não foi possível '+action+' o login: '+(e.message||e));
-  }
-}
-
 async function approvePortalUser(key){
   if(!nucleoFeatureRequire('users','approve'))return;
   if(!isAdmin())return;
@@ -4827,8 +4692,6 @@ function unifiedActionIsActiveUser(u){
     normalizeAnswer(u.status||'')!=='inactive' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
-    u.approvalStatus!=='inactive' &&
-    u.approvalStatus!=='disabled' &&
     !nucleoPersonPermissions(u).sgq;
 }
 function unifiedActionAssignableUsers(){
@@ -6321,13 +6184,7 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
   if(design.logoFileId&&logo&&!images[design.logoFileId])images[design.logoFileId]=logo;
   const header=Array.isArray(layout.headerGrid)?layout.headerGrid:[],body=Array.isArray(layout.bodyGrid)&&layout.bodyGrid.length?layout.bodyGrid:(Array.isArray(model?.layoutGrid)?model.layoutGrid:[]),footer=Array.isArray(layout.footerGrid)?layout.footerGrid:[];
   const evidenceUrls=model?.showEvidence===false?[]:nucleoRoEvidenceUrls(ro);
-
-  // As evidências não devem criar uma folha inteira para cada imagem.
-  // Agrupamos até 4 evidências por página (grade 2x2).
-  const evidenceGroups=[];
-  for(let i=0;i<evidenceUrls.length;i+=4)evidenceGroups.push(evidenceUrls.slice(i,i+4));
-
-  const totalPages=Math.max(1,1+evidenceGroups.length);
+  const totalPages=Math.max(1,1+evidenceUrls.length);
   const table=(rows,cls='')=>rows?`<table class="grid ${cls}"><colgroup>${'<col>'.repeat(100)}</colgroup><tbody>${rows}</tbody></table>`:'';
   const pageShell=(pageNo,inner)=>{
     const headerRows=nucleoRoModelRowsHtml(header,ro,model,images,pageNo,totalPages);
@@ -6335,32 +6192,17 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
     const fallbackLogo=logo&&!Object.values(images).includes(logo)?`<div style="text-align:${['left','center','right'].includes(design.align)?design.align:'center'};margin-bottom:2mm"><img src="${nucleoRoModelEsc(logo)}" style="width:${Math.max(10,Math.min(80,Number(design.logoWidth)||30))}mm;max-height:25mm;object-fit:contain"></div>`:'';
     return `<section class="page">${fallbackLogo}${layout.repeatHeader===false&&pageNo>1?'':table(headerRows)}${inner}${layout.repeatFooter===false&&pageNo<totalPages?'':(footerRows?`<div class="footer-wrap">${table(footerRows)}</div>`:'')}</section>`;
   };
-
   const bodyRows=nucleoRoModelRowsHtml(body,ro,model,images,1,totalPages);
   let pages=pageShell(1,`${design.before?`<div class="before">${nucleoRoModelEsc(design.before)}</div>`:''}${table(bodyRows)}${design.after?`<div class="after">${nucleoRoModelEsc(design.after)}</div>`:''}`);
-
-  let evidenceNumber=0;
-  evidenceGroups.forEach((group,groupIndex)=>{
-    const pageNo=groupIndex+2;
-    const cards=group.map(url=>{
-      evidenceNumber++;
-      const imageUrl=nucleoRoEvidenceImageUrl(url);
-      return `<div class="evidence-card">
-        <div class="evidence-title">EVIDÊNCIA ${evidenceNumber}</div>
-        <div class="evidence-frame">
-          <img src="${nucleoRoModelEsc(imageUrl)}" alt="Evidência ${evidenceNumber}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-          <div class="evidence-fallback" style="display:none">Não foi possível carregar a imagem nesta visualização.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>
-        </div>
-      </div>`;
-    }).join('');
-
-    pages+=pageShell(pageNo,`<div class="evidence-page"><div class="evidence-section-title">EVIDÊNCIAS ANEXADAS</div><div class="evidence-grid count-${group.length}">${cards}</div></div>`);
+  evidenceUrls.forEach((url,i)=>{
+    const imageUrl=nucleoRoEvidenceImageUrl(url),pageNo=i+2;
+    pages+=pageShell(pageNo,`<div class="evidence-page"><div class="evidence-title">EVIDÊNCIA ${i+1}</div><div class="evidence-frame"><img src="${nucleoRoModelEsc(imageUrl)}" alt="Evidência ${i+1}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><div class="evidence-fallback" style="display:none">Não foi possível carregar a imagem nesta visualização.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${i+1}</a></div></div></div>`);
   });
   return `<!doctype html><html><head><meta charset="utf-8"><title>${nucleoRoModelEsc(ro?.numero||'R.O.')}</title><style>
   @page{size:A4 ${orientation};margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;padding:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:${nucleoRoModelEsc(design.textColor||'#222222')}}
   .page{width:${orientation==='landscape'?'297mm':'210mm'};height:${orientation==='landscape'?'210mm':'297mm'};margin:0 auto 8mm;background:#fff;padding:${margin}mm;font-size:${Math.max(7,Math.min(18,Number(model?.fontSize)||9))}pt;display:flex;flex-direction:column;overflow:hidden;page-break-after:always}.page:last-child{page-break-after:auto}
   .grid{width:100%;border-collapse:collapse;table-layout:fixed}.grid col{width:1%}.cell-stack{display:flex;flex-direction:column;gap:.35mm;min-width:0}.cell-label{line-height:1.05}.before,.after{white-space:pre-wrap;margin:2mm 0}.footer-wrap{margin-top:auto;padding-top:3mm}
-  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-frame img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}
+  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:3mm}.evidence-title{font-size:11pt;font-weight:700;margin:0 0 3mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-frame img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.evidence-fallback{text-align:center;font-size:10pt;line-height:1.5}
   @media screen{body{padding:8mm}.page{box-shadow:0 2px 12px #0003}}@media print{body{background:#fff;padding:0}.page{box-shadow:none;margin:0}}
   </style></head><body>${pages}</body></html>`;
 }
@@ -6813,7 +6655,7 @@ function ensureSacReworkState(r){
   return r;
 }
 function showSacTracking(){
-  if(!nucleoFeatureRequire('sac','consult'))return;
+  if(!isAdmin())return;
   view('sacTrackingView');
   setNav('navSacTracking');
   setSacTrackingTab('active');
@@ -7170,7 +7012,7 @@ function showMySacs(){
 }
 
 function showExternalRoControl(){
-  if(!nucleoFeatureRequire('sac','consult') && !nucleoPersonFeatureCan('sac','edit'))return;
+  if(!isAdmin()){showList();return}
   view('externalRoControlView');
   setNav('externalro');
   renderExternalRoControl();
@@ -7294,7 +7136,7 @@ async function saveSacDecisionLocally(record){
 }
 
 async function markExternalRoAsRoOnly(id){
-  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r)return;
   if(!confirm('Manter '+String(r.ro||'esta ocorrência')+' somente como R.O.? Ela sairá da área de SAC.'))return;
@@ -7305,7 +7147,7 @@ async function markExternalRoAsRoOnly(id){
   refreshMenuNotificationBadges();
 }
 async function promoteExternalRoToSac(id){
-  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r)return;
   const now=new Date().toISOString();
@@ -7371,13 +7213,11 @@ function sacSortRows(rows,mode){
 
 function renderExternalRoControl(){
   nucleoRenderSacDrafts();
-  const canConsultSac=nucleoPersonFeatureCan('sac','consult')||nucleoPersonFeatureCan('sac','edit');
-  const canEditSac=nucleoPersonFeatureCan('sac','edit');
-  if(!canConsultSac&&!isRepresentativeSacAccess())return;
+  if(!isAdmin()&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
   const treatment=document.getElementById('externalRoImpactFilter')?.value||'all';
   const q=normalizeAnswer(document.getElementById('externalRoSearch')?.value||'');
-  const allSacRows=canConsultSac?getExternalRoControls():getMySacs();
+  const allSacRows=isAdmin()?getExternalRoControls():getMySacs();
 
   const sortMode=document.getElementById('externalRoSort')?.value||'date_desc';
 
@@ -7439,7 +7279,7 @@ function renderExternalRoControl(){
         <div class="small" style="margin-top:12px">Esta é uma R.O. externa. Só será criada como SAC se o SGQ indicar que há necessidade de atendimento ao cliente.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.ro)}')">Ver R.O.</button>
-          ${canEditSac?`<button class="btn secondary" type="button" onclick="markExternalRoAsRoOnly('${escapeHtml(r.id)}')">Somente R.O.</button>
+          ${isAdmin()?`<button class="btn secondary" type="button" onclick="markExternalRoAsRoOnly('${escapeHtml(r.id)}')">Somente R.O.</button>
           <button class="btn primary" type="button" onclick="promoteExternalRoToSac('${escapeHtml(r.id)}')">Criar SAC</button>`:''}
         </div>
       </div>`;
@@ -7463,7 +7303,7 @@ function renderExternalRoControl(){
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
-            ${canEditSac?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
+            ${isAdmin()?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
           </div>
           <div class="small" style="margin-top:4px"><b>Direcionado para:</b> ${escapeHtml(sacDirectedSector(r))}</div>
         </div>
@@ -7488,7 +7328,7 @@ function renderExternalRoControl(){
       <div class="small" style="margin-top:12px">${escapeHtml(started)}${escapeHtml(completed)}</div>
 
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
-        ${canEditSac?`
+        ${isAdmin()?`
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.ro)}')">Ver R.O.</button>
           <button class="btn secondary" type="button" onclick="correctSacRepresentative('${escapeHtml(r.id)}')">Corrigir representante</button>
           <button class="btn secondary" type="button" onclick="openSacEditModal('${escapeHtml(r.id)}')">Preencher ficha SAC</button>
@@ -7642,139 +7482,8 @@ function openSacPdf(id){
 }
 
 
-
-function sacCurrentEditRecord(){
-  const id=String(document.getElementById('sacEditRecordId')?.value||'').trim();
-  return getExternalRoControls().find(x=>String(x.id)===id)||null;
-}
-
-function renderSacAttachmentList(record){
-  const host=document.getElementById('sacEditAttachmentList');
-  if(!host)return;
-  const list=Array.isArray(record?.sacAttachments)?record.sacAttachments:[];
-  host.innerHTML=list.length
-    ? list.map(a=>`
-      <div class="card" style="padding:10px;margin:7px 0;display:flex;justify-content:space-between;gap:10px;align-items:center">
-        <div style="min-width:0">
-          <b style="word-break:break-word">${escapeHtml(a.fileName||'Arquivo')}</b>
-          <div class="small">${escapeHtml(a.mimeType||'arquivo')}${a.size?` · ${Math.max(1,Math.round(Number(a.size)/1024))} KB`:''}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn secondary" type="button" onclick="openSacAttachment('${escapeHtml(record.id)}','${escapeHtml(a.id)}')">Abrir</button>
-          <button class="btn secondary" type="button" style="color:#b42318" onclick="deleteSacAttachment('${escapeHtml(record.id)}','${escapeHtml(a.id)}')">Excluir</button>
-        </div>
-      </div>`).join('')
-    : '<div class="small">Nenhum arquivo anexado.</div>';
-}
-
-async function refreshSacAttachments(id){
-  try{
-    const record=getExternalRoControls().find(x=>String(x.id)===String(id));
-    if(!record)return;
-    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
-    const res=await portalJsonp({acao:'nucleo_drive_sac_attachments',unit,sacId:record.id},30000);
-    if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível consultar os anexos.');
-
-    const list=getExternalRoControls();
-    const idx=list.findIndex(x=>String(x.id)===String(id));
-    if(idx>=0){
-      list[idx]={...list[idx],sacAttachments:Array.isArray(res.attachments)?res.attachments:[]};
-      saveExternalRoControlsLocal(list);
-      renderSacAttachmentList(list[idx]);
-    }
-  }catch(e){
-    const st=document.getElementById('sacEditUploadStatus');
-    if(st)st.textContent='Não foi possível carregar os anexos: '+(e.message||e);
-  }
-}
-
-async function uploadSacAttachments(){
-  if(!nucleoFeatureRequire('sac','edit'))return;
-  const record=sacCurrentEditRecord();
-  if(!record){alert('SAC não encontrado.');return}
-
-  const input=document.getElementById('sacEditFile');
-  const files=[...(input?.files||[])];
-  if(!files.length){alert('Selecione pelo menos um arquivo.');return}
-
-  const tooLarge=files.find(f=>f.size>8*1024*1024);
-  if(tooLarge){alert('Cada arquivo deve ter no máximo 8 MB.');return}
-
-  const st=document.getElementById('sacEditUploadStatus');
-  const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
-  if(st)st.textContent='Enviando '+files.length+' arquivo(s)...';
-
-  try{
-    for(let i=0;i<files.length;i++){
-      const file=files[i];
-      if(st)st.textContent=`Enviando ${i+1} de ${files.length}: ${file.name}`;
-      const fileData=await fileToBase64(file);
-      const eventId='SACATT-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
-      const res=await portalJsonp({
-        acao:'nucleo_drive_sac_upload',
-        unit,
-        sacId:record.id,
-        eventoId:eventId,
-        fileName:file.name,
-        mimeType:file.type||'application/octet-stream',
-        fileData
-      },90000);
-      if(!res?.sucesso)throw new Error(res?.erro||('Falha ao anexar '+file.name));
-    }
-    if(input)input.value='';
-    if(st)st.textContent='Arquivo(s) anexado(s) e confirmado(s) na base central.';
-    await refreshSacAttachments(record.id);
-  }catch(e){
-    if(st)st.textContent='Erro ao anexar: '+(e.message||e);
-  }
-}
-
-async function openSacAttachment(sacId,attachmentId){
-  const record=getExternalRoControls().find(x=>String(x.id)===String(sacId));
-  if(!record)return;
-  try{
-    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
-    const res=await portalJsonp({
-      acao:'nucleo_drive_sac_read',
-      unit,
-      sacId,
-      attachmentId
-    },60000);
-    if(!res?.sucesso||!res.base64)throw new Error(res?.erro||'Arquivo indisponível.');
-    const bytes=Uint8Array.from(atob(res.base64),c=>c.charCodeAt(0));
-    const blob=new Blob([bytes],{type:res.mimeType||'application/octet-stream'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=res.fileName||'anexo';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1500);
-  }catch(e){alert('Não foi possível abrir o anexo: '+(e.message||e))}
-}
-
-async function deleteSacAttachment(sacId,attachmentId){
-  if(!nucleoFeatureRequire('sac','edit'))return;
-  if(!confirm('Excluir este anexo do SAC?'))return;
-  const record=getExternalRoControls().find(x=>String(x.id)===String(sacId));
-  if(!record)return;
-  try{
-    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
-    const res=await portalJsonp({
-      acao:'nucleo_drive_sac_delete',
-      unit,
-      sacId,
-      attachmentId,
-      eventoId:'SACATTDEL-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)
-    },60000);
-    if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível excluir o anexo.');
-    await refreshSacAttachments(sacId);
-  }catch(e){alert('Não foi possível excluir o anexo: '+(e.message||e))}
-}
-
 function openSacEditModal(id){
-  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r){alert('Controle de SAC não encontrado.');return}
   const f=r.officialForm||{};
@@ -7802,8 +7511,6 @@ function openSacEditModal(id){
   set('sacEditDeviationProductCode',f.deviationProductCode||r.product||'');
   set('sacEditDeviationDescription',f.deviationDescription||'');
   set('sacEditAttachments',f.attachments||'');
-  renderSacAttachmentList(r);
-  setTimeout(()=>refreshSacAttachments(r.id),0);
   set('sacEditFounded',f.founded||'');
   set('sacEditRncNumber',f.rncNumber||'');
   set('sacEditLotSize',f.lotSize||'');
@@ -7861,6 +7568,7 @@ function collectSacEditForm(){
 }
 function saveSacEditForm(){
   if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const id=String(document.getElementById('sacEditRecordId')?.value||'').trim();
   let list=getExternalRoControls();
   const idx=list.findIndex(x=>String(x.id)===String(id));
@@ -8142,9 +7850,19 @@ function saveExternalRoControl(){
   if(!nucleoFeatureRequire('sac','edit'))return;
   if(!isAdmin())return;
   const ro=String(document.getElementById('externalRoNumber')?.value||'').trim();
-  const normRo=v=>String(v||'').replace(/\D/g,'').replace(/^0+/,'')||String(v||'').trim().toLowerCase();
-  const baseRoRecord=getAllRoRecords().find(x=>normRo(x.numero||x.id||x.codigo||'')===normRo(ro));
-  if(baseRoRecord && !(baseRoRecord.ehSac===true||String(baseRoRecord.origemBase||'')==='Externa')){
+  // Distingue a origem da R.O.: RO-EX-00485 e RO-IN-00485 são registros diferentes.
+  // Não comparar apenas dígitos: isso encontra incorretamente a R.O. interna.
+  const origemSolicitada=roOriginFromNumber(ro,'');
+  const numeroSolicitado=appRoNumber(ro,origemSolicitada||'Externa');
+  const baseRoRecord=getAllRoRecords().find(x=>{
+    const numero=String(x?.numero||x?.id||x?.codigo||'').trim();
+    const origem=String(x?.origemBase||x?.raw?.__origemBase||roOriginFromNumber(numero,'')).trim();
+    return appRoNumber(numero,origem||origemSolicitada||'Externa')===numeroSolicitado &&
+      (!origemSolicitada||origem===origemSolicitada||roOriginFromNumber(numero,'')===origemSolicitada);
+  });
+  const origemEncontrada=String(baseRoRecord?.origemBase||baseRoRecord?.raw?.__origemBase||roOriginFromNumber(baseRoRecord?.numero||baseRoRecord?.id||baseRoRecord?.codigo||'','')).trim();
+  // O prefixo explícito EX/IN tem precedência sobre qualquer registro de mesmo número.
+  if(origemSolicitada==='Interna'||(origemSolicitada!=='Externa'&&baseRoRecord&&origemEncontrada==='Interna'&&baseRoRecord.ehSac!==true)){
     alert('Esta R.O. pertence à aba Interna. O Controle de SAC aceita apenas R.O.s da aba Externa.');
     return;
   }
@@ -8335,7 +8053,7 @@ function updateExternalTreatmentRecord(id,patch){
   return record;
 }
 function startExternalTreatment(id){
-  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
   if(!sacIsClassified(current)){
@@ -8366,7 +8084,7 @@ function startExternalTreatment(id){
   refreshMenuNotificationBadges();
 }
 function finishExternalTreatment(id){
-  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!isAdmin())return;
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
   if(!confirm('Confirmar a conclusão da tratativa da R.O. '+current.ro+'? O reclamante será notificado.'))return;
@@ -9158,7 +8876,7 @@ function nucleoClosePdcaPriorities(){
 
 function renderTriage(){
   try{refreshMenuNotificationBadges()}catch(e){}
-  if(!nucleoPersonFeatureCan('ros','triage'))return;
+  if(!isAdmin())return;
   const status=document.getElementById('triageStatusFilter')?.value||'all';
   const sector=document.getElementById('triageSectorFilter')?.value||'all';
   const origin=document.getElementById('triageOriginFilter')?.value||'all';
@@ -9222,6 +8940,7 @@ function renderTriage(){
 function showTriage(){
   if(!nucleoFeatureRequire('ros','triage'))return;
   try{refreshMenuNotificationBadges()}catch(e){}
+  if(!isAdmin()){showList();return}
   view('triageView');
   setNav('triage');
   populateTriageSectors();
@@ -9239,8 +8958,6 @@ function activeOperationalUsers(){
     normalizeAnswer(u.status||'')!=='inactive' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
-    u.approvalStatus!=='inactive' &&
-    u.approvalStatus!=='disabled' &&
     String(u.name||'').trim() &&
     String(u.email||'').trim()
   );
@@ -11090,7 +10807,7 @@ function renderSgqCharts(d){
 }
 
 function renderSgqIndicators(){
-  if(!nucleoPersonFeatureCan('indicators','consult'))return;
+  if(!isAdmin()){showList();return}
 
   // Carrega a base uma única vez para esta renderização.
   const allRows=getAllRoRecords();
@@ -11157,6 +10874,7 @@ function renderSgqIndicators(){
 }
 async function showSgqIndicators(){
   if(!nucleoFeatureRequire('indicators','consult'))return;
+  if(!isAdmin()){showList();return}
 
   view('sgqIndicatorsView');
   setNav('indicators');
@@ -12425,8 +12143,6 @@ function managersForSector(sector){
     u.role==='manager' &&
     u.approvalStatus!=='pending' &&
     u.approvalStatus!=='rejected' &&
-    u.approvalStatus!=='inactive' &&
-    u.approvalStatus!=='disabled' &&
     (Array.isArray(u.managedSectors)?u.managedSectors:[]).some(s=>normalizeAnswer(s)===wanted)
   );
 }
@@ -16557,7 +16273,7 @@ async function deleteAdminOperationalRecord(id){
 function openAdmin(){
   if(nucleoPersonPermissions(getSession()).sgq)nucleoReadAvatarGalleryConfig();
   refreshSectorSelectors();
-  if(!nucleoPersonCan('users')&&!nucleoPersonCan('sectors')){showList();return;}
+  if(!isAdmin()){showList();return;}
   view('settingsView');setNav('admin');loadAdminConfig();window.scrollTo({top:0,behavior:'instant'});
   if(typeof renderAccess==='function')renderAccess();
   renderOperationalUsers();
@@ -18468,11 +18184,11 @@ function overviewQuickCatalog(){
     {id:'pending',label:'Pendências',detail:'Sua central de acompanhamento',action:'showPendingHub()',allowed:()=>true},
     {id:'documents',label:'Solicitação de Documentos',detail:'Pedir ou acompanhar documentos',action:"showAdminOperationalModule('documents')",allowed:()=>canRequestDocuments()},
     {id:'mysacs',label:'Meus SACs',detail:'Reclamações em que você é representante',action:'showMySacs()',allowed:()=>!isAdmin()&&overviewSafe(()=>isRepresentativeSacAccess(),false)},
-    {id:'triage',label:'Triagem de R.O.s',detail:'Classificar e direcionar ocorrências',action:'showTriage()',allowed:()=>nucleoPersonFeatureCan('sac','edit')},
-    {id:'saccontrol',label:'Controle de SAC',detail:'Classificação e encaminhamento',action:'showExternalRoControl()',allowed:()=>nucleoPersonCan('equipment')},
-    {id:'pendingactions',label:'Ações pendentes',detail:'Conferência e acompanhamento do SGQ',action:'showPendingActions()',allowed:()=>nucleoPersonCan('training')},
-    {id:'contests',label:'Contestações',detail:'Analisar solicitações',action:'showContestations()',allowed:()=>nucleoPersonCan('nc')},
-    {id:'equipment',label:'Equipamentos e metrologia',detail:'Ativos, calibrações e histórico',action:"showAdminOperationalModule('equipment')",allowed:()=>nucleoPersonCan('processes')},
+    {id:'triage',label:'Triagem de R.O.s',detail:'Classificar e direcionar ocorrências',action:'showTriage()',allowed:()=>isAdmin()},
+    {id:'saccontrol',label:'Controle de SAC',detail:'Classificação e encaminhamento',action:'showExternalRoControl()',allowed:()=>isAdmin()},
+    {id:'pendingactions',label:'Ações pendentes',detail:'Conferência e acompanhamento do SGQ',action:'showPendingActions()',allowed:()=>isAdmin()},
+    {id:'contests',label:'Contestações',detail:'Analisar solicitações',action:'showContestations()',allowed:()=>isAdmin()},
+    {id:'equipment',label:'Equipamentos e metrologia',detail:'Ativos, calibrações e histórico',action:"showAdminOperationalModule('equipment')",allowed:()=>isAdmin()},
     {id:'training',label:'Treinamentos e competências',detail:'Treinamentos e reciclagens',action:"showAdminOperationalModule('training')",allowed:()=>isAdmin()},
     {id:'nccapa',label:'Não conformidades e CAPA',detail:'Relatórios e ações',action:"showAdminOperationalModule('nccapa')",allowed:()=>isAdmin()},
     {id:'processes',label:'Gestão de processos',detail:'IT, GSP, POP, LPP e documentos internos',action:"showAdminOperationalModule('processes')",allowed:()=>isAdmin()},
@@ -19489,13 +19205,14 @@ function refreshContestUserStatus(){
 }
 function showContestations(){
   if(!nucleoFeatureRequire('ros','reviewContests'))return;
+  if(!isAdmin()){showList();return}
   view('contestationsView'); setNav('contests'); renderContestations();
 }
 function refreshContestPendingBadge(){
   refreshMenuNotificationBadges();
 }
 function renderContestations(){
-  if(!nucleoPersonFeatureCan('ros','reviewContests'))return;
+  if(!isAdmin())return;
   refreshContestPendingBadge();
   const filter=document.getElementById('contestStatusFilter')?.value||'pending';
   const q=normalizeAnswer(document.getElementById('contestSearch')?.value||'');
@@ -19524,6 +19241,7 @@ function renderContestations(){
 }
 function reviewContestation(id,decision){
   if(!nucleoFeatureRequire('ros','reviewContests'))return;
+  if(!isAdmin())return;
   const list=getContestations();
   const idx=list.findIndex(c=>String(c.id)===String(id));if(idx<0)return;
   const c=list[idx];
@@ -20072,19 +19790,10 @@ function enforceAdminVisibility(){
     el.classList.toggle('hidden',!allowed);
   });
 
-  const session5s=getSession()||{};
-  const canSee5s=allowed || !!String(session5s.sector||'').trim();
-
   const module=document.getElementById('moduleManagement');
   if(module){
-    module.style.display=canSee5s?'':'none';
-    module.classList.toggle('hidden',!canSee5s);
-  }
-
-  const navAudit5s=document.getElementById('navAudit5s');
-  if(navAudit5s){
-    navAudit5s.style.display=canSee5s?'':'none';
-    navAudit5s.classList.toggle('hidden',!canSee5s);
+    module.style.display=allowed?'':'none';
+    module.classList.toggle('hidden',!allowed);
   }
 
   const adminIds=[
@@ -20095,17 +19804,8 @@ function enforceAdminVisibility(){
   adminIds.forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
-
-    // Para perfis sem edição detalhada, mantém o comportamento antigo.
-    if(getSession()?.permissions?.detailVersion!==1){
-      el.style.display=allowed?'':'none';
-      el.classList.toggle('hidden',!allowed);
-      return;
-    }
-
-    // Com permissões detalhadas, nucleoApplyFeatureAccess decide item por item.
-    el.style.removeProperty('display');
-    el.classList.remove('hidden');
+    el.style.display=allowed?'':'none';
+    el.classList.toggle('hidden',!allowed);
   });
 
   // Cadastro de R.O. Externa / SAC é restrito a Comercial, Diretoria, Processos e SGQ,
@@ -20231,7 +19931,7 @@ function openUnitUserAccess(encoded){
  const parent=nucleoPersonPermissions(getSession()),perms=nucleoPersonPermissions(user),units=nucleoPersonUnits(user),allowed=nucleoPersonUnits(getSession());
  if(!parent.sgq&&(user.role==='admin'||units.some(u=>!allowed.includes(u)))){alert('Este cadastro é administrado pelo SGQ.');return;}
  let overlay=document.getElementById('unitUserAccess');overlay?.remove();overlay=document.createElement('div');overlay.id='unitUserAccess';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
- overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto"><h3>Editar acesso — '+escapeHtml(user.name)+'</h3><p>Escolha as unidades e marque somente as funções permitidas dentro de cada área.</p><div id="personAccessUnits">'+['matriz','filial'].map(u=>'<label style="display:inline-flex;gap:8px;margin:10px"><input type="checkbox" value="'+u+'" '+(units.includes(u)?'checked':'')+' '+(!allowed.includes(u)?'disabled':'')+' style="width:20px;height:20px">'+(u==='matriz'?'SETA SC — Matriz':'SETA ES — Linhares')+'</label>').join('')+'</div>'+nucleoFeatureEditor(user,getSession())+'<p><label><input id="personRegisterRo" type="checkbox" '+(perms.registerRo?'checked':'')+' '+(!parent.sgq&&!parent.registerRo?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. interna</label></p><p><label><input id="personRegisterExternal" type="checkbox" '+(perms.registerExternal?'checked':'')+' '+(!parent.sgq&&!parent.registerExternal?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. externa / SAC</label></p>'+(parent.sgq?'<p><label><input id="personSgq" type="checkbox" '+(perms.sgq?'checked':'')+' style="width:20px;height:20px"> Administração geral SGQ — todas as permissões, integração e configurações globais</label><div class="small" style="margin:5px 0 0 30px">Ao desmarcar esta opção e salvar, o perfil SGQ será removido. A pessoa volta ao acesso do próprio setor; se tiver setores sob gestão, permanece como Gestor.</div></p><details><summary>Setores unificados</summary><p class="small">Um vínculo por linha: matriz | PCP ou filial | PCP.</p><textarea id="unitAccessMemberships" rows="4"></textarea></details>':'')+'<p class="small">O cadastro e o e-mail continuam únicos. A alteração exige novo login da pessoa para atualizar seu acesso.</p><button class="btn primary" id="unitAccessSave">Salvar permissões</button> <button class="btn secondary" id="unitAccessClose">Fechar</button><p id="unitAccessStatus" role="status"></p></div>';
+ overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto"><h3>Editar acesso — '+escapeHtml(user.name)+'</h3><p>Escolha as unidades e marque somente as funções permitidas dentro de cada área.</p><div id="personAccessUnits">'+['matriz','filial'].map(u=>'<label style="display:inline-flex;gap:8px;margin:10px"><input type="checkbox" value="'+u+'" '+(units.includes(u)?'checked':'')+' '+(!allowed.includes(u)?'disabled':'')+' style="width:20px;height:20px">'+(u==='matriz'?'SETA SC — Matriz':'SETA ES — Linhares')+'</label>').join('')+'</div>'+nucleoFeatureEditor(user,getSession())+'<p><label><input id="personRegisterRo" type="checkbox" '+(perms.registerRo?'checked':'')+' '+(!parent.sgq&&!parent.registerRo?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. interna</label></p><p><label><input id="personRegisterExternal" type="checkbox" '+(perms.registerExternal?'checked':'')+' '+(!parent.sgq&&!parent.registerExternal?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. externa / SAC</label></p>'+(parent.sgq?'<p><label><input id="personSgq" type="checkbox" '+(perms.sgq?'checked':'')+' style="width:20px;height:20px"> Administração geral SGQ — todas as permissões, integração e configurações globais</label></p><details><summary>Setores unificados</summary><p class="small">Um vínculo por linha: matriz | PCP ou filial | PCP.</p><textarea id="unitAccessMemberships" rows="4"></textarea></details>':'')+'<p class="small">O cadastro e o e-mail continuam únicos. A alteração exige novo login da pessoa para atualizar seu acesso.</p><button class="btn primary" id="unitAccessSave">Salvar permissões</button> <button class="btn secondary" id="unitAccessClose">Fechar</button><p id="unitAccessStatus" role="status"></p></div>';
  document.body.appendChild(overlay);if(parent.sgq)document.getElementById('unitAccessMemberships').value=(user.sectorMemberships||[]).map(m=>m.unit+' | '+m.sector).join('\n');document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
  overlay.querySelectorAll('[data-mode="manage"]').forEach(input=>input.onchange=()=>{if(input.checked)input.closest('tr').querySelector('[data-mode="view"]').checked=true;});
  document.getElementById('unitAccessSave').onclick=async()=>{
@@ -20243,15 +19943,7 @@ function openUnitUserAccess(encoded){
    const accessUnits=[...overlay.querySelectorAll('#personAccessUnits input:checked')].map(x=>x.value);if(!accessUnits.length)throw new Error('Selecione ao menos uma unidade.');
    let memberships=user.sectorMemberships||[];
    if(parent.sgq)memberships=document.getElementById('unitAccessMemberships').value.split('\n').filter(x=>x.trim()).map(line=>{const parts=line.split('|');if(parts.length!==2)throw new Error('Informe unidade | setor em cada vínculo.');return {unit:parts[0].trim().toLowerCase(),sector:parts[1].trim()};});
-   const removeSgq=perms.sgq===true && next.sgq!==true;
-   const result=await portalJsonp({
-     acao:'portal_set_user_access',
-     person:id,
-     permissions:JSON.stringify(next),
-     accessUnits:JSON.stringify(accessUnits),
-     memberships:JSON.stringify(memberships),
-     removeSgq:removeSgq?'1':'0'
-   },60000);
+   const result=await portalJsonp({acao:'portal_set_user_access',person:id,permissions:JSON.stringify(next),accessUnits:JSON.stringify(accessUnits),memberships:JSON.stringify(memberships)},60000);
    if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a alteração.');
    status.textContent='Permissões salvas na base central. A pessoa deve entrar novamente.';await syncPortalBackend(false);renderOperationalUsers();
   }catch(e){status.textContent='Não foi possível salvar: '+(/perfil inv[aá]lido/i.test(e.message)?'A implantação do Apps Script ainda usa a versão antiga dos perfis. Atualize o código e publique uma nova versão na implantação existente.':e.message);}finally{btn.disabled=false;}
@@ -20411,23 +20103,7 @@ function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.acc
 function nucleoApplyPersonAccess(){
  const user=getSession();if(!user?.permissions)return;
  const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
- Object.entries(map).forEach(([id,module])=>{
-   const el=document.getElementById(id);if(!el)return;
-   let allowed=nucleoPersonCan(module);
-   if(id==='navTriage')allowed=nucleoPersonFeatureCan('ros','triage');
-   if(id==='navExternalRoControl')allowed=nucleoPersonFeatureCan('sac','edit')||nucleoPersonFeatureCan('sac','consult');
-   if(id==='navSacTracking'||id==='navMySacs')allowed=nucleoPersonFeatureCan('sac','consult');
-   if(id==='navIndicators')allowed=nucleoPersonFeatureCan('indicators','consult');
-   if(id==='navContests')allowed=nucleoPersonFeatureCan('ros','reviewContests');
-   if(id==='navPendingActions')allowed=nucleoPersonFeatureCan('pdca','reviewActions');
-   if(!allowed){
-     el.style.setProperty('display','none','important');
-     el.classList.add('hidden');
-   }else{
-     el.style.removeProperty('display');
-     el.classList.remove('hidden');
-   }
- });
+ Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
  nucleoApplyFeatureAccess();
  ['cfgUsers','unitQualitySettings','cfgNotifications','cfgUnits'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const module=id==='cfgUsers'?'users':'sectors';el.style.setProperty('display',nucleoPersonCan(module)?'':'none','important');});
 }
@@ -20465,17 +20141,7 @@ function nucleoFeatureEditor(user,parent){
 function nucleoApplyFeatureAccess(){
  if(getSession()?.permissions?.detailVersion!==1)return;
  const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','request'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','publish'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
- Object.entries(nav).forEach(([id,[module,key]])=>{
-   const el=document.getElementById(id);if(!el)return;
-   const allowed=key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key);
-   if(allowed){
-     el.style.removeProperty('display');
-     el.classList.remove('hidden');
-   }else{
-     el.style.setProperty('display','none','important');
-     el.classList.add('hidden');
-   }
- });
+ Object.entries(nav).forEach(([id,[module,key]])=>{const el=document.getElementById(id);if(el&&!(key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key))){el.style.setProperty('display','none','important');el.classList.add('hidden');}});
 }
 
 function nucleoWorkspaceFeature(key,mode){
@@ -21211,7 +20877,6 @@ function nucleo5sCurrentAccess(){
 }
 
 function nucleo5sApplyHubAccess(access){
-  try{nucleo5sEnsureAuditorLinkCard?.()}catch(e){}
   const auditButton=document.querySelector("#audit5sHubCards [onclick=\"nucleo5sShowPanel('audit')\"]");
   if(auditButton) auditButton.style.display=access?.canAudit?'':'none';
   const tutorialButton=document.querySelector("#audit5sHubCards [onclick=\"nucleo5sShowPanel('tutorial')\"]");
@@ -21240,38 +20905,20 @@ async function showAudit5S(){
   nucleo5sCurrentUnit=nucleo5sSessionUnit();
   nucleo5sSetUnitButtons(nucleo5sCurrentUnit);
   nucleo5sConfigReady();
-
-  const host=document.getElementById('audit5sPanel');
-  if(host)host.innerHTML='<div class="small" style="padding:8px 2px">Validando seu acesso ao 5S...</div>';
-
-  try{nucleo5sEnsureAuditorLinkCard?.()}catch(e){}
-
   try{
-    const timeout=new Promise((_,reject)=>setTimeout(
-      ()=>reject(new Error('A base do 5S não respondeu em até 12 segundos.')),
-      12000
-    ));
-    const access=await Promise.race([nucleo5sGetAccess(true),timeout]);
+    const access=await nucleo5sGetAccess(true);
     nucleo5sApplyHubAccess(access);
-    await nucleo5sShowPanel('home');
+    nucleo5sShowPanel('home');
   }catch(e){
-    if(host)host.innerHTML=
-      '<div class="notice danger"><b>O Centro 5S abriu, mas a validação de acesso não respondeu.</b><br>'+
-      escapeHtml(e.message||String(e))+
-      '<br><br>O restante do Núcleo continua disponível.</div>';
+    const host=document.getElementById('audit5sPanel');
+    if(host)host.innerHTML='<div class="notice danger">Não foi possível carregar suas permissões do 5S: '+escapeHtml(e.message||String(e))+'</div>';
   }
-
   window.scrollTo({top:0,behavior:'instant'});
 }
 
 async function nucleo5sShowPanel(panel){
   const host=document.getElementById('audit5sPanel');
   if(!host)return;
-
-  if(panel==='auditor-links'){
-    return nucleo5sRenderAuditorLinks(host);
-  }
-
   let access;
   try{ access=await nucleo5sGetAccess(false); }
   catch(e){ host.innerHTML='<div class="notice danger">Não foi possível validar seu acesso ao 5S: '+escapeHtml(e.message||String(e))+'</div>'; return; }
@@ -21374,332 +21021,3 @@ const __nucleo5sRenderHistoryOriginal=nucleo5sRenderHistory;
 nucleo5sRenderHistory=function(host){ __nucleo5sRenderHistoryOriginal(host); nucleo5sLockSectorSelect('nucleo5sHistorySector'); };
 const __nucleo5sRenderCycleOriginal=nucleo5sRenderCycle;
 nucleo5sRenderCycle=function(host){ __nucleo5sRenderCycleOriginal(host); nucleo5sLockSectorSelect('nucleo5sCycleSector'); };
-
-
-/* ===== NÚCLEO 5S | VÍNCULOS MANUAIS DE AUDITORES ===== */
-const NUCLEO_5S_AUDITOR_LINKS_KEY='nucleo-5s-auditor-links-v1';
-
-function nucleo5sLinkNorm(v){
-  return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
-}
-function nucleo5sIsLinkAdmin(){
-  return ['admin','quality'].includes(String(getSession()?.role||'').trim().toLowerCase());
-}
-function nucleo5sReadAuditorLinks(){
-  try{
-    const data=JSON.parse(localStorage.getItem(NUCLEO_5S_AUDITOR_LINKS_KEY)||'[]');
-    return Array.isArray(data)?data:[];
-  }catch(e){return []}
-}
-function nucleo5sUserKeyForLink(u){
-  return String(u?.personId||u?.email||u?.name||'').trim();
-}
-function nucleo5sUserMatchesUnitForLink(u,unit){
-  const raw=String(u?.unit||'').toLowerCase();
-  if(raw.includes('todas'))return true;
-  try{return explicitPortalUnit(u?.unit)===unit}catch(e){}
-  return unit==='filial'
-    ? raw.includes('filial')||raw.includes('linhares')
-    : raw.includes('matriz')||raw.includes('são bento')||raw.includes('sao bento');
-}
-function nucleo5sEnsureAuditorLinkCard(){
-  const cards=document.getElementById('audit5sHubCards');
-  if(!cards)return;
-
-  const existing=document.getElementById('audit5sAuditorLinksBtn');
-
-  if(!nucleo5sIsLinkAdmin()){
-    if(existing)existing.remove();
-    return;
-  }
-  if(existing)return;
-
-  const btn=document.createElement('button');
-  btn.id='audit5sAuditorLinksBtn';
-  btn.className='card';
-  btn.type='button';
-  btn.style.cssText='text-align:left;padding:16px;cursor:pointer';
-  btn.onclick=()=>nucleo5sShowPanel('auditor-links');
-  btn.innerHTML='<div class="overview-eyebrow">VÍNCULOS</div><h3 style="margin:6px 0">Vincular auditores</h3><div class="small">Relacione o nome do cronograma ao usuário correto do Núcleo.</div>';
-  cards.appendChild(btn);
-}
-async function nucleo5sSaveAuditorLinks(links){
-  if(!nucleo5sIsLinkAdmin())throw new Error('Acesso restrito ao SGQ.');
-  if(!nucleoCentralDataConfirmed())throw new Error('A base central ainda não terminou a sincronização.');
-
-  const record={
-    id:'global:'+NUCLEO_5S_AUDITOR_LINKS_KEY,
-    key:NUCLEO_5S_AUDITOR_LINKS_KEY,
-    value:JSON.stringify(links||[]),
-    scope:'global',
-    userKey:'',
-    updatedAt:new Date().toISOString(),
-    updatedBy:getSession()?.name||'SGQ'
-  };
-
-  const timeout=new Promise((_,reject)=>setTimeout(
-    ()=>reject(new Error('A base demorou mais de 15 segundos para confirmar o vínculo.')),
-    15000
-  ));
-
-  await Promise.race([
-    portalBackendSaveConfirmed('shared_state',record.id,record),
-    timeout
-  ]);
-
-  nucleoNativeStorageSetItem.call(localStorage,NUCLEO_5S_AUDITOR_LINKS_KEY,record.value);
-  window.NUCLEO_5S_ACCESS_CACHE={};
-}
-
-function nucleo5sCurrentLinkUsers(){
-  // Usa exatamente a mesma fonte da tela Administração > Usuários.
-  // Não aplica filtro extra de status/unidade, para que qualquer cadastro
-  // exibido na administração também possa ser localizado para vínculo 5S.
-  return (getOperationalUsers()||[])
-    .filter(u=>String(u.name||u.email||'').trim())
-    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-}
-
-async function nucleo5sPopulateLinkUsers(forceRemote=false){
-  const select=document.getElementById('nucleo5sLinkUser');
-  if(!select)return;
-
-  const previous=String(select.value||'');
-  const localUsers=nucleo5sCurrentLinkUsers();
-  const map=new Map();
-
-  localUsers.forEach(u=>{
-    const key=String(u.email||u.personId||u.name||'').trim().toLowerCase();
-    if(key)map.set(key,u);
-  });
-
-  // A lista de vínculo 5S precisa refletir a base central real de cadastros.
-  // portal_pending_users já é a rota usada pela administração para atualizar usuários.
-  if(portalBackendEnabled()){
-    try{
-      if(forceRemote || !window.__nucleo5sRemoteUsersAt || Date.now()-window.__nucleo5sRemoteUsersAt>30000){
-        const timeout=new Promise((_,reject)=>setTimeout(
-          ()=>reject(new Error('A base de usuários demorou para responder.')),
-          20000
-        ));
-        const res=await Promise.race([
-          portalJsonp({acao:'portal_pending_users'},20000),
-          timeout
-        ]);
-
-        if(res?.sucesso!==false){
-          const remote=nucleoApplyUserLoginStatusGuards(Array.isArray(res?.users)?res.users:[]);
-          remote.forEach(u=>{
-            const key=String(u.email||u.personId||u.name||'').trim().toLowerCase();
-            if(!key)return;
-            const existing=map.get(key)||{};
-            map.set(key,{...existing,...u});
-          });
-
-          window.__nucleo5sRemoteUsersAt=Date.now();
-
-          // Atualiza também o cache oficial local para manter consistência com Administração > Usuários.
-          try{
-            const merged=[...map.values()];
-            nucleoNativeStorageSetItem.call(localStorage,USERS_KEY,JSON.stringify(merged));
-          }catch(e){}
-        }
-      }
-    }catch(e){
-      console.warn('Falha ao atualizar usuários para vínculo 5S:',e);
-    }
-  }
-
-  const users=[...map.values()]
-    .filter(u=>String(u.name||u.email||'').trim())
-    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
-
-  select.innerHTML='<option value="">Selecione a pessoa...</option>'+
-    users.map(u=>{
-      const key=nucleo5sUserKeyForLink(u);
-      const label=[u.name,u.sector,u.email].filter(Boolean).join(' · ');
-      return '<option value="'+escapeHtml(key)+'">'+escapeHtml(label)+'</option>';
-    }).join('');
-
-  if(previous && [...select.options].some(o=>o.value===previous)){
-    select.value=previous;
-  }
-
-  const counter=document.getElementById('nucleo5sLinkPeopleCount');
-  if(counter)counter.textContent=users.length+' pessoa(s) carregada(s) da base do Núcleo.';
-}
-
-function nucleo5sRenderAuditorLinks(host){
-  if(!host)return;
-
-  if(!nucleo5sIsLinkAdmin()){
-    host.innerHTML='<div class="notice">Somente o SGQ pode editar os vínculos.</div>';
-    return;
-  }
-
-  const unit=nucleo5sCurrentUnit;
-  const links=nucleo5sReadAuditorLinks().filter(x=>x.unit===unit);
-  const users=nucleo5sCurrentLinkUsers();
-
-  const rows=links.length
-    ? '<div style="overflow:auto;margin-top:18px"><table><thead><tr><th>Nome no cronograma</th><th>Usuário Núcleo</th><th></th></tr></thead><tbody>'+
-      links.map(x=>'<tr><td><b>'+escapeHtml(x.scheduleName||'-')+'</b></td><td>'+
-        escapeHtml([x.userName,x.email].filter(Boolean).join(' · '))+
-        '</td><td><button class="btn secondary" type="button" onclick="nucleo5sRemoveAuditorLink('+JSON.stringify(x.scheduleName||'')+')">Remover</button></td></tr>').join('')+
-      '</tbody></table></div>'
-    : '<div class="small" style="margin-top:16px">Nenhum vínculo manual cadastrado.</div>';
-
-  host.innerHTML=
-    '<div class="card" style="padding:18px">'+
-      '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-        '<div><div class="overview-eyebrow">ADMINISTRAÇÃO 5S</div><h3 style="margin:5px 0">Vincular auditor</h3>'+
-        '<div class="small">Escolha qualquer nome existente no Cronograma 5S e vincule à pessoa correspondente no Núcleo.</div></div>'+
-        '<button class="btn secondary" type="button" onclick="nucleo5sShowPanel(\'home\')">Voltar</button>'+
-      '</div>'+
-
-      '<div class="grid" style="margin-top:16px;align-items:end">'+
-        '<label><span class="small">Nome no cronograma</span>'+
-          '<select id="nucleo5sLinkScheduleSelect" onchange="nucleo5sSelectScheduleAuditorName()">'+
-            '<option value="">Carregando todos os nomes do cronograma...</option>'+
-          '</select>'+
-        '</label>'+
-
-        '<label><span class="small">Pessoa no Núcleo</span>'+
-          '<select id="nucleo5sLinkUser" onfocus="nucleo5sPopulateLinkUsers(true)" onclick="nucleo5sPopulateLinkUsers(true)">'+
-            '<option value="">Carregando pessoas...</option>'+
-          '</select>'+
-          '<span id="nucleo5sLinkPeopleCount" class="small"></span>'+
-        '</label>'+
-      '</div>'+
-
-      '<div style="margin-top:10px">'+
-        '<label><span class="small">Ou digite manualmente</span>'+
-          '<input id="nucleo5sLinkScheduleName" placeholder="Ex.: Bruna">'+
-        '</label>'+
-      '</div>'+
-
-      '<div class="actions">'+
-        '<button id="nucleo5sLinkSaveBtn" class="btn primary" type="button" onclick="nucleo5sSaveManualAuditorLink()">Salvar vínculo</button>'+
-        '<button class="btn secondary" type="button" onclick="nucleo5sLoadAuditorNamesFromSchedule(true)">↻ Atualizar nomes</button>'+
-      '</div>'+
-
-      '<div id="nucleo5sLinkStatus" class="small" style="margin-top:12px"></div>'+
-      rows+
-    '</div>';
-
-  nucleo5sPopulateLinkUsers(true);
-  setTimeout(()=>nucleo5sPopulateLinkUsers(false),1200);
-  setTimeout(()=>nucleo5sPopulateLinkUsers(),4000);
-  setTimeout(()=>nucleo5sPopulateLinkUsers(),9000);
-  setTimeout(()=>nucleo5sLoadAuditorNamesFromSchedule(false),0);
-}
-
-function nucleo5sSelectScheduleAuditorName(){
-  const select=document.getElementById('nucleo5sLinkScheduleSelect');
-  const input=document.getElementById('nucleo5sLinkScheduleName');
-  if(!select||!input)return;
-  if(select.value)input.value=select.value;
-}
-
-async function nucleo5sLoadAuditorNamesFromSchedule(force=false){
-  const select=document.getElementById('nucleo5sLinkScheduleSelect');
-  const status=document.getElementById('nucleo5sLinkStatus');
-  if(!select)return;
-
-  select.disabled=true;
-  select.innerHTML='<option value="">Carregando todos os nomes do cronograma...</option>';
-  if(status && force)status.textContent='Atualizando nomes do Cronograma 5S...';
-
-  try{
-    const timeout=new Promise((_,reject)=>setTimeout(
-      ()=>reject(new Error('O cronograma demorou mais de 30 segundos para responder.')),
-      30000
-    ));
-
-    const data=await Promise.race([
-      nucleo5sBackend('nucleo_5s_schedule_names',{}),
-      timeout
-    ]);
-
-    if(!data?.sucesso)throw new Error(data?.erro||'Não foi possível consultar o cronograma.');
-
-    const names=Array.isArray(data.names)
-      ? data.names.map(name=>String(name||'').trim()).filter(Boolean)
-      : [];
-
-    names.sort((a,b)=>a.localeCompare(b,'pt-BR'));
-
-    if(names.length){
-      select.innerHTML='<option value="">Selecione um nome do cronograma...</option>'+
-        names.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');
-      if(status)status.textContent=names.length+' nome(s) encontrado(s) em todo o Cronograma 5S.';
-    }else{
-      select.innerHTML='<option value="">Nenhum auditor encontrado no cronograma</option>';
-      if(status)status.textContent='Nenhum auditor foi encontrado no Cronograma 5S. Você ainda pode digitar o nome manualmente.';
-    }
-  }catch(e){
-    select.innerHTML='<option value="">Não foi possível carregar o cronograma</option>';
-    if(status)status.textContent='Não foi possível carregar os nomes automaticamente: '+(e.message||e)+'. Você ainda pode digitar o nome manualmente.';
-  }finally{
-    select.disabled=false;
-  }
-}
-
-async function nucleo5sSaveManualAuditorLink(){
-  const status=document.getElementById('nucleo5sLinkStatus');
-  const btn=document.getElementById('nucleo5sLinkSaveBtn');
-  const scheduleName=String(document.getElementById('nucleo5sLinkScheduleName')?.value||'').trim();
-  const userKey=String(document.getElementById('nucleo5sLinkUser')?.value||'').trim();
-
-  if(!scheduleName){if(status)status.textContent='Digite o nome do cronograma.';return}
-  if(!userKey){if(status)status.textContent='Selecione a pessoa no Núcleo.';return}
-
-  try{
-    if(btn){btn.disabled=true;btn.textContent='Salvando...'}
-    if(status)status.textContent='Salvando vínculo...';
-
-    const unit=nucleo5sCurrentUnit;
-    const user=(getOperationalUsers()||[]).find(u=>nucleo5sUserKeyForLink(u)===userKey);
-    if(!user)throw new Error('Usuário selecionado não encontrado.');
-
-    let links=nucleo5sReadAuditorLinks().filter(x=>!(
-      x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(scheduleName)
-    ));
-
-    links.push({
-      unit,
-      scheduleName,
-      personId:String(user.personId||'').trim(),
-      email:String(user.email||'').trim().toLowerCase(),
-      userName:String(user.name||'').trim(),
-      updatedAt:new Date().toISOString(),
-      updatedBy:getSession()?.name||'SGQ'
-    });
-
-    await nucleo5sSaveAuditorLinks(links);
-    nucleo5sRenderAuditorLinks(document.getElementById('audit5sPanel'));
-  }catch(e){
-    if(status)status.textContent='Erro: '+(e.message||e);
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent='Salvar vínculo'}
-  }
-}
-async function nucleo5sRemoveAuditorLink(scheduleName){
-  const unit=nucleo5sCurrentUnit;
-  const links=nucleo5sReadAuditorLinks().filter(x=>!(
-    x.unit===unit && nucleo5sLinkNorm(x.scheduleName)===nucleo5sLinkNorm(scheduleName)
-  ));
-
-  try{
-    await nucleo5sSaveAuditorLinks(links);
-    nucleo5sRenderAuditorLinks(document.getElementById('audit5sPanel'));
-  }catch(e){
-    const status=document.getElementById('nucleo5sLinkStatus');
-    if(status)status.textContent='Erro: '+(e.message||e);
-  }
-}
-
-document.addEventListener('DOMContentLoaded',()=>{
-  try{nucleo5sEnsureAuditorLinkCard()}catch(e){}
-});
