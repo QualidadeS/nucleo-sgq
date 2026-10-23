@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-0635-user-login-status';
+window.NUCLEO_BUILD_VERSION = '20261023-0948-user-login-confirm-fix';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -4331,11 +4331,13 @@ async function toggleOperationalUserLogin(key){
 
       if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a alteração.');
 
-      const verify=await portalJsonp({acao:'portal_pending_users'},25000);
-      const remote=Array.isArray(verify?.users)?verify.users:[];
-      const saved=remote.find(u=>String(u.email||u.name)===String(user.email||user.name));
-      if(!saved || String(saved.approvalStatus||'').toLowerCase()!==next){
-        throw new Error('A alteração não foi confirmada na base central.');
+      // A própria rota portal_update_user_status grava o cadastro e devolve o
+      // status efetivamente salvo. Não fazemos uma segunda leitura imediata,
+      // porque a coleção central pode levar alguns segundos para refletir a
+      // alteração e isso gerava falso erro de confirmação.
+      const confirmedStatus=String(res.approvalStatus||next).trim().toLowerCase();
+      if(confirmedStatus!==next){
+        throw new Error('A base central confirmou um status diferente do solicitado.');
       }
     }
 
@@ -4348,6 +4350,24 @@ async function toggleOperationalUserLogin(key){
       user.email||user.name,
       {name:user.name,email:user.email,status:next}
     );
+
+    // Reconsulta depois, sem bloquear a ação do usuário.
+    setTimeout(async()=>{
+      try{
+        const fresh=await portalJsonp({acao:'portal_pending_users'},25000);
+        const remote=Array.isArray(fresh?.users)?fresh.users:[];
+        if(remote.length){
+          const current=getOperationalUsers();
+          const map=new Map(current.map(u=>[String(u.email||u.name||'').toLowerCase(),u]));
+          remote.forEach(u=>{
+            const k=String(u.email||u.name||'').toLowerCase();
+            if(k)map.set(k,{...(map.get(k)||{}),...u});
+          });
+          localStorage.setItem(USERS_KEY,JSON.stringify([...map.values()]));
+          renderOperationalUsers();
+        }
+      }catch(e){}
+    },4000);
   }catch(e){
     users[idx]=original;
     localStorage.setItem(USERS_KEY,JSON.stringify(users));
