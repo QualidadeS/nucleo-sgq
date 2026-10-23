@@ -11950,12 +11950,13 @@ async function showSentPdcas(){
   }
 }
 // Nome amigável apenas para exibição: preserva o ID técnico na base e nas ações.
-function nucleoPdcaReceivedDisplayName(id){
- const raw=String(id||'').trim();
- const match=raw.match(/^CTRL-PDCA-RO-(?:EX|IN)-(\d+)-(.+)$/i);
- if(!match)return raw;
- const numero=String(Number(match[1]));
- const setor=String(match[2]||'').replace(/-/g,' ').trim().toUpperCase();
+function nucleoPdcaReceivedDisplayName(id,fileName){
+ const original=String(id||'').trim();
+ // Nos registros importados o identificador técnico também pode estar em fileName.
+ const found=[original,String(fileName||'').trim()].map(v=>v.match(/^CTRL-PDCA-RO-(?:EX|IN)-(\d+)-(.+)$/i)).find(Boolean);
+ if(!found)return String(fileName||'').trim()||original;
+ const numero=String(Number(found[1]));
+ const setor=String(found[2]||'').replace(/-/g,' ').trim().toUpperCase();
  return 'PDCA — R.O. '+numero+(setor?' ('+setor+')':'');
 }
 function renderSentPdcas(){
@@ -11963,7 +11964,7 @@ function renderSentPdcas(){
  renderPdcaPdfSummary();
  const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase(),sf=document.getElementById('sentStatusFilter')?.value||'todos';
  let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
- const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):nucleoPdcaReceivedDisplayName(p.id)};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
+ const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:nucleoPdcaReceivedDisplayName(p.id,p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):'')};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
  const body=document.getElementById('sentRows');if(!body)return;
  const lifecycle=isAdmin()?(document.getElementById('sentLifecycleFilter')?.value||'active'):'all';
  nucleoRenderPdcaLifecycle(data,lifecycle);
@@ -11979,7 +11980,7 @@ function renderSentPdcas(){
     : confirmed?'Reclamante confirmado — falta entregar a resposta'
     : user?'Cadastro identificado — confirmar'
     :'Reclamante a confirmar';
-  return '<tr class="click" onclick="'+(pdfPending?'event.stopPropagation()':'openPdcaReport(\''+escapeHtml(p.id)+'\')')+'"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+(pdfPending?'<div class="small">'+escapeHtml(p.setor||'')+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(pdfPending?'<div style="margin-top:6px"><span class="status-badge pending">PDF pendente</span></div>':'')+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(pdfPending?(String(p.status||'').toLowerCase().includes('apresent')?'Apresentado':'Respondido'):delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">'+(pdfPending?'<button class="btn primary" type="button" onclick="event.stopPropagation();nucleoUploadPendingPdcaPdf(\''+escapeHtml(p.id)+'\')">Subir PDF</button>':'Ver PDCA →')+'</td></tr>';
+  return '<tr class="click" onclick="'+(pdfPending?'event.stopPropagation()':'openPdcaReport(\''+escapeHtml(p.id)+'\')')+'"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+(pdfPending&&!/^CTRL-PDCA-RO-(?:EX|IN)-\d+-/i.test(String(p.id||p.fileName||''))?'<div class="small">'+escapeHtml(p.setor||'')+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(pdfPending?'<div style="margin-top:6px"><span class="status-badge pending">PDF pendente</span></div>':'')+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(pdfPending?(String(p.status||'').toLowerCase().includes('apresent')?'Apresentado':'Respondido'):delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">'+(pdfPending?'<button class="btn primary" type="button" onclick="event.stopPropagation();nucleoUploadPendingPdcaPdf(\''+escapeHtml(p.id)+'\')">Subir PDF</button>':'Ver PDCA →')+'</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
 
