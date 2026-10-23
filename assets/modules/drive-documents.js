@@ -143,7 +143,53 @@ function nucleoDriveSectors(ro){
 }
 function nucleoDriveRenderConfirmation(){const p=nucleoDriveState.parsed||{};document.getElementById('ndPdcaConfirm').innerHTML='<h4>'+nucleoDriveEscape(nucleoDriveState.selectedPdf.name)+'</h4><p class="small">Números encontrados: '+nucleoDriveEscape((p.numbers||[]).join(', ')||'nenhum')+'. Confirme todos os vínculos abaixo.</p><div class="grid"><label>Responsável<input id="ndResponsible" value="'+nucleoDriveEscape(p.responsible||'')+'"></label><label>Cliente<input id="ndClient" value="'+nucleoDriveEscape(p.client||'')+'"></label><label>Data do documento<input id="ndDate" value="'+nucleoDriveEscape(p.date||'')+'"></label></div><div id="ndLinks"></div><button class="btn secondary" onclick="nucleoDriveAddLink()">Adicionar R.O. / setor</button> <button class="btn primary" id="ndSavePdca" onclick="nucleoDriveSavePdca()">Confirmar e armazenar resposta</button>';nucleoDriveRenderLinks();}
 function nucleoDriveAddLink(){nucleoDriveState.links.push({ro:'',sector:nucleoDriveState.parsed?.sector||''});nucleoDriveRenderLinks();}
-function nucleoDriveRenderLinks(){const candidates=nucleoDriveCandidates();document.getElementById('ndLinks').innerHTML=nucleoDriveState.links.map((l,i)=>{const directed=nucleoDriveSectors(l.ro);const sectors=[...new Set(directed.concat(getConfiguredSectors(nucleoDriveState.unit)))];const identified=l.sector||nucleoDriveState.parsed?.sector||'';const actual=directed.find(x=>sectorCompareKey(x)===sectorCompareKey(identified));const chosen=l.sectorConfirmed?sectors.find(x=>sectorCompareKey(x)===sectorCompareKey(l.sector)):actual;l.sector=chosen||(!identified&&directed.length===1?directed[0]:'');return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">'+(l.matchWarning&&!l.ro?'<p class="small" style="width:100%;color:#9b3b12">'+nucleoDriveEscape('R.O. '+l.identifiedNumber+' '+l.identifiedOrigin+' — '+l.matchWarning)+'</p>':'')+(!l.sector?'<p class="small" style="width:100%">Setor direcionado não identificado. Selecione o setor.</p>':'')+'<select onchange="nucleoDriveState.links['+i+'].ro=this.value;nucleoDriveState.links['+i+'].sector=\'\';nucleoDriveState.links['+i+'].sectorConfirmed=false;nucleoDriveRenderLinks()"><option value="">Selecione a R.O.</option>'+candidates.map(r=>{const key=r.numero||r.id;return '<option value="'+nucleoDriveEscape(key)+'" '+(key===l.ro?'selected':'')+'>'+nucleoDriveEscape(key+' · '+(r.cliente||''))+'</option>';}).join('')+'</select><select onchange="nucleoDriveState.links['+i+'].sector=this.value;nucleoDriveState.links['+i+'].sectorConfirmed=true;nucleoDriveRenderLinks()"><option value="">Setor direcionado</option>'+sectors.map(sector=>'<option '+(sectorCompareKey(sector)===sectorCompareKey(l.sector)?'selected':'')+' value="'+nucleoDriveEscape(sector)+'">'+nucleoDriveEscape(sector)+'</option>').join('')+'</select><button class="btn secondary" onclick="nucleoDriveState.links.splice('+i+',1);nucleoDriveRenderLinks()">Remover</button></div>';}).join('');nucleoDriveUpdateClient();}
+function nucleoDriveManualRoIdentity(value){
+ const raw=String(value||'').trim().toUpperCase();
+ if(!raw)return '';
+ const origin=/\b(?:EX|EXTERNA)\b/.test(raw)||/RO[-_ ]?EX/.test(raw)?'EX':/\b(?:IN|INTERNA)\b/.test(raw)||/RO[-_ ]?IN/.test(raw)?'IN':nucleoDriveState.parsed?.origin==='Externa'?'EX':nucleoDriveState.parsed?.origin==='Interna'?'IN':'';
+ const match=raw.match(/(?:^|[^0-9])(\d{1,7})$/);
+ if(!match||!origin)return '';
+ return 'RO-'+origin+'-'+match[1].padStart(5,'0');
+}
+function nucleoDriveChooseManualRo(i){
+ const link=nucleoDriveState.links[i];if(!link)return;
+ const input=document.getElementById('ndManualRo_'+i);
+ const canonical=nucleoDriveManualRoIdentity(input?.value);
+ if(!canonical){alert('Informe o número da R.O. e sua origem (Interna/Externa).');return;}
+ const expected=nucleoDriveState.parsed?.origin||link.identifiedOrigin||'';
+ if(expected&&((expected==='Externa')!==canonical.startsWith('RO-EX-'))){alert('A origem da R.O. não corresponde ao tipo identificado no PDF.');return;}
+ link.ro=canonical;link.sector='';link.sectorConfirmed=false;link.manualRo=true;
+ link.matchWarning='R.O. informada manualmente. A existência e o setor serão conferidos na base central ao salvar.';
+ nucleoDriveRenderLinks();
+}
+function nucleoDriveRenderLinks(){
+ const candidates=nucleoDriveCandidates();
+ document.getElementById('ndLinks').innerHTML=nucleoDriveState.links.map((l,i)=>{
+  const directed=nucleoDriveSectors(l.ro);
+  const sectors=[...new Set(directed.concat(getConfiguredSectors(nucleoDriveState.unit)))];
+  const identified=l.sector||nucleoDriveState.parsed?.sector||'';
+  const actual=directed.find(x=>sectorCompareKey(x)===sectorCompareKey(identified));
+  const chosen=l.sectorConfirmed?sectors.find(x=>sectorCompareKey(x)===sectorCompareKey(l.sector)):actual;
+  l.sector=chosen||(!identified&&directed.length===1?directed[0]:'');
+  const hasOption=candidates.some(r=>String(r.numero||r.id)===String(l.ro));
+  const displayRo=l.ro&&!hasOption?'<option selected value="'+nucleoDriveEscape(l.ro)+'">'+nucleoDriveEscape(l.ro)+' (vínculo manual)</option>':'';
+  const preset=l.ro||((l.identifiedNumber)?('RO-'+((l.identifiedOrigin||nucleoDriveState.parsed?.origin)==='Interna'?'IN':'EX')+'-'+String(l.identifiedNumber).padStart(5,'0')):'');
+  return '<div style="padding:12px;border:1px solid #d5dbe5;border-radius:10px;margin:10px 0">'
+   +'<div style="font-weight:600;margin-bottom:6px">'+nucleoDriveEscape(l.identifiedNumber?'R.O. '+l.identifiedNumber+' — '+(l.identifiedOrigin||nucleoDriveState.parsed?.origin||'origem não identificada'):'Vínculo adicional')+'</div>'
+   +(l.matchWarning?'<p class="small" style="color:#9b3b12;margin:4px 0 8px">'+nucleoDriveEscape(l.matchWarning)+'</p>':'')
+   +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+   +'<select style="flex:2;min-width:210px" onchange="nucleoDriveState.links['+i+'].ro=this.value;nucleoDriveState.links['+i+'].sector=\'\';nucleoDriveState.links['+i+'].sectorConfirmed=false;nucleoDriveRenderLinks()"><option value="">Selecione a R.O.</option>'
+   +displayRo+candidates.map(r=>{const key=String(r.numero||r.id);return '<option value="'+nucleoDriveEscape(key)+'" '+(key===l.ro?'selected':'')+'>'+nucleoDriveEscape(key+' · '+(r.cliente||''))+'</option>';}).join('')+'</select>'
+   +'<select style="flex:1;min-width:190px" onchange="nucleoDriveState.links['+i+'].sector=this.value;nucleoDriveState.links['+i+'].sectorConfirmed=true;nucleoDriveRenderLinks()"><option value="">Setor direcionado</option>'+sectors.map(sector=>'<option '+(sectorCompareKey(sector)===sectorCompareKey(l.sector)?'selected':'')+' value="'+nucleoDriveEscape(sector)+'">'+nucleoDriveEscape(sector)+'</option>').join('')+'</select>'
+   +'<button class="btn secondary" type="button" onclick="nucleoDriveState.links.splice('+i+',1);nucleoDriveRenderLinks()">Remover</button></div>'
+   +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px"><label class="small" for="ndManualRo_'+i+'">Não está na lista? Informe a R.O. equivalente:</label>'
+   +'<input id="ndManualRo_'+i+'" style="flex:1;min-width:150px" placeholder="Ex.: RO-EX-00315" value="'+nucleoDriveEscape(preset)+'">'
+   +'<button class="btn secondary" type="button" onclick="nucleoDriveChooseManualRo('+i+')">Vincular manualmente</button></div>'
+   +(!l.sector?'<p class="small" style="margin:5px 0 0">Selecione também o setor responsável.</p>':'')
+   +'</div>';
+ }).join('');
+ nucleoDriveUpdateClient();
+}
 function nucleoDriveUpdateClient(){
  const input=document.getElementById('ndClient');if(!input)return;
  const candidates=nucleoDriveCandidates(),clients=[...new Set(nucleoDriveState.links.map(l=>candidates.find(r=>String(r.numero||r.id)===l.ro)?.cliente).filter(Boolean))];
