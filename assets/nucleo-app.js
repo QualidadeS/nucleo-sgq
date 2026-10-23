@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-1210-sac-real-attachments';
+window.NUCLEO_BUILD_VERSION = '20261023-1425-permissoes-individuais';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -6792,7 +6792,7 @@ function ensureSacReworkState(r){
   return r;
 }
 function showSacTracking(){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','consult'))return;
   view('sacTrackingView');
   setNav('navSacTracking');
   setSacTrackingTab('active');
@@ -7149,7 +7149,7 @@ function showMySacs(){
 }
 
 function showExternalRoControl(){
-  if(!isAdmin()){showList();return}
+  if(!nucleoFeatureRequire('sac','consult') && !nucleoPersonFeatureCan('sac','edit'))return;
   view('externalRoControlView');
   setNav('externalro');
   renderExternalRoControl();
@@ -7273,7 +7273,7 @@ async function saveSacDecisionLocally(record){
 }
 
 async function markExternalRoAsRoOnly(id){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','edit'))return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r)return;
   if(!confirm('Manter '+String(r.ro||'esta ocorrência')+' somente como R.O.? Ela sairá da área de SAC.'))return;
@@ -7284,7 +7284,7 @@ async function markExternalRoAsRoOnly(id){
   refreshMenuNotificationBadges();
 }
 async function promoteExternalRoToSac(id){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','edit'))return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r)return;
   const now=new Date().toISOString();
@@ -7350,11 +7350,13 @@ function sacSortRows(rows,mode){
 
 function renderExternalRoControl(){
   nucleoRenderSacDrafts();
-  if(!isAdmin()&&!isRepresentativeSacAccess())return;
+  const canConsultSac=nucleoPersonFeatureCan('sac','consult')||nucleoPersonFeatureCan('sac','edit');
+  const canEditSac=nucleoPersonFeatureCan('sac','edit');
+  if(!canConsultSac&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
   const treatment=document.getElementById('externalRoImpactFilter')?.value||'all';
   const q=normalizeAnswer(document.getElementById('externalRoSearch')?.value||'');
-  const allSacRows=isAdmin()?getExternalRoControls():getMySacs();
+  const allSacRows=canConsultSac?getExternalRoControls():getMySacs();
 
   const sortMode=document.getElementById('externalRoSort')?.value||'date_desc';
 
@@ -7416,7 +7418,7 @@ function renderExternalRoControl(){
         <div class="small" style="margin-top:12px">Esta é uma R.O. externa. Só será criada como SAC se o SGQ indicar que há necessidade de atendimento ao cliente.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.ro)}')">Ver R.O.</button>
-          ${isAdmin()?`<button class="btn secondary" type="button" onclick="markExternalRoAsRoOnly('${escapeHtml(r.id)}')">Somente R.O.</button>
+          ${canEditSac?`<button class="btn secondary" type="button" onclick="markExternalRoAsRoOnly('${escapeHtml(r.id)}')">Somente R.O.</button>
           <button class="btn primary" type="button" onclick="promoteExternalRoToSac('${escapeHtml(r.id)}')">Criar SAC</button>`:''}
         </div>
       </div>`;
@@ -7440,7 +7442,7 @@ function renderExternalRoControl(){
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
-            ${isAdmin()?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
+            ${canEditSac?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
           </div>
           <div class="small" style="margin-top:4px"><b>Direcionado para:</b> ${escapeHtml(sacDirectedSector(r))}</div>
         </div>
@@ -7465,7 +7467,7 @@ function renderExternalRoControl(){
       <div class="small" style="margin-top:12px">${escapeHtml(started)}${escapeHtml(completed)}</div>
 
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px">
-        ${isAdmin()?`
+        ${canEditSac?`
           <button class="btn secondary" type="button" onclick="openRoReport('${escapeHtml(r.ro)}')">Ver R.O.</button>
           <button class="btn secondary" type="button" onclick="correctSacRepresentative('${escapeHtml(r.id)}')">Corrigir representante</button>
           <button class="btn secondary" type="button" onclick="openSacEditModal('${escapeHtml(r.id)}')">Preencher ficha SAC</button>
@@ -7751,7 +7753,7 @@ async function deleteSacAttachment(sacId,attachmentId){
 }
 
 function openSacEditModal(id){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','edit'))return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!r){alert('Controle de SAC não encontrado.');return}
   const f=r.officialForm||{};
@@ -7838,7 +7840,6 @@ function collectSacEditForm(){
 }
 function saveSacEditForm(){
   if(!nucleoFeatureRequire('sac','edit'))return;
-  if(!isAdmin())return;
   const id=String(document.getElementById('sacEditRecordId')?.value||'').trim();
   let list=getExternalRoControls();
   const idx=list.findIndex(x=>String(x.id)===String(id));
@@ -8313,7 +8314,7 @@ function updateExternalTreatmentRecord(id,patch){
   return record;
 }
 function startExternalTreatment(id){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','edit'))return;
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
   if(!sacIsClassified(current)){
@@ -8344,7 +8345,7 @@ function startExternalTreatment(id){
   refreshMenuNotificationBadges();
 }
 function finishExternalTreatment(id){
-  if(!isAdmin())return;
+  if(!nucleoFeatureRequire('sac','edit'))return;
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
   if(!confirm('Confirmar a conclusão da tratativa da R.O. '+current.ro+'? O reclamante será notificado.'))return;
@@ -9136,7 +9137,7 @@ function nucleoClosePdcaPriorities(){
 
 function renderTriage(){
   try{refreshMenuNotificationBadges()}catch(e){}
-  if(!isAdmin())return;
+  if(!nucleoPersonFeatureCan('ros','triage'))return;
   const status=document.getElementById('triageStatusFilter')?.value||'all';
   const sector=document.getElementById('triageSectorFilter')?.value||'all';
   const origin=document.getElementById('triageOriginFilter')?.value||'all';
@@ -9200,7 +9201,6 @@ function renderTriage(){
 function showTriage(){
   if(!nucleoFeatureRequire('ros','triage'))return;
   try{refreshMenuNotificationBadges()}catch(e){}
-  if(!isAdmin()){showList();return}
   view('triageView');
   setNav('triage');
   populateTriageSectors();
@@ -11069,7 +11069,7 @@ function renderSgqCharts(d){
 }
 
 function renderSgqIndicators(){
-  if(!isAdmin()){showList();return}
+  if(!nucleoPersonFeatureCan('indicators','consult'))return;
 
   // Carrega a base uma única vez para esta renderização.
   const allRows=getAllRoRecords();
@@ -11136,7 +11136,6 @@ function renderSgqIndicators(){
 }
 async function showSgqIndicators(){
   if(!nucleoFeatureRequire('indicators','consult'))return;
-  if(!isAdmin()){showList();return}
 
   view('sgqIndicatorsView');
   setNav('indicators');
@@ -16537,7 +16536,7 @@ async function deleteAdminOperationalRecord(id){
 function openAdmin(){
   if(nucleoPersonPermissions(getSession()).sgq)nucleoReadAvatarGalleryConfig();
   refreshSectorSelectors();
-  if(!isAdmin()){showList();return;}
+  if(!nucleoPersonCan('users')&&!nucleoPersonCan('sectors')){showList();return;}
   view('settingsView');setNav('admin');loadAdminConfig();window.scrollTo({top:0,behavior:'instant'});
   if(typeof renderAccess==='function')renderAccess();
   renderOperationalUsers();
@@ -18448,11 +18447,11 @@ function overviewQuickCatalog(){
     {id:'pending',label:'Pendências',detail:'Sua central de acompanhamento',action:'showPendingHub()',allowed:()=>true},
     {id:'documents',label:'Solicitação de Documentos',detail:'Pedir ou acompanhar documentos',action:"showAdminOperationalModule('documents')",allowed:()=>canRequestDocuments()},
     {id:'mysacs',label:'Meus SACs',detail:'Reclamações em que você é representante',action:'showMySacs()',allowed:()=>!isAdmin()&&overviewSafe(()=>isRepresentativeSacAccess(),false)},
-    {id:'triage',label:'Triagem de R.O.s',detail:'Classificar e direcionar ocorrências',action:'showTriage()',allowed:()=>isAdmin()},
-    {id:'saccontrol',label:'Controle de SAC',detail:'Classificação e encaminhamento',action:'showExternalRoControl()',allowed:()=>isAdmin()},
-    {id:'pendingactions',label:'Ações pendentes',detail:'Conferência e acompanhamento do SGQ',action:'showPendingActions()',allowed:()=>isAdmin()},
-    {id:'contests',label:'Contestações',detail:'Analisar solicitações',action:'showContestations()',allowed:()=>isAdmin()},
-    {id:'equipment',label:'Equipamentos e metrologia',detail:'Ativos, calibrações e histórico',action:"showAdminOperationalModule('equipment')",allowed:()=>isAdmin()},
+    {id:'triage',label:'Triagem de R.O.s',detail:'Classificar e direcionar ocorrências',action:'showTriage()',allowed:()=>nucleoPersonFeatureCan('sac','edit')},
+    {id:'saccontrol',label:'Controle de SAC',detail:'Classificação e encaminhamento',action:'showExternalRoControl()',allowed:()=>nucleoPersonCan('equipment')},
+    {id:'pendingactions',label:'Ações pendentes',detail:'Conferência e acompanhamento do SGQ',action:'showPendingActions()',allowed:()=>nucleoPersonCan('training')},
+    {id:'contests',label:'Contestações',detail:'Analisar solicitações',action:'showContestations()',allowed:()=>nucleoPersonCan('nc')},
+    {id:'equipment',label:'Equipamentos e metrologia',detail:'Ativos, calibrações e histórico',action:"showAdminOperationalModule('equipment')",allowed:()=>nucleoPersonCan('processes')},
     {id:'training',label:'Treinamentos e competências',detail:'Treinamentos e reciclagens',action:"showAdminOperationalModule('training')",allowed:()=>isAdmin()},
     {id:'nccapa',label:'Não conformidades e CAPA',detail:'Relatórios e ações',action:"showAdminOperationalModule('nccapa')",allowed:()=>isAdmin()},
     {id:'processes',label:'Gestão de processos',detail:'IT, GSP, POP, LPP e documentos internos',action:"showAdminOperationalModule('processes')",allowed:()=>isAdmin()},
@@ -19469,14 +19468,13 @@ function refreshContestUserStatus(){
 }
 function showContestations(){
   if(!nucleoFeatureRequire('ros','reviewContests'))return;
-  if(!isAdmin()){showList();return}
   view('contestationsView'); setNav('contests'); renderContestations();
 }
 function refreshContestPendingBadge(){
   refreshMenuNotificationBadges();
 }
 function renderContestations(){
-  if(!isAdmin())return;
+  if(!nucleoPersonFeatureCan('ros','reviewContests'))return;
   refreshContestPendingBadge();
   const filter=document.getElementById('contestStatusFilter')?.value||'pending';
   const q=normalizeAnswer(document.getElementById('contestSearch')?.value||'');
@@ -19505,7 +19503,6 @@ function renderContestations(){
 }
 function reviewContestation(id,decision){
   if(!nucleoFeatureRequire('ros','reviewContests'))return;
-  if(!isAdmin())return;
   const list=getContestations();
   const idx=list.findIndex(c=>String(c.id)===String(id));if(idx<0)return;
   const c=list[idx];
@@ -20077,8 +20074,17 @@ function enforceAdminVisibility(){
   adminIds.forEach(id=>{
     const el=document.getElementById(id);
     if(!el)return;
-    el.style.display=allowed?'':'none';
-    el.classList.toggle('hidden',!allowed);
+
+    // Para perfis sem edição detalhada, mantém o comportamento antigo.
+    if(getSession()?.permissions?.detailVersion!==1){
+      el.style.display=allowed?'':'none';
+      el.classList.toggle('hidden',!allowed);
+      return;
+    }
+
+    // Com permissões detalhadas, nucleoApplyFeatureAccess decide item por item.
+    el.style.removeProperty('display');
+    el.classList.remove('hidden');
   });
 
   // Cadastro de R.O. Externa / SAC é restrito a Comercial, Diretoria, Processos e SGQ,
@@ -20384,7 +20390,23 @@ function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.acc
 function nucleoApplyPersonAccess(){
  const user=getSession();if(!user?.permissions)return;
  const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
- Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
+ Object.entries(map).forEach(([id,module])=>{
+   const el=document.getElementById(id);if(!el)return;
+   let allowed=nucleoPersonCan(module);
+   if(id==='navTriage')allowed=nucleoPersonFeatureCan('ros','triage');
+   if(id==='navExternalRoControl')allowed=nucleoPersonFeatureCan('sac','edit')||nucleoPersonFeatureCan('sac','consult');
+   if(id==='navSacTracking'||id==='navMySacs')allowed=nucleoPersonFeatureCan('sac','consult');
+   if(id==='navIndicators')allowed=nucleoPersonFeatureCan('indicators','consult');
+   if(id==='navContests')allowed=nucleoPersonFeatureCan('ros','reviewContests');
+   if(id==='navPendingActions')allowed=nucleoPersonFeatureCan('pdca','reviewActions');
+   if(!allowed){
+     el.style.setProperty('display','none','important');
+     el.classList.add('hidden');
+   }else{
+     el.style.removeProperty('display');
+     el.classList.remove('hidden');
+   }
+ });
  nucleoApplyFeatureAccess();
  ['cfgUsers','unitQualitySettings','cfgNotifications','cfgUnits'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const module=id==='cfgUsers'?'users':'sectors';el.style.setProperty('display',nucleoPersonCan(module)?'':'none','important');});
 }
@@ -20422,7 +20444,17 @@ function nucleoFeatureEditor(user,parent){
 function nucleoApplyFeatureAccess(){
  if(getSession()?.permissions?.detailVersion!==1)return;
  const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','request'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','publish'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
- Object.entries(nav).forEach(([id,[module,key]])=>{const el=document.getElementById(id);if(el&&!(key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key))){el.style.setProperty('display','none','important');el.classList.add('hidden');}});
+ Object.entries(nav).forEach(([id,[module,key]])=>{
+   const el=document.getElementById(id);if(!el)return;
+   const allowed=key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key);
+   if(allowed){
+     el.style.removeProperty('display');
+     el.classList.remove('hidden');
+   }else{
+     el.style.setProperty('display','none','important');
+     el.classList.add('hidden');
+   }
+ });
 }
 
 function nucleoWorkspaceFeature(key,mode){
