@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-1425-permissoes-individuais';
+window.NUCLEO_BUILD_VERSION = '20261023-1505-ro-pdf-compact';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -6321,7 +6321,13 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
   if(design.logoFileId&&logo&&!images[design.logoFileId])images[design.logoFileId]=logo;
   const header=Array.isArray(layout.headerGrid)?layout.headerGrid:[],body=Array.isArray(layout.bodyGrid)&&layout.bodyGrid.length?layout.bodyGrid:(Array.isArray(model?.layoutGrid)?model.layoutGrid:[]),footer=Array.isArray(layout.footerGrid)?layout.footerGrid:[];
   const evidenceUrls=model?.showEvidence===false?[]:nucleoRoEvidenceUrls(ro);
-  const totalPages=Math.max(1,1+evidenceUrls.length);
+
+  // As evidências não devem criar uma folha inteira para cada imagem.
+  // Agrupamos até 4 evidências por página (grade 2x2).
+  const evidenceGroups=[];
+  for(let i=0;i<evidenceUrls.length;i+=4)evidenceGroups.push(evidenceUrls.slice(i,i+4));
+
+  const totalPages=Math.max(1,1+evidenceGroups.length);
   const table=(rows,cls='')=>rows?`<table class="grid ${cls}"><colgroup>${'<col>'.repeat(100)}</colgroup><tbody>${rows}</tbody></table>`:'';
   const pageShell=(pageNo,inner)=>{
     const headerRows=nucleoRoModelRowsHtml(header,ro,model,images,pageNo,totalPages);
@@ -6329,17 +6335,32 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
     const fallbackLogo=logo&&!Object.values(images).includes(logo)?`<div style="text-align:${['left','center','right'].includes(design.align)?design.align:'center'};margin-bottom:2mm"><img src="${nucleoRoModelEsc(logo)}" style="width:${Math.max(10,Math.min(80,Number(design.logoWidth)||30))}mm;max-height:25mm;object-fit:contain"></div>`:'';
     return `<section class="page">${fallbackLogo}${layout.repeatHeader===false&&pageNo>1?'':table(headerRows)}${inner}${layout.repeatFooter===false&&pageNo<totalPages?'':(footerRows?`<div class="footer-wrap">${table(footerRows)}</div>`:'')}</section>`;
   };
+
   const bodyRows=nucleoRoModelRowsHtml(body,ro,model,images,1,totalPages);
   let pages=pageShell(1,`${design.before?`<div class="before">${nucleoRoModelEsc(design.before)}</div>`:''}${table(bodyRows)}${design.after?`<div class="after">${nucleoRoModelEsc(design.after)}</div>`:''}`);
-  evidenceUrls.forEach((url,i)=>{
-    const imageUrl=nucleoRoEvidenceImageUrl(url),pageNo=i+2;
-    pages+=pageShell(pageNo,`<div class="evidence-page"><div class="evidence-title">EVIDÊNCIA ${i+1}</div><div class="evidence-frame"><img src="${nucleoRoModelEsc(imageUrl)}" alt="Evidência ${i+1}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><div class="evidence-fallback" style="display:none">Não foi possível carregar a imagem nesta visualização.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${i+1}</a></div></div></div>`);
+
+  let evidenceNumber=0;
+  evidenceGroups.forEach((group,groupIndex)=>{
+    const pageNo=groupIndex+2;
+    const cards=group.map(url=>{
+      evidenceNumber++;
+      const imageUrl=nucleoRoEvidenceImageUrl(url);
+      return `<div class="evidence-card">
+        <div class="evidence-title">EVIDÊNCIA ${evidenceNumber}</div>
+        <div class="evidence-frame">
+          <img src="${nucleoRoModelEsc(imageUrl)}" alt="Evidência ${evidenceNumber}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <div class="evidence-fallback" style="display:none">Não foi possível carregar a imagem nesta visualização.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    pages+=pageShell(pageNo,`<div class="evidence-page"><div class="evidence-section-title">EVIDÊNCIAS ANEXADAS</div><div class="evidence-grid count-${group.length}">${cards}</div></div>`);
   });
   return `<!doctype html><html><head><meta charset="utf-8"><title>${nucleoRoModelEsc(ro?.numero||'R.O.')}</title><style>
   @page{size:A4 ${orientation};margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;padding:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:${nucleoRoModelEsc(design.textColor||'#222222')}}
   .page{width:${orientation==='landscape'?'297mm':'210mm'};height:${orientation==='landscape'?'210mm':'297mm'};margin:0 auto 8mm;background:#fff;padding:${margin}mm;font-size:${Math.max(7,Math.min(18,Number(model?.fontSize)||9))}pt;display:flex;flex-direction:column;overflow:hidden;page-break-after:always}.page:last-child{page-break-after:auto}
   .grid{width:100%;border-collapse:collapse;table-layout:fixed}.grid col{width:1%}.cell-stack{display:flex;flex-direction:column;gap:.35mm;min-width:0}.cell-label{line-height:1.05}.before,.after{white-space:pre-wrap;margin:2mm 0}.footer-wrap{margin-top:auto;padding-top:3mm}
-  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:3mm}.evidence-title{font-size:11pt;font-weight:700;margin:0 0 3mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-frame img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.evidence-fallback{text-align:center;font-size:10pt;line-height:1.5}
+  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-frame img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}
   @media screen{body{padding:8mm}.page{box-shadow:0 2px 12px #0003}}@media print{body{background:#fff;padding:0}.page{box-shadow:none;margin:0}}
   </style></head><body>${pages}</body></html>`;
 }
