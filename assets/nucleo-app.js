@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-1125-remove-sgq-persist';
+window.NUCLEO_BUILD_VERSION = '20261023-1210-sac-real-attachments';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -7619,6 +7619,137 @@ function openSacPdf(id){
 }
 
 
+
+function sacCurrentEditRecord(){
+  const id=String(document.getElementById('sacEditRecordId')?.value||'').trim();
+  return getExternalRoControls().find(x=>String(x.id)===id)||null;
+}
+
+function renderSacAttachmentList(record){
+  const host=document.getElementById('sacEditAttachmentList');
+  if(!host)return;
+  const list=Array.isArray(record?.sacAttachments)?record.sacAttachments:[];
+  host.innerHTML=list.length
+    ? list.map(a=>`
+      <div class="card" style="padding:10px;margin:7px 0;display:flex;justify-content:space-between;gap:10px;align-items:center">
+        <div style="min-width:0">
+          <b style="word-break:break-word">${escapeHtml(a.fileName||'Arquivo')}</b>
+          <div class="small">${escapeHtml(a.mimeType||'arquivo')}${a.size?` · ${Math.max(1,Math.round(Number(a.size)/1024))} KB`:''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn secondary" type="button" onclick="openSacAttachment('${escapeHtml(record.id)}','${escapeHtml(a.id)}')">Abrir</button>
+          <button class="btn secondary" type="button" style="color:#b42318" onclick="deleteSacAttachment('${escapeHtml(record.id)}','${escapeHtml(a.id)}')">Excluir</button>
+        </div>
+      </div>`).join('')
+    : '<div class="small">Nenhum arquivo anexado.</div>';
+}
+
+async function refreshSacAttachments(id){
+  try{
+    const record=getExternalRoControls().find(x=>String(x.id)===String(id));
+    if(!record)return;
+    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
+    const res=await portalJsonp({acao:'nucleo_drive_sac_attachments',unit,sacId:record.id},30000);
+    if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível consultar os anexos.');
+
+    const list=getExternalRoControls();
+    const idx=list.findIndex(x=>String(x.id)===String(id));
+    if(idx>=0){
+      list[idx]={...list[idx],sacAttachments:Array.isArray(res.attachments)?res.attachments:[]};
+      saveExternalRoControlsLocal(list);
+      renderSacAttachmentList(list[idx]);
+    }
+  }catch(e){
+    const st=document.getElementById('sacEditUploadStatus');
+    if(st)st.textContent='Não foi possível carregar os anexos: '+(e.message||e);
+  }
+}
+
+async function uploadSacAttachments(){
+  if(!nucleoFeatureRequire('sac','edit'))return;
+  const record=sacCurrentEditRecord();
+  if(!record){alert('SAC não encontrado.');return}
+
+  const input=document.getElementById('sacEditFile');
+  const files=[...(input?.files||[])];
+  if(!files.length){alert('Selecione pelo menos um arquivo.');return}
+
+  const tooLarge=files.find(f=>f.size>8*1024*1024);
+  if(tooLarge){alert('Cada arquivo deve ter no máximo 8 MB.');return}
+
+  const st=document.getElementById('sacEditUploadStatus');
+  const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
+  if(st)st.textContent='Enviando '+files.length+' arquivo(s)...';
+
+  try{
+    for(let i=0;i<files.length;i++){
+      const file=files[i];
+      if(st)st.textContent=`Enviando ${i+1} de ${files.length}: ${file.name}`;
+      const fileData=await fileToBase64(file);
+      const eventId='SACATT-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+      const res=await portalJsonp({
+        acao:'nucleo_drive_sac_upload',
+        unit,
+        sacId:record.id,
+        eventoId:eventId,
+        fileName:file.name,
+        mimeType:file.type||'application/octet-stream',
+        fileData
+      },90000);
+      if(!res?.sucesso)throw new Error(res?.erro||('Falha ao anexar '+file.name));
+    }
+    if(input)input.value='';
+    if(st)st.textContent='Arquivo(s) anexado(s) e confirmado(s) na base central.';
+    await refreshSacAttachments(record.id);
+  }catch(e){
+    if(st)st.textContent='Erro ao anexar: '+(e.message||e);
+  }
+}
+
+async function openSacAttachment(sacId,attachmentId){
+  const record=getExternalRoControls().find(x=>String(x.id)===String(sacId));
+  if(!record)return;
+  try{
+    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
+    const res=await portalJsonp({
+      acao:'nucleo_drive_sac_read',
+      unit,
+      sacId,
+      attachmentId
+    },60000);
+    if(!res?.sucesso||!res.base64)throw new Error(res?.erro||'Arquivo indisponível.');
+    const bytes=Uint8Array.from(atob(res.base64),c=>c.charCodeAt(0));
+    const blob=new Blob([bytes],{type:res.mimeType||'application/octet-stream'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=res.fileName||'anexo';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){alert('Não foi possível abrir o anexo: '+(e.message||e))}
+}
+
+async function deleteSacAttachment(sacId,attachmentId){
+  if(!nucleoFeatureRequire('sac','edit'))return;
+  if(!confirm('Excluir este anexo do SAC?'))return;
+  const record=getExternalRoControls().find(x=>String(x.id)===String(sacId));
+  if(!record)return;
+  try{
+    const unit=normalizePortalUnit(record.unit||record.unidade||'matriz');
+    const res=await portalJsonp({
+      acao:'nucleo_drive_sac_delete',
+      unit,
+      sacId,
+      attachmentId,
+      eventoId:'SACATTDEL-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)
+    },60000);
+    if(!res?.sucesso)throw new Error(res?.erro||'Não foi possível excluir o anexo.');
+    await refreshSacAttachments(sacId);
+  }catch(e){alert('Não foi possível excluir o anexo: '+(e.message||e))}
+}
+
 function openSacEditModal(id){
   if(!isAdmin())return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
@@ -7648,6 +7779,8 @@ function openSacEditModal(id){
   set('sacEditDeviationProductCode',f.deviationProductCode||r.product||'');
   set('sacEditDeviationDescription',f.deviationDescription||'');
   set('sacEditAttachments',f.attachments||'');
+  renderSacAttachmentList(r);
+  setTimeout(()=>refreshSacAttachments(r.id),0);
   set('sacEditFounded',f.founded||'');
   set('sacEditRncNumber',f.rncNumber||'');
   set('sacEditLotSize',f.lotSize||'');
