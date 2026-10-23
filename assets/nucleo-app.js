@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261022-1855-5s-users-exact-source';
+window.NUCLEO_BUILD_VERSION = '20261022-1905-5s-users-central';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -1479,7 +1479,7 @@ async function syncPortalBackend(showMessage=false,options={}){
     applyPortalBackendSnapshot(res);
     nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',res?.atualizadoEm||'');
     updateBackendStatus(true,'Base central conectada.');
-    try{nucleo5sPopulateLinkUsers?.()}catch(e){}
+    try{nucleo5sPopulateLinkUsers?.(true)}catch(e){}
 
     // Atualizações leves acontecem imediatamente. Renderizações grandes ficam fora
     // do caminho crítico para o navegador não congelar a cada sincronização automática.
@@ -21128,12 +21128,59 @@ function nucleo5sCurrentLinkUsers(){
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 }
 
-function nucleo5sPopulateLinkUsers(){
+async function nucleo5sPopulateLinkUsers(forceRemote=false){
   const select=document.getElementById('nucleo5sLinkUser');
   if(!select)return;
 
   const previous=String(select.value||'');
-  const users=nucleo5sCurrentLinkUsers();
+  const localUsers=nucleo5sCurrentLinkUsers();
+  const map=new Map();
+
+  localUsers.forEach(u=>{
+    const key=String(u.email||u.personId||u.name||'').trim().toLowerCase();
+    if(key)map.set(key,u);
+  });
+
+  // A lista de vínculo 5S precisa refletir a base central real de cadastros.
+  // portal_pending_users já é a rota usada pela administração para atualizar usuários.
+  if(portalBackendEnabled()){
+    try{
+      if(forceRemote || !window.__nucleo5sRemoteUsersAt || Date.now()-window.__nucleo5sRemoteUsersAt>30000){
+        const timeout=new Promise((_,reject)=>setTimeout(
+          ()=>reject(new Error('A base de usuários demorou para responder.')),
+          20000
+        ));
+        const res=await Promise.race([
+          portalJsonp({acao:'portal_pending_users'},20000),
+          timeout
+        ]);
+
+        if(res?.sucesso!==false){
+          const remote=Array.isArray(res?.users)?res.users:[];
+          remote.forEach(u=>{
+            const key=String(u.email||u.personId||u.name||'').trim().toLowerCase();
+            if(!key)return;
+            const existing=map.get(key)||{};
+            map.set(key,{...existing,...u});
+          });
+
+          window.__nucleo5sRemoteUsersAt=Date.now();
+
+          // Atualiza também o cache oficial local para manter consistência com Administração > Usuários.
+          try{
+            const merged=[...map.values()];
+            nucleoNativeStorageSetItem.call(localStorage,USERS_KEY,JSON.stringify(merged));
+          }catch(e){}
+        }
+      }
+    }catch(e){
+      console.warn('Falha ao atualizar usuários para vínculo 5S:',e);
+    }
+  }
+
+  const users=[...map.values()]
+    .filter(u=>String(u.name||u.email||'').trim())
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
 
   select.innerHTML='<option value="">Selecione a pessoa...</option>'+
     users.map(u=>{
@@ -21147,7 +21194,7 @@ function nucleo5sPopulateLinkUsers(){
   }
 
   const counter=document.getElementById('nucleo5sLinkPeopleCount');
-  if(counter)counter.textContent=users.length+' pessoa(s) disponível(is) no Núcleo.';
+  if(counter)counter.textContent=users.length+' pessoa(s) carregada(s) da base do Núcleo.';
 }
 
 function nucleo5sRenderAuditorLinks(host){
@@ -21186,7 +21233,7 @@ function nucleo5sRenderAuditorLinks(host){
         '</label>'+
 
         '<label><span class="small">Pessoa no Núcleo</span>'+
-          '<select id="nucleo5sLinkUser" onfocus="nucleo5sPopulateLinkUsers()" onclick="nucleo5sPopulateLinkUsers()">'+
+          '<select id="nucleo5sLinkUser" onfocus="nucleo5sPopulateLinkUsers(true)" onclick="nucleo5sPopulateLinkUsers(true)">'+
             '<option value="">Carregando pessoas...</option>'+
           '</select>'+
           '<span id="nucleo5sLinkPeopleCount" class="small"></span>'+
@@ -21208,8 +21255,8 @@ function nucleo5sRenderAuditorLinks(host){
       rows+
     '</div>';
 
-  nucleo5sPopulateLinkUsers();
-  setTimeout(()=>nucleo5sPopulateLinkUsers(),1200);
+  nucleo5sPopulateLinkUsers(true);
+  setTimeout(()=>nucleo5sPopulateLinkUsers(false),1200);
   setTimeout(()=>nucleo5sPopulateLinkUsers(),4000);
   setTimeout(()=>nucleo5sPopulateLinkUsers(),9000);
   setTimeout(()=>nucleo5sLoadAuditorNamesFromSchedule(false),0);
