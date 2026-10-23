@@ -11949,12 +11949,21 @@ async function showSentPdcas(){
     if(body)body.innerHTML='<tr><td colspan="8" class="small" style="color:#a12f2f">Não foi possível consultar a base central agora. Nenhum cache local foi usado. Clique em Sincronizar e tente novamente.</td></tr>';
   }
 }
+// Nome amigável apenas para exibição: preserva o ID técnico na base e nas ações.
+function nucleoPdcaReceivedDisplayName(id){
+ const raw=String(id||'').trim();
+ const match=raw.match(/^CTRL-PDCA-RO-(?:EX|IN)-(\d+)-(.+)$/i);
+ if(!match)return raw;
+ const numero=String(Number(match[1]));
+ const setor=String(match[2]||'').replace(/-/g,' ').trim().toUpperCase();
+ return 'PDCA — R.O. '+numero+(setor?' ('+setor+')':'');
+}
 function renderSentPdcas(){
  refreshPdcaSidebarBadge();
  renderPdcaPdfSummary();
  const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase(),sf=document.getElementById('sentStatusFilter')?.value||'todos';
  let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
- const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):p.id};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
+ const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):nucleoPdcaReceivedDisplayName(p.id)};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
  const body=document.getElementById('sentRows');if(!body)return;
  const lifecycle=isAdmin()?(document.getElementById('sentLifecycleFilter')?.value||'active'):'all';
  nucleoRenderPdcaLifecycle(data,lifecycle);
