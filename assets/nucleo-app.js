@@ -7041,7 +7041,6 @@ function setSacQuickTab(tab){
 function sacIsClassified(r){
   return sacIsRealSac(r) &&
          !!String(r?.treatmentType||'').trim() &&
-         !!String(r?.responsibleSector||'').trim() &&
          !!String(r?.treatmentDeadline||'').trim();
 }
 function sacHasFilledForm(r){
@@ -7878,7 +7877,6 @@ function saveExternalRoControl(){
   if(!client){alert('Informe o cliente.');return}
   if(!treatmentType){alert('Selecione a tratativa definida pelo SGQ.');return}
   if(!treatmentDeadline){alert('Informe o prazo da tratativa.');return}
-  if(!responsibleSector){alert('Selecione o setor responsável pelo PDCA.');return}
 
   const receiptSigned=String(document.getElementById('externalReceiptSigned')?.value||'pending');
   const directorDecision=String(document.getElementById('externalDirectorDecision')?.value||'pending');
@@ -7987,7 +7985,9 @@ function saveExternalRoControl(){
   portalBackendSave('external_ro_controls',id,record);
 
   const baseRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'')===ro);
-  if(baseRo){
+  // A classificação do SAC não cria direcionamento de PDCA sem setor definido.
+  // Quando o setor for selecionado posteriormente, esta rotina registra a triagem.
+  if(baseRo && responsibleSector){
     const map=getSavedTriageMap();
     const old=map.get(ro)||{};
     map.set(ro,{
@@ -8040,7 +8040,7 @@ function saveExternalRoControl(){
   closeExternalRoControlModal();
   renderExternalRoControl();
   refreshMenuNotificationBadges();
-  alert('Controle de SAC salvo.');
+  alert(responsibleSector?'Controle de SAC salvo. O setor do PDCA está definido.':'Classificação do SAC salva. O setor responsável pelo PDCA poderá ser definido posteriormente.');
 }
 function updateExternalTreatmentRecord(id,patch){
   let list=getExternalRoControls();
@@ -8057,7 +8057,7 @@ function startExternalTreatment(id){
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
   if(!sacIsClassified(current)){
-    alert('Antes de iniciar, defina a classificação / tratativa, o setor responsável e o prazo vigente do SAC.');
+    alert('Antes de iniciar, defina a tratativa e o prazo vigente do SAC. O setor do PDCA pode ser indicado posteriormente.');
     openExternalRoControlModal(id);
     return;
   }
@@ -20581,13 +20581,24 @@ async function finalizeAndSendSac(id){
  const status=dialog.querySelector('#sacMailStatus');let local=null;try{local=JSON.parse(localStorage.getItem(nucleoSacMailKey(id))||'null');}catch(_){}
  try{let r;if(local?.draft?.token){r=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,draftToken:local.draft.token},60000);if(r?.sucesso&&r.state==='sent'){localStorage.removeItem(nucleoSacMailKey(id));status.textContent='Este envio já foi confirmado. Nenhum novo e-mail foi enviado.';await portalBackendSync({silent:true});return;}if(r?.sucesso&&r.state==='sending'){status.textContent='O envio anterior está sem confirmação. Confira os e-mails e o histórico antes de reenviar. O rascunho continua salvo.';return;}if(!r?.sucesso)throw new Error(r?.erro||'Não foi possível conferir a pendência.');}else r=await portalJsonp({acao:'portal_finalize_sac',mode:'prepare',id},90000);
  if(!r?.sucesso||!r.draft)throw new Error(r?.erro||'Não foi possível preparar o SAC.');const draft=r.draft,host=dialog.querySelector('#sacMailFields');
- host.innerHTML='<p><b>Para:</b> <span id="sacMailTo"></span></p><p><b>Cópia:</b> <span id="sacMailCc"></span></p><label>Assunto<input id="sacMailSubject" maxlength="200"></label><label>Mensagem<textarea id="sacMailBody" rows="9" maxlength="12000"></textarea></label><p id="sacMailPdfName"></p><button class="btn secondary" id="sacMailPdf">Abrir PDF em outra aba</button><label style="display:flex;gap:10px;align-items:center;margin:16px 0"><input id="sacMailChecked" type="checkbox" style="width:24px;height:24px">Conferi os destinatários, a mensagem e o PDF.</label><div class="actions"><button class="btn secondary" id="sacMailLocal">Guardar para depois</button><button class="btn primary" id="sacMailSend" disabled>Confirmar e enviar e-mail</button></div>';
- host.querySelector('#sacMailTo').textContent=draft.to;host.querySelector('#sacMailCc').textContent=draft.cc||'Sem cópias';host.querySelector('#sacMailSubject').value=local?.subject||draft.subject;host.querySelector('#sacMailBody').value=local?.body||draft.body;host.querySelector('#sacMailPdfName').textContent='Anexo: '+draft.pdfName;
- const saveLocal=()=>{const data={draft,subject:host.querySelector('#sacMailSubject').value,body:host.querySelector('#sacMailBody').value};localStorage.setItem(nucleoSacMailKey(id),JSON.stringify(data));return data;};saveLocal();host.querySelector('#sacMailSubject').oninput=host.querySelector('#sacMailBody').oninput=()=>{try{saveLocal();}catch(e){status.textContent='O navegador não conseguiu guardar o rascunho local.';}};
+ host.innerHTML='<div class="field"><label for="sacMailTo">Para (e-mails separados por vírgula ou ponto e vírgula)</label><textarea id="sacMailTo" rows="2" placeholder="Digite um ou mais e-mails" style="width:100%"></textarea></div><div class="field"><label for="sacMailCc">Cópia (opcional)</label><textarea id="sacMailCc" rows="2" placeholder="Digite e-mails para cópia" style="width:100%"></textarea></div><div class="field"><label for="sacMailUserPicker">Adicionar pessoa cadastrada no Núcleo</label><div class="actions"><select id="sacMailUserPicker" style="flex:1;min-width:220px"><option value="">Selecione uma pessoa...</option></select><button class="btn secondary" type="button" id="sacMailAddTo">Adicionar em Para</button><button class="btn secondary" type="button" id="sacMailAddCc">Adicionar em Cópia</button></div></div><label>Assunto<input id="sacMailSubject" maxlength="200"></label><label>Mensagem<textarea id="sacMailBody" rows="9" maxlength="12000"></textarea></label><p id="sacMailPdfName"></p><button class="btn secondary" id="sacMailPdf">Abrir PDF em outra aba</button><label style="display:flex;gap:10px;align-items:center;margin:16px 0"><input id="sacMailChecked" type="checkbox" style="width:24px;height:24px">Conferi os destinatários, a mensagem e o PDF.</label><div class="actions"><button class="btn secondary" id="sacMailLocal">Guardar para depois</button><button class="btn primary" id="sacMailSend" disabled>Confirmar e enviar e-mail</button></div>';
+ host.querySelector('#sacMailTo').value=local?.to??draft.to??'';host.querySelector('#sacMailCc').value=local?.cc??draft.cc??'';
+ const picker=host.querySelector('#sacMailUserPicker');
+ const people=(getOperationalUsers()||[]).filter(u=>u&&u.email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(u.email).trim())&&u.active!==false&&String(u.approvalStatus||'approved').toLowerCase()==='approved').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+ people.forEach(u=>{const option=document.createElement('option');option.value=String(u.email).trim();option.textContent=[u.name,u.sector,u.email].filter(Boolean).join(' · ');picker.appendChild(option);});
+ const addPerson=selector=>{const email=picker.value;if(!email)return;const field=host.querySelector(selector),items=field.value.split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);if(!items.some(x=>x.toLowerCase()===email.toLowerCase()))items.push(email);field.value=items.join(', ');field.dispatchEvent(new Event('input',{bubbles:true}));};
+ host.querySelector('#sacMailAddTo').onclick=()=>addPerson('#sacMailTo');host.querySelector('#sacMailAddCc').onclick=()=>addPerson('#sacMailCc');
+ host.querySelector('#sacMailSubject').value=local?.subject||draft.subject;host.querySelector('#sacMailBody').value=local?.body||draft.body;host.querySelector('#sacMailPdfName').textContent='Anexo: '+draft.pdfName;
+ const saveLocal=()=>{const data={draft,to:host.querySelector('#sacMailTo').value,cc:host.querySelector('#sacMailCc').value,subject:host.querySelector('#sacMailSubject').value,body:host.querySelector('#sacMailBody').value};localStorage.setItem(nucleoSacMailKey(id),JSON.stringify(data));return data;};saveLocal();host.querySelector('#sacMailTo').oninput=host.querySelector('#sacMailCc').oninput=host.querySelector('#sacMailSubject').oninput=host.querySelector('#sacMailBody').oninput=()=>{try{saveLocal();}catch(e){status.textContent='O navegador não conseguiu guardar o rascunho local.';}};
  host.querySelector('#sacMailLocal').onclick=()=>{try{saveLocal();status.textContent='Rascunho guardado neste navegador. Abra Preparar e-mail neste SAC para continuar.';}catch(e){status.textContent='Não foi possível guardar localmente.';}};
  host.querySelector('#sacMailChecked').onchange=e=>host.querySelector('#sacMailSend').disabled=!e.target.checked;
  host.querySelector('#sacMailPdf').onclick=async()=>{const tab=window.open('about:blank','_blank');if(!tab){status.textContent='Permita abrir a aba do PDF neste navegador.';return;}tab.opener=null;tab.document.body.textContent='Carregando PDF…';try{const pdf=await portalJsonp({acao:'portal_finalize_sac',mode:'pdf',id,draftToken:draft.token},90000);if(!pdf?.sucesso)throw new Error(pdf?.erro||'PDF indisponível.');const bytes=Uint8Array.from(atob(pdf.base64),c=>c.charCodeAt(0)),url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));tab.location.replace(url);setTimeout(()=>URL.revokeObjectURL(url),300000);}catch(e){tab.document.body.textContent=e.message;}};
- host.querySelector('#sacMailSend').onclick=async()=>{const btn=host.querySelector('#sacMailSend');btn.disabled=true;try{const data=saveLocal();status.textContent='Enviando e conferindo…';await portalPostForm({acao:'portal_finalize_sac',mode:'send',id,draftToken:draft.token,message:JSON.stringify({subject:data.subject,body:data.body})});let result;for(let i=0;i<20;i++){await new Promise(resolve=>setTimeout(resolve,1500));result=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,draftToken:draft.token},15000);if(result?.state==='failed')throw new Error(result.draft?.error||'O servidor não conseguiu enviar. O rascunho ficou guardado.');if(result?.state==='sent')break;}if(result?.state!=='sent')throw new Error('O envio ainda não foi confirmado. O rascunho ficou guardado. Confira antes de tentar novamente.');localStorage.removeItem(nucleoSacMailKey(id));status.textContent='E-mail enviado e confirmado. PDF versão '+draft.version+'.';host.querySelector('#sacMailChecked').disabled=true;await portalBackendSync({silent:true});renderExternalRoControl();}catch(e){status.textContent=e.message+' Abra novamente este SAC para consultar o resultado ou retomar o rascunho.';}finally{if(status.textContent.indexOf('E-mail enviado')!==0)btn.disabled=false;}};
+ host.querySelector('#sacMailSend').onclick=async()=>{const btn=host.querySelector('#sacMailSend');btn.disabled=true;try{const data=saveLocal();const splitEmails=value=>[...new Set(String(value||'').split(/[,;\n]+/).map(x=>x.trim().toLowerCase()).filter(Boolean))];const to=splitEmails(data.to),cc=splitEmails(data.cc).filter(x=>!to.includes(x));const valid=e=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);if(!to.length)throw Error('Selecione ou digite pelo menos um e-mail em Para.');if([...to,...cc].some(e=>!valid(e)))throw Error('Confira os e-mails dos destinatários.');
+ let currentDraft=draft;
+ if(to.join(',')!==splitEmails(draft.to).join(',')||cc.join(',')!==splitEmails(draft.cc).filter(x=>!to.includes(x)).join(',')){
+  status.textContent='Confirmando os destinatários na base central…';const prepared=await portalJsonp({acao:'portal_finalize_sac',mode:'prepare',id,recipientsTo:to.join(','),recipientsCc:cc.join(',')},90000);if(!prepared?.sucesso||!prepared.draft)throw Error(prepared?.erro||'Não foi possível confirmar os destinatários.');currentDraft=prepared.draft;data.draft=currentDraft;localStorage.setItem(nucleoSacMailKey(id),JSON.stringify(data));
+ }
+ status.textContent='Enviando e conferindo…';await portalPostForm({acao:'portal_finalize_sac',mode:'send',id,draftToken:currentDraft.token,message:JSON.stringify({subject:data.subject,body:data.body})});let result;for(let i=0;i<20;i++){await new Promise(resolve=>setTimeout(resolve,1500));result=await portalJsonp({acao:'portal_finalize_sac',mode:'status',id,draftToken:currentDraft.token},15000);if(result?.state==='failed')throw new Error(result.draft?.error||'O servidor não conseguiu enviar. O rascunho ficou guardado.');if(result?.state==='sent')break;}if(result?.state!=='sent')throw new Error('O envio ainda não foi confirmado. O rascunho ficou guardado. Confira antes de tentar novamente.');localStorage.removeItem(nucleoSacMailKey(id));status.textContent='E-mail enviado e confirmado. PDF versão '+draft.version+'.';host.querySelector('#sacMailChecked').disabled=true;await portalBackendSync({silent:true});renderExternalRoControl();}catch(e){status.textContent=e.message+' Abra novamente este SAC para consultar o resultado ou retomar o rascunho.';}finally{if(status.textContent.indexOf('E-mail enviado')!==0)btn.disabled=false;}};
  status.textContent='Confira o conteúdo. O e-mail ainda não foi enviado.';
  }catch(e){status.textContent=e.message;}
 }
