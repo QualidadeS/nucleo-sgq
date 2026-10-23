@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-0948-user-login-confirm-fix';
+window.NUCLEO_BUILD_VERSION = '20261023-1018-user-login-stable';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -3976,7 +3976,7 @@ async function refreshPendingRegistrations(showMessage=false){
     const res=await portalJsonp({acao:'portal_pending_users'});
     if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar cadastros.');
 
-    const remote=Array.isArray(res.users)?res.users:[];
+    const remote=nucleoApplyUserLoginStatusGuards(Array.isArray(res.users)?res.users:[]);
     const local=getOperationalUsers();
     const map=new Map();
 
@@ -4280,6 +4280,44 @@ function nucleoUserLoginState(u){
   return {active:true,label:'Ativo',className:'approved'};
 }
 
+
+window.__nucleoUserLoginStatusGuard=window.__nucleoUserLoginStatusGuard||{};
+
+function nucleoRememberUserLoginStatus(key,status){
+  const k=String(key||'').trim().toLowerCase();
+  if(!k)return;
+  window.__nucleoUserLoginStatusGuard[k]={
+    status:String(status||'').trim().toLowerCase(),
+    until:Date.now()+60000
+  };
+}
+
+function nucleoApplyUserLoginStatusGuards(users){
+  const now=Date.now();
+  const guards=window.__nucleoUserLoginStatusGuard||{};
+  Object.keys(guards).forEach(k=>{
+    if(!guards[k] || guards[k].until<=now)delete guards[k];
+  });
+
+  return (users||[]).map(u=>{
+    const keys=[
+      String(u?.email||'').trim().toLowerCase(),
+      String(u?.name||'').trim().toLowerCase()
+    ].filter(Boolean);
+
+    const guard=keys.map(k=>guards[k]).find(Boolean);
+    if(!guard)return u;
+
+    const active=guard.status==='approved';
+    return {
+      ...u,
+      approvalStatus:guard.status,
+      active,
+      status:active?'active':'inactive'
+    };
+  });
+}
+
 async function toggleOperationalUserLogin(key){
   if(!nucleoFeatureRequire('users','approve'))return;
   if(!isAdmin())return;
@@ -4339,6 +4377,7 @@ async function toggleOperationalUserLogin(key){
       if(confirmedStatus!==next){
         throw new Error('A base central confirmou um status diferente do solicitado.');
       }
+      nucleoRememberUserLoginStatus(user.email||user.name,next);
     }
 
     localStorage.setItem(USERS_KEY,JSON.stringify(users));
@@ -4351,23 +4390,6 @@ async function toggleOperationalUserLogin(key){
       {name:user.name,email:user.email,status:next}
     );
 
-    // Reconsulta depois, sem bloquear a ação do usuário.
-    setTimeout(async()=>{
-      try{
-        const fresh=await portalJsonp({acao:'portal_pending_users'},25000);
-        const remote=Array.isArray(fresh?.users)?fresh.users:[];
-        if(remote.length){
-          const current=getOperationalUsers();
-          const map=new Map(current.map(u=>[String(u.email||u.name||'').toLowerCase(),u]));
-          remote.forEach(u=>{
-            const k=String(u.email||u.name||'').toLowerCase();
-            if(k)map.set(k,{...(map.get(k)||{}),...u});
-          });
-          localStorage.setItem(USERS_KEY,JSON.stringify([...map.values()]));
-          renderOperationalUsers();
-        }
-      }catch(e){}
-    },4000);
   }catch(e){
     users[idx]=original;
     localStorage.setItem(USERS_KEY,JSON.stringify(users));
@@ -21273,7 +21295,7 @@ async function nucleo5sPopulateLinkUsers(forceRemote=false){
         ]);
 
         if(res?.sucesso!==false){
-          const remote=Array.isArray(res?.users)?res.users:[];
+          const remote=nucleoApplyUserLoginStatusGuards(Array.isArray(res?.users)?res.users:[]);
           remote.forEach(u=>{
             const key=String(u.email||u.personId||u.name||'').trim().toLowerCase();
             if(!key)return;
