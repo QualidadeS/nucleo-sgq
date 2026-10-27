@@ -13091,10 +13091,14 @@ async function saveIntegrationSettingsConfirmed(){
     if(!sync)return false;
     const res=await portalJsonp({acao:'portal_save_config',dados:JSON.stringify(getAdminConfig()),ator:getSession()?.name||'SGQ'},60000,candidate);
     if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
+    if(res.bootstrapPublished!==true){
+      throw new Error('A configuração foi salva, mas o bootstrap central não foi publicado.');
+    }
+
     nucleoConfirmedApiUrl=candidate;
-    if(st)st.textContent='Integração confirmada e salva na base central.';
+    if(st)st.textContent='Integração confirmada, salva e publicada para todos os dispositivos.';
     await syncPortalBackend(false);
-    alert('Integração salva na base central. Todos os dispositivos usarão esta configuração ao atualizar o Núcleo.');
+    alert('Integração salva e publicada centralmente. Guias anônimas e outros computadores passarão a usar esta configuração após o deploy do GitHub Pages.');
     return true;
   }catch(e){
     keys.forEach((key,i)=>before[i]===null?localStorage.removeItem(key):localStorage.setItem(key,before[i]));
