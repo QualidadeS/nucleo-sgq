@@ -1,0 +1,30 @@
+{
+  "key": "indicators",
+  "name": "Indicadores",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api"
+  ],
+  "functionCount": 16,
+  "functions": [
+    "sgqIndicatorStatusCode",
+    "sgqIndicatorDate",
+    "sgqIndicatorFilterState",
+    "sgqIndicatorMatchesFilters",
+    "populateSgqIndicatorUnits",
+    "refreshSgqIndicatorPeriodFields",
+    "clearSgqIndicatorFilters",
+    "sgqIndicatorData",
+    "sgqIndicatorMonthlyData",
+    "renderSgqIndicators",
+    "showSgqIndicators",
+    "nucleoRefreshIndicatorClassificationOptions",
+    "nucleoRenderClassificationIndicators",
+    "nucleoSectorDecisionIndicators",
+    "nucleoRenderSectorDecisionIndicators",
+    "nucleoRefreshIndicatorDecisions"
+  ]
+}

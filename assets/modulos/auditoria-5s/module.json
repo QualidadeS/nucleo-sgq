@@ -1,0 +1,43 @@
+{
+  "key": "auditoria-5s",
+  "name": "Auditoria 5S",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api",
+    "usuarios-acessos"
+  ],
+  "functionCount": 25,
+  "functions": [
+    "nucleo5sAccessCacheKey",
+    "nucleo5sGetAccess",
+    "nucleo5sEquivalentSectorClient",
+    "nucleo5sCurrentAccess",
+    "nucleo5sApplyHubAccess",
+    "nucleoOpen5SUnit",
+    "showAudit5S",
+    "nucleo5sShowPanel",
+    "nucleo5sRestrictAuditIframe",
+    "nucleo5sRenderAudit",
+    "nucleo5sLockSectorSelect",
+    "nucleo5sLinkNorm",
+    "nucleo5sIsLinkAdmin",
+    "nucleo5sReadAuditorLinks",
+    "nucleo5sUserKeyForLink",
+    "nucleo5sUserMatchesUnitForLink",
+    "nucleo5sEnsureAuditorLinkCard",
+    "nucleo5sSaveAuditorLinks",
+    "nucleo5sCurrentLinkUsers",
+    "nucleo5sPopulateLinkUsers",
+    "nucleo5sRenderAuditorLinks",
+    "nucleo5sSelectScheduleAuditorName",
+    "nucleo5sLoadAuditorNamesFromSchedule",
+    "nucleo5sSaveManualAuditorLink",
+    "nucleo5sRemoveAuditorLink"
+  ],
+  "folderName": "auditoria-5s",
+  "displayName": "Auditoria 5S",
+  "maintenanceNote": "Pasta renomeada para manutenção mais fácil."
+}

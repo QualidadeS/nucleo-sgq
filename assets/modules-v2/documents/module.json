@@ -1,0 +1,34 @@
+{
+  "key": "documents",
+  "name": "Documentos",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api"
+  ],
+  "functionCount": 20,
+  "functions": [
+    "canRequestDocuments",
+    "renderPdcaPrintDocument",
+    "buildPdcaPresentationDocument",
+    "getStandardDocuments",
+    "saveStandardDocumentsLocal",
+    "getDocumentDeliveries",
+    "configuredDocumentTypes",
+    "documentTypeOptions",
+    "standardDocumentTypeLabel",
+    "renderDocumentTypeSettings",
+    "addDocumentTypeSettingRow",
+    "standardDocumentIsValid",
+    "findMatchingStandardDocument",
+    "openStandardDocumentCreate",
+    "saveStandardDocument",
+    "renderStandardDocumentsWorkspace",
+    "toggleStandardDocument",
+    "deleteStandardDocument",
+    "renderDocumentDeliveriesWorkspace",
+    "autoFulfillDocumentRequest"
+  ]
+}

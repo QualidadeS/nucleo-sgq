@@ -1,0 +1,100 @@
+{
+  "build": "20261023-modular-teste-v11-ro-slides-modelo-central-mm",
+  "environment": "TESTE",
+  "architecture": "modular-monolith",
+  "rules": {
+    "productionUntouched": true,
+    "moduleChangesStayInsideModule": true,
+    "sharedChangesOnlyInCore": true,
+    "backendSource": "Nucleo_AppsScript_PRODUCAO.txt"
+  },
+  "modules": {
+    "comunicados": {
+      "version": "2.0.0-test",
+      "functions": 38,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "auditoria-5s": {
+      "version": "2.0.0-test",
+      "functions": 25,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "documentos": {
+      "version": "2.0.0-test",
+      "functions": 20,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "equipamentos": {
+      "version": "2.0.0-test",
+      "functions": 10,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "indicadores": {
+      "version": "2.0.0-test",
+      "functions": 16,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "rnc": {
+      "version": "2.0.0-test",
+      "functions": 192,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "pdca": {
+      "version": "2.0.0-test",
+      "functions": 97,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "gestao-processos": {
+      "version": "2.0.0-test",
+      "functions": 19,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "relato-ocorrencia": {
+      "version": "2.0.0-test",
+      "functions": 61,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "sac": {
+      "version": "2.0.0-test",
+      "functions": 89,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "treinamentos": {
+      "version": "2.0.0-test",
+      "functions": 0,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    },
+    "usuarios-acessos": {
+      "version": "2.0.0-test",
+      "functions": 40,
+      "status": "TESTE - AGUARDANDO VALIDAÇÃO"
+    }
+  },
+  "changes": [
+    "E-mail de R.O. direcionada mostra o motivo informado na triagem.",
+    "PDF da R.O. converte corretamente as alturas do editor visual.",
+    "Confirmação do marcador administrativo agora é feita pela leitura da base central, sem falso timeout do JSONP.",
+    "SAC diferencia RO-EX e RO-IN mesmo quando possuem o mesmo número sequencial.",
+    "Marcador administrativo usa portalBackendSaveConfirmedPost em vez de portalPostForm.",
+    "shared_state é confirmado por conteúdo, sem exigir updatedAt idêntico.",
+    "Editor/PDF da R.O. preserva propriedades visuais e altura em px.",
+    "PDF da R.O. usa CSS Grid em vez de tabela para preservar alturas e mesclagens.",
+    "Protótipo: PDF da R.O. usa Google Slides A4 como motor de impressão quando configurado.",
+    "Slides converte altura mm→pt e relê documentFormats.ro diretamente de unit_config."
+  ],
+  "folderNaming": "friendly-portuguese",
+  "folderMap": {
+    "users": "usuarios-acessos",
+    "ro": "relato-ocorrencia",
+    "pdca": "pdca",
+    "sac": "sac",
+    "audit5s": "auditoria-5s",
+    "equipment": "equipamentos",
+    "training": "treinamentos",
+    "documents": "documentos",
+    "processes": "gestao-processos",
+    "nc": "rnc",
+    "indicators": "indicadores",
+    "announcements": "comunicados"
+  }
+}

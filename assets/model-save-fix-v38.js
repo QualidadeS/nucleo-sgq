@@ -76,7 +76,7 @@ async function completeConfirmedResult(params,result){
  if(!['ro','sac','pdca'].includes(kind)||!params?.data)return result;
  if(result?.sucesso===false)throw new Error(result?.erro||'A base central recusou o salvamento.');
  if(result?.formats?.[kind]){
-  setTopStatus('✓ Modelo salvo e confirmado na base central.','success');
+  setTopStatus('✓ Modelo salvo e confirmado na base TESTE.','success');
   return result;
  }
  setTopStatus('Salvo na base. Atualizando a leitura do modelo…','info');
@@ -85,7 +85,7 @@ async function completeConfirmedResult(params,result){
   try{
    const check=await portalJsonp({acao:'nucleo_drive_process_formats',unit:params.unit,kind},60000);
    if(check?.sucesso!==false&&check?.formats?.[kind]){
-    setTopStatus('✓ Modelo salvo e confirmado na base central.','success');
+    setTopStatus('✓ Modelo salvo e confirmado na base TESTE.','success');
     return {...(result||{}),sucesso:true,formats:check.formats,documentFormatStandards:check.documentFormatStandards,__confirmedByV42:true};
    }
    lastError=check?.erro||'A releitura ainda não devolveu o modelo.';
@@ -105,7 +105,7 @@ function installMutationWrapper(){
   const btn=document.getElementById('umSave'),originalLabel=btn?.textContent||'Salvar modelo';
   try{
    if(btn){btn.disabled=true;btn.textContent='Salvando…';}
-   setTopStatus('Enviando alterações para a base central…','info');
+   setTopStatus('Enviando alterações para a base TESTE…','info');
    const result=await original(action,params);
    const confirmed=await completeConfirmedResult(params,result);
    if(btn){btn.textContent='✓ Salvo';setTimeout(()=>{if(document.body.contains(btn)){btn.textContent=originalLabel;btn.disabled=false;}},2200)}

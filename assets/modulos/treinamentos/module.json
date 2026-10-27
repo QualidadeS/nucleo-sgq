@@ -1,0 +1,16 @@
+{
+  "key": "treinamentos",
+  "name": "Treinamentos",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api"
+  ],
+  "functionCount": 0,
+  "functions": [],
+  "folderName": "treinamentos",
+  "displayName": "Treinamentos",
+  "maintenanceNote": "Pasta renomeada para manutenção mais fácil."
+}

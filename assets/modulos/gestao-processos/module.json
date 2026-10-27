@@ -1,0 +1,36 @@
+{
+  "key": "gestao-processos",
+  "name": "Gestão de processos",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api"
+  ],
+  "functionCount": 19,
+  "functions": [
+    "processDeadlineAlerts",
+    "requestEmailQueueProcessing",
+    "defaultProcessLayouts",
+    "getProcessLayouts",
+    "saveProcessLayouts",
+    "processLayoutById",
+    "createProcessLayout",
+    "duplicateProcessLayout",
+    "toggleProcessLayoutStatus",
+    "createProcessDocumentModel",
+    "duplicateProcessDocumentModel",
+    "toggleProcessDocumentStatus",
+    "processDocumentLibraryHtml",
+    "getProcessTemplates",
+    "nucleoProcessTemplateSaveUnit",
+    "nucleoApplyProcessTemplateImageRefs",
+    "saveProcessTemplates",
+    "renderProcessTemplatesWorkspace",
+    "nucleoSaveProcessRecordConfirmed"
+  ],
+  "folderName": "gestao-processos",
+  "displayName": "Gestão de Processos",
+  "maintenanceNote": "Pasta renomeada para manutenção mais fácil."
+}

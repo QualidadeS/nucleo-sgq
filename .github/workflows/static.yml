@@ -2,111 +2,42 @@
 name: Deploy static content to Pages
 
 on:
+  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
+
+  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
+  # Single deploy job since we're just deploying
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Validate production API URLs
-        env:
-          NUCLEO_API_URL: ${{ vars.NUCLEO_API_URL }}
-          NUCLEO_5S_SC_API_URL: ${{ vars.NUCLEO_5S_SC_API_URL }}
-          NUCLEO_5S_ES_API_URL: ${{ vars.NUCLEO_5S_ES_API_URL }}
-        run: |
-          if [ -z "$NUCLEO_API_URL" ]; then
-            echo "::error::Configure NUCLEO_API_URL em Repository variables."
-            exit 1
-          fi
-          if [ -z "$NUCLEO_5S_SC_API_URL" ]; then
-            echo "::error::Configure NUCLEO_5S_SC_API_URL em Repository variables."
-            exit 1
-          fi
-
-          case "$NUCLEO_API_URL" in
-            https://script.google.com/macros/s/*/exec) ;;
-            *)
-              echo "::error::NUCLEO_API_URL inválida. Use a URL /exec do Apps Script."
-              exit 1
-              ;;
-          esac
-
-          case "$NUCLEO_5S_SC_API_URL" in
-            https://script.google.com/macros/s/*/exec) ;;
-            *)
-              echo "::error::NUCLEO_5S_SC_API_URL inválida. Use a URL /exec do Apps Script."
-              exit 1
-              ;;
-          esac
-
-          if [ -n "$NUCLEO_5S_ES_API_URL" ]; then
-            case "$NUCLEO_5S_ES_API_URL" in
-              https://script.google.com/macros/s/*/exec) ;;
-              *)
-                echo "::error::NUCLEO_5S_ES_API_URL inválida. Use a URL /exec do Apps Script."
-                exit 1
-                ;;
-            esac
-          fi
-
-      - name: Generate central runtime config
-        env:
-          NUCLEO_API_URL: ${{ vars.NUCLEO_API_URL }}
-          NUCLEO_5S_SC_API_URL: ${{ vars.NUCLEO_5S_SC_API_URL }}
-          NUCLEO_5S_ES_API_URL: ${{ vars.NUCLEO_5S_ES_API_URL }}
-        run: |
-          python - <<'PY'
-          import json, os, pathlib
-
-          api = os.environ["NUCLEO_API_URL"].strip()
-          sc = os.environ["NUCLEO_5S_SC_API_URL"].strip()
-          es = os.environ.get("NUCLEO_5S_ES_API_URL", "").strip() or \
-               "https://script.google.com/macros/s/AKfycbyAJJYri_gEOzPmj6gQXz97srltW9oS68wSHRmnuJwyCvF7pLDtuw6rAJl33ctFX7WJpw/exec"
-
-          cfg = {
-              "apiUrl": api,
-              "audit5sScUrl": sc,
-              "audit5sEsUrl": es
-          }
-
-          path = pathlib.Path("assets/nucleo-runtime-config.js")
-          path.parent.mkdir(parents=True, exist_ok=True)
-          path.write_text(
-              "window.NUCLEO_RUNTIME_CONFIG = Object.freeze(" +
-              json.dumps(cfg, ensure_ascii=False) +
-              ");\n",
-              encoding="utf-8"
-          )
-
-          print("Runtime config gerado para Núcleo + 5S SC + 5S ES.")
-          PY
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
+          # Upload entire repository
           path: '.'
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

@@ -1,0 +1,27 @@
+{
+  "key": "equipamentos",
+  "name": "Equipamentos",
+  "version": "2.0.0-test",
+  "status": "migration-test",
+  "dependsOn": [
+    "core.auth",
+    "core.permissions",
+    "core.api"
+  ],
+  "functionCount": 10,
+  "functions": [
+    "nucleoPatchEquipmentReportsUi",
+    "nucleoMetrologyEmailEnabled",
+    "nucleoLoadMetrologyAlertPreferences",
+    "nucleoOpenMetrologyAlertPreferences",
+    "nucleoReloadMetrologyAlertPreferences",
+    "nucleoSaveMetrologyAlertPreferences",
+    "nucleoMetrologyDaysUntil",
+    "nucleoMetrologyAlertDescriptor",
+    "nucleoClearEquipmentNotifications",
+    "nucleoRefreshMetrologyAlertsForCurrentUser"
+  ],
+  "folderName": "equipamentos",
+  "displayName": "Equipamentos / Metrologia",
+  "maintenanceNote": "Pasta renomeada para manutenção mais fácil."
+}
