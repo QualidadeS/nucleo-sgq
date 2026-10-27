@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261023-modular-full-test-v4-safe';
+window.NUCLEO_BUILD_VERSION = '20261027-ro-removal-manager-v2';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -17951,7 +17951,7 @@ function render(){
     const pdcaReviewAction=review2026Eligible&&!reviewDecision
       ? `<div class="pdca-review-choice" style="display:flex;gap:6px;align-items:center;justify-content:center;white-space:nowrap"><button class="btn primary" style="padding:5px 9px;font-size:11px;min-width:76px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}','yes')">Tem PDCA</button><button class="btn secondary" style="padding:5px 9px;font-size:11px;min-width:92px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}','no')">Não tem PDCA</button></div>`
       : review2026Eligible&&reviewDecision
-        ? `<div class="pdca-review-choice" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap"><span class="status-badge answered">${reviewDecision==='yes'?'Tem PDCA':'Sem PDCA'}</span><button class="btn secondary" style="padding:4px 8px;font-size:10px" type="button" onclick="event.stopPropagation();nucleoUnlinkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}')">Desvincular PDCA</button></div>`
+        ? `<span class="status-badge answered">${reviewDecision==='yes'?'Tem PDCA':'Sem PDCA'}</span>`
         : '';
 
     let operationalActions='';
@@ -17991,7 +17991,7 @@ function render(){
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r,renderTriageMap))}</td>
       <td>${statusControl}</td>
-      <td class="ro-eye-cell"><div class="ro-row-actions" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px">${pdcaReviewAction}<div style="display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></div></td>
+      <td class="ro-eye-cell"><div class="ro-row-actions" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px">${pdcaReviewAction}<div style="display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="openRoRemovalManager('${escapeHtml(tri.roKey)}')" title="Gerenciar remoção" aria-label="Gerenciar remoção desta R.O.">🗑</button>`:''}</div></div></td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -18007,32 +18007,193 @@ function render(){
   });
 }
 
-async function deleteAssignedDirection(triageKey){
+let nucleoRoRemovalContext=null;
+
+function nucleoRemovalClose(){
+  document.getElementById('nucleoRoRemovalOverlay')?.remove();
+  nucleoRoRemovalContext=null;
+}
+
+function nucleoRemovalSetExtraFields(){
+  const type=document.getElementById('nucleoRoRemovalType')?.value||'';
+  const dup=document.getElementById('nucleoRoRemovalDuplicateBox');
+  if(dup)dup.hidden=type!=='duplicate';
+  const note=document.getElementById('nucleoRoRemovalHelp');
+  if(note){
+    const messages={
+      unlink_pdca:'O PDCA será preservado, mas deixará de estar vinculado a esta R.O./setor.',
+      assignment:'Remove somente este direcionamento. A R.O. principal e os outros setores são preservados.',
+      person:'Mantém o setor atribuído e remove somente a pessoa responsável.',
+      duplicate:'A R.O. será retirada do fluxo ativo como cancelada por duplicidade. O registro permanece no histórico.',
+      mistake:'A R.O. será retirada do fluxo ativo como cancelada por lançamento indevido. O registro permanece no histórico.',
+      cancel:'Mantém o registro e altera a decisão para Cancelada.',
+      obsolete:'Mantém o registro e altera a decisão para Obsoleta.'
+    };
+    note.textContent=messages[type]||'';
+  }
+}
+
+function openRoRemovalManager(triageKey){
   if(!nucleoFeatureRequire('ros','triage'))return;
-  if(!isAdmin()){alert('Somente o SGQ pode remover duplicatas da visualização.');return;}
+  if(!isAdmin()){alert('Somente o SGQ pode gerenciar remoções de R.O.');return;}
   const key=String(triageKey||'').trim();
   if(!key)return;
-  const map=getSavedTriageMap();
-  const tri=map.get(key);
+  const tri=getSavedTriageMap().get(key);
   if(!tri){alert('Este direcionamento não foi encontrado. Sincronize e tente novamente.');return;}
   const ro=triageRoNumberPart(key);
   const sector=String(tri.responsibleSector||tri.setorDirecionado||'').trim();
-  if(!confirm(`Ocultar esta linha duplicada em R.O.s atribuídas?\n\n${ro}${sector?' • '+sector:''}\n\nNenhum direcionamento, setor ou dado da planilha será apagado.`))return;
-  try{
-    await withNucleoLoading('Removendo somente a duplicata da visualização...',async()=>{
-      // Esta ação é EXCLUSIVAMENTE visual. Não apaga SGQ_TRIAGENS e não altera
-      // a planilha original. O direcionamento continua existindo e a R.O. segue triada.
-      const hidden=getHiddenAssignedKeys();
-      hidden.add(key);
-      saveHiddenAssignedKeys(hidden);
-      render();
-      try{renderCurrentOverview()}catch(e){}
-    },'Atualizando visualização');
-    alert('Linha removida da visualização. O direcionamento foi preservado.');
-  }catch(err){
-    console.error('[NUCLEO OCULTAR DUPLICATA]',err);
-    alert('Não foi possível remover a duplicata da visualização. '+(err?.message||err||''));
+  nucleoRoRemovalContext={triageKey:key,ro,sector};
+  document.getElementById('nucleoRoRemovalOverlay')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='nucleoRoRemovalOverlay';
+  overlay.className='modal-overlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.52);display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="nucleoRoRemovalTitle" style="width:min(620px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.24)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px">
+      <div><h3 id="nucleoRoRemovalTitle" style="margin:0 0 6px">Gerenciar remoção da R.O.</h3><p class="small" style="margin:0">${escapeHtml(ro)}${sector?' · '+escapeHtml(sector):''}</p></div>
+      <button type="button" class="btn secondary" onclick="nucleoRemovalClose()" aria-label="Fechar">Fechar</button>
+    </div>
+    <label style="display:block;margin-top:18px"><span>O que deseja fazer?</span>
+      <select id="nucleoRoRemovalType" onchange="nucleoRemovalSetExtraFields()">
+        <option value="unlink_pdca">Desvincular PDCA</option>
+        <option value="assignment">Remover esta atribuição da R.O.</option>
+        <option value="person">Remover somente a pessoa responsável</option>
+        <option value="duplicate">Excluir R.O. duplicada do fluxo ativo</option>
+        <option value="mistake">Excluir R.O. lançada por engano do fluxo ativo</option>
+        <option value="cancel">Cancelar R.O.</option>
+        <option value="obsolete">Marcar R.O. como obsoleta</option>
+      </select>
+    </label>
+    <div id="nucleoRoRemovalDuplicateBox" hidden style="margin-top:12px">
+      <label><span>R.O. original que deve permanecer</span><input id="nucleoRoRemovalDuplicateOf" placeholder="Ex.: 325" autocomplete="off"></label>
+    </div>
+    <label style="display:block;margin-top:12px"><span>Motivo *</span><textarea id="nucleoRoRemovalReason" rows="4" maxlength="600" placeholder="Registre o motivo para o histórico"></textarea></label>
+    <p id="nucleoRoRemovalHelp" class="small" style="margin:10px 0 0"></p>
+    <p id="nucleoRoRemovalStatus" class="small" role="status"></p>
+    <div class="actions" style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+      <button type="button" class="btn secondary" onclick="nucleoRemovalClose()">Cancelar</button>
+      <button type="button" class="btn primary" id="nucleoRoRemovalConfirm" onclick="nucleoConfirmRoRemoval(this)">Confirmar</button>
+    </div>
+  </div>`;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)nucleoRemovalClose();});
+  document.body.appendChild(overlay);
+  nucleoRemovalSetExtraFields();
+  setTimeout(()=>document.getElementById('nucleoRoRemovalType')?.focus(),0);
+}
+
+async function nucleoPersistTriageRemovalRecord(key,changes,reason,type){
+  const map=getSavedTriageMap();
+  const current=map.get(key);
+  if(!current)throw new Error('O direcionamento não foi encontrado na base carregada.');
+  const now=new Date().toISOString();
+  const actor=getSession()?.name||'SGQ';
+  const record={...current,...changes,updatedAt:now,updatedBy:actor,administrativeChange:{type,reason,at:now,by:actor}};
+  await portalBackendSaveConfirmedPost('triage',key,record,90000);
+  map.set(key,record);
+  localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+  return record;
+}
+
+async function nucleoUnlinkPdcaFromAssignment(key,reason){
+  const map=getSavedTriageMap(),tri=map.get(key);
+  if(!tri)throw new Error('Direcionamento não encontrado.');
+  const ro=triageRoNumberPart(key),sector=String(tri.responsibleSector||'').trim();
+  const linked=getAllSentPdcas().filter(p=>String(p.ro||p.roId||p.numeroRo||'').trim()===ro&&(!sector||normalizeAnswer(p.setor||'')===normalizeAnswer(sector)));
+  const now=new Date().toISOString(),actor=getSession()?.name||'SGQ';
+  for(const p of linked){
+    if(!p?.id)continue;
+    const detached={...p,unlinkedFromRo:ro,unlinkedFromSector:sector,unlinkedAt:now,unlinkedBy:actor,unlinkReason:reason,ro:'',roId:'',numeroRo:'',updatedAt:now};
+    await portalBackendSaveConfirmedPost('pdca_sent',p.id,detached,90000);
   }
+  await nucleoPersistTriageRemovalRecord(key,{
+    pdcaExternal:false,pdcaSource:'',pdcaFileId:'',pdcaExternalUpdatedAt:'',pdcaResponded:false,pdcaSent:false,pdcaPresented:false,
+    pdcaRequired:true,pdcaLinkRemovedAt:now,pdcaLinkRemovedBy:actor,pdcaLinkRemovalReason:reason
+  },reason,'unlink_pdca');
+  try{await syncPortalBackend(false,{foreground:true})}catch(e){}
+}
+
+async function nucleoRemoveSingleAssignment(key,reason){
+  const tri=getSavedTriageMap().get(key);
+  if(!tri)throw new Error('Direcionamento não encontrado.');
+  // Salva o motivo antes da exclusão para que a auditoria central registre a causa.
+  const annotated={...tri,administrativeRemoval:{type:'assignment',reason,at:new Date().toISOString(),by:getSession()?.name||'SGQ'},updatedAt:new Date().toISOString()};
+  await portalBackendSaveConfirmedPost('triage',key,annotated,90000);
+  await adminCleanupDeleteRecord('triage',key);
+  const deleted=getDeletedTriageKeys();
+  deleted.add(key);
+  saveDeletedTriageKeys(deleted);
+  await adminCleanupSaveSharedState(DELETED_TRIAGE_KEYS_KEY,JSON.stringify([...deleted]));
+  const map=getSavedTriageMap();map.delete(key);localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+  try{await syncPortalBackend(false,{foreground:true})}catch(e){}
+  const finalDeleted=getDeletedTriageKeys();finalDeleted.add(key);saveDeletedTriageKeys(finalDeleted);
+}
+
+async function nucleoRemoveAssignedPerson(key,reason){
+  await nucleoPersistTriageRemovalRecord(key,{responsibleUserEmail:'',responsibleUserName:'',personRemovedAt:new Date().toISOString(),personRemovalReason:reason},reason,'person');
+}
+
+async function nucleoSetAdministrativeRoDecision(key,decision,reason,extra={}){
+  const map=getSavedTriageMap();
+  const base=triageRoNumberPart(key);
+  let records=getTriageRecordsForRoNumber(base,map).filter(x=>x?.decision);
+  if(!records.length&&map.get(key))records=[map.get(key)];
+  if(!records.length)throw new Error('Nenhuma triagem foi encontrada para esta R.O.');
+  const now=new Date().toISOString(),actor=getSession()?.name||'SGQ';
+  for(const old of records){
+    const recordKey=String(old.roKey||base);
+    const record={...old,
+      decision,decisionId:decision,decisionLabel:decision==='obsolete'?'Obsoleta':'Cancelar R.O.',
+      pdcaRequired:false,pdcaDeadline:'',responsibleUserEmail:'',responsibleUserName:'',
+      note:reason,updatedAt:now,updatedBy:actor,
+      administrativeRemoval:{type:extra.type||decision,reason,duplicateOf:extra.duplicateOf||'',at:now,by:actor}
+    };
+    await portalBackendSaveConfirmedPost('triage',recordKey,record,90000);
+    map.set(recordKey,record);
+  }
+  localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+  try{
+    await portalUpdateRoSheetConfirmed(base,{status:decision==='obsolete'?'Obsoleto':'Cancelada',pessoa:'',resultado:reason});
+  }catch(e){console.warn('[NUCLEO REMOÇÃO] decisão salva, mas planilha não confirmou status',e);}
+  try{await syncPortalBackend(false,{foreground:true})}catch(e){}
+}
+
+async function nucleoConfirmRoRemoval(button){
+  const ctx=nucleoRoRemovalContext;
+  if(!ctx)return;
+  const type=document.getElementById('nucleoRoRemovalType')?.value||'';
+  const reason=String(document.getElementById('nucleoRoRemovalReason')?.value||'').trim();
+  const duplicateOf=String(document.getElementById('nucleoRoRemovalDuplicateOf')?.value||'').trim();
+  const status=document.getElementById('nucleoRoRemovalStatus');
+  if(!reason){status.textContent='Informe o motivo da alteração.';document.getElementById('nucleoRoRemovalReason')?.focus();return;}
+  if(type==='duplicate'&&!duplicateOf){status.textContent='Informe qual R.O. original deve permanecer.';document.getElementById('nucleoRoRemovalDuplicateOf')?.focus();return;}
+  button.disabled=true;status.textContent='Aplicando alteração e conferindo a base central…';
+  try{
+    if(type==='unlink_pdca')await nucleoUnlinkPdcaFromAssignment(ctx.triageKey,reason);
+    else if(type==='assignment')await nucleoRemoveSingleAssignment(ctx.triageKey,reason);
+    else if(type==='person')await nucleoRemoveAssignedPerson(ctx.triageKey,reason);
+    else if(type==='duplicate')await nucleoSetAdministrativeRoDecision(ctx.triageKey,'cancelled',reason,{type:'duplicate',duplicateOf});
+    else if(type==='mistake')await nucleoSetAdministrativeRoDecision(ctx.triageKey,'cancelled',reason,{type:'mistake'});
+    else if(type==='cancel')await nucleoSetAdministrativeRoDecision(ctx.triageKey,'cancelled',reason,{type:'cancel'});
+    else if(type==='obsolete')await nucleoSetAdministrativeRoDecision(ctx.triageKey,'obsolete',reason,{type:'obsolete'});
+    else throw new Error('Escolha uma ação válida.');
+    try{render()}catch(e){}
+    try{renderAssignedRos()}catch(e){}
+    try{renderTriage()}catch(e){}
+    try{refreshRoSummary()}catch(e){}
+    try{refreshMenuNotificationBadges()}catch(e){}
+    status.textContent='Alteração confirmada.';
+    setTimeout(nucleoRemovalClose,350);
+  }catch(e){
+    console.error('[NUCLEO GERENCIAR REMOÇÃO]',e);
+    status.textContent='Não foi possível concluir: '+String(e?.message||e);
+    button.disabled=false;
+  }
+}
+
+// Compatibilidade com botões antigos/caches anteriores: o antigo delete agora abre
+// o gerenciador e nunca executa exclusão direta.
+async function deleteAssignedDirection(triageKey){
+  openRoRemovalManager(triageKey);
 }
 
 function openAssignedSectorEdit(triageKey){
