@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261026-modular-teste-v27-ro-drive-fila-gatilho';
+window.NUCLEO_BUILD_VERSION = '20261023-modular-full-test-v4-safe';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -33,7 +33,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261026-modular-teste-v13-ro-geometria-no-modelo',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261021-0945-unified',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -6300,147 +6300,42 @@ function nucleoRoCellPersistMeta(cell){
   return {source:dec(parts[0]),mask:/^[01]{4}$/.test(parts[1]||'')?parts[1]:'',fill:hasFill?parts[2]:'',label:dec(parts.slice(hasFill?3:2).join('~'))};
 }
 function nucleoRoModelRowUnits(row){const cells=row?.cells||[];if(!cells.length)return[];const total=cells.reduce((s,c)=>s+Math.max(.01,Number(c.width)||50),0)||100;let used=0;return cells.map((c,i)=>{if(i===cells.length-1)return Math.max(1,100-used);const rem=cells.length-i-1;let u=Math.max(1,Math.round((Math.max(.01,Number(c.width)||50)/total)*100));u=Math.min(u,Math.max(1,100-used-rem));used+=u;return u;});}
-function nucleoRoModelHeightPx(value,kind='cell'){
-  // A altura do editor universal já é salva em unidade visual (px).
-  // Não converter nem compactar: a impressão deve reproduzir o que foi escolhido.
-  const px=Number(value);
-  if(!Number.isFinite(px)||px<=0)return kind==='image'?40:24;
-  return Math.max(3,Math.min(120,px));
-}
 function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
   const safeColor=(v,d)=>/^#[0-9a-f]{6}$/i.test(String(v||''))?v:d;
   const safeFill=(v,d='#ffffff')=>String(v||'').toLowerCase()==='transparent'?'transparent':safeColor(v,d);
   const rows=Array.isArray(grid)?grid:[];
-  if(!rows.length)return '';
-
-  const rowHeights=rows.map((row)=>{
-    const own=(row?.cells||[]).filter(c=>(Number(c.rowSpan)||1)<=1).map(c=>nucleoRoModelHeightPx(c.height,'cell'));
-    return Math.max(3,...own,24);
-  });
-
-  // A célula mesclada define a altura total do bloco. Distribui somente o que faltar
-  // pelas linhas ocupadas, sem deixar a tabela/navegador recalcular as proporções.
-  rows.forEach((row,ri)=>{
-    (row?.cells||[]).forEach(cell=>{
-      const span=Math.max(1,Math.floor(Number(cell.rowSpan)||1));
-      if(span<=1)return;
-      const wanted=nucleoRoModelHeightPx(cell.height,'cell');
-      const stop=Math.min(rows.length,ri+span);
-      const current=rowHeights.slice(ri,stop).reduce((a,b)=>a+b,0);
-      if(current<wanted){
-        const add=(wanted-current)/(stop-ri);
-        for(let r=ri;r<stop;r++)rowHeights[r]+=add;
-      }
-    });
-  });
-
-  const occupied={};
-  const cellsHtml=[];
-
-  rows.forEach((row,ri)=>{
-    const rowNo=ri+1;
-    const blocks=(occupied[rowNo]||[]).slice().sort((a,b)=>a[0]-b[0]);
-    const free=[];
-    let cursor=0;
-    blocks.forEach(([l,r])=>{
-      if(l>cursor)free.push([cursor,l]);
-      cursor=Math.max(cursor,r);
-    });
-    if(cursor<1000)free.push([cursor,1000]);
-
-    const cells=row?.cells||[];
-    const total=cells.reduce((s,c)=>s+Math.max(.01,Number(c.width)||50),0)||100;
-    const freeTotal=free.reduce((s,z)=>s+z[1]-z[0],0)||1000;
-    let segment=0,segmentPos=free[0]?.[0]||0;
-
-    cells.forEach((cell)=>{
-      let want=Math.max(1,(Math.max(.01,Number(cell.width)||50)/total)*freeTotal);
-      let left=null,right=null;
-
-      while(want>.01 && segment<free.length){
-        const [sl,sr]=free[segment];
-        segmentPos=Math.max(segmentPos,sl);
-        const avail=sr-segmentPos;
-        if(avail<=.01){
-          segment++;
-          segmentPos=free[segment]?.[0]||1000;
-          continue;
-        }
-        const take=Math.min(want,avail);
-        if(left===null)left=segmentPos;
-        right=segmentPos+take;
-        segmentPos+=take;
-        want-=take;
-        if(segmentPos>=sr-.01){
-          segment++;
-          segmentPos=free[segment]?.[0]||1000;
-        }
-      }
-
-      if(left===null){left=0;right=1;}
-
-      const span=Math.max(1,Math.floor(Number(cell.rowSpan)||1));
-      if(span>1){
-        for(let z=1;z<span && rowNo+z<=rows.length;z++){
-          (occupied[rowNo+z]||(occupied[rowNo+z]=[])).push([left,right]);
-        }
-      }
-
-      const meta=nucleoRoCellPersistMeta(cell);
-      const persistedText=String(cell.text||'').trim();
-      const placeholderSource={
-        '[CÓDIGO DO DOCUMENTO]':'#CODE','[CODIGO DO DOCUMENTO]':'#CODE',
-        '[REVISÃO]':'#REVISION','[REVISAO]':'#REVISION',
-        '[NÚMERO / REGISTRO]':'#REGISTER','[NUMERO / REGISTRO]':'#REGISTER',
-        '[PÁGINA]':'#PAGE','[PAGINA]':'#PAGE'
-      };
-      let src=String(cell.systemSource||meta.source||cell.source||'');
-      if(!src)src=placeholderSource[persistedText]||'';
-
-      const rawBw=Number(cell.borderWidth);
-      const bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5));
-      const bc=safeColor(cell.borderColor,'#999999');
-      const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
-      const side=(name)=>{
-        const explicit=meta.mask?meta.mask[sideIndex[name]]==='1':cell['border'+name]!==false;
-        return explicit?`${bw}pt solid ${safeColor(cell['border'+name+'Color'],bc)}`:'0';
-      };
-
-      let content='';
-      if(cell.type==='image'){
-        const img=images?.[cell.imageFileId]||'';
-        content=img?`<img src="${nucleoRoModelEsc(img)}" style="display:block;width:100%;height:100%;object-fit:${cell.imageFit==='cover'?'cover':'contain'}">`:'';
-      }else if(src){
-        content=nucleoRoModelEsc(nucleoRoModelValue(ro,src,model,pageNo,totalPages)).replace(/\n/g,'<br>');
-      }else{
-        content=nucleoRoModelEsc(cell.text||'').replace(/\n/g,'<br>');
-      }
-
-      const visibleLabel=String(cell.labelText||cell.systemLabelText||meta.label||'');
-      if(visibleLabel){
-        content=`<div class="cell-stack"><span class="cell-label" style="font-size:${Math.max(5,Number(cell.labelFontSize)||7)}pt;font-weight:${cell.labelBold===false?'400':'700'}">${nucleoRoModelEsc(visibleLabel)}</span><span>${content||''}</span></div>`;
-      }
-
-      const cs=Math.max(1,Math.round(left)+1);
-      const ce=Math.max(cs+1,Math.round(right)+1);
-      const rs=rowNo,re=Math.min(rows.length+1,rowNo+span);
-
-      cellsHtml.push(
-        `<div class="ro-model-cell" style="grid-column:${cs}/${ce};grid-row:${rs}/${re};`+
-        `background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};`+
-        `color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};`+
-        `border-bottom:${side('Bottom')};border-left:${side('Left')};`+
-        `padding:${Number.isFinite(Number(cell.padding))?Math.max(0,Math.min(24,Number(cell.padding))):4}px;`+
-        `text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};`+
-        `align-items:${cell.verticalAlign==='top'?'flex-start':cell.verticalAlign==='bottom'?'flex-end':'center'};`+
-        `justify-content:${cell.align==='center'?'center':cell.align==='right'?'flex-end':'flex-start'};`+
-        `font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};`+
-        `font-style:${cell.italic?'italic':'normal'}">${content||'&nbsp;'}</div>`
-      );
-    });
-  });
-
-  return `<div class="ro-model-grid" style="grid-template-rows:${rowHeights.map(h=>`${Math.max(3,h)}px`).join(' ')}">${cellsHtml.join('')}</div>`;
+  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
+    const meta=nucleoRoCellPersistMeta(cell);
+    // V62: alguns backends preservam o texto do placeholder, mas removem a origem
+    // especial da célula. Nesse caso, recupere a origem pelo próprio placeholder
+    // para que PÁGINA (e os demais campos dinâmicos) continuem funcionando no PDF.
+    const persistedText=String(cell.text||'').trim();
+    const placeholderSource={
+      '[CÓDIGO DO DOCUMENTO]':'#CODE',
+      '[CODIGO DO DOCUMENTO]':'#CODE',
+      '[REVISÃO]':'#REVISION',
+      '[REVISAO]':'#REVISION',
+      '[NÚMERO / REGISTRO]':'#REGISTER',
+      '[NUMERO / REGISTRO]':'#REGISTER',
+      '[PÁGINA]':'#PAGE',
+      '[PAGINA]':'#PAGE'
+    };
+    let src=String(cell.systemSource||meta.source||cell.source||'');
+    if(!src)src=placeholderSource[persistedText]||'';
+    const rawBw=Number(cell.borderWidth),bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5)),bc=safeColor(cell.borderColor,'#999999');
+    const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
+    const side=(name)=>{const explicit=meta.mask?meta.mask[sideIndex[name]]==='1':cell['border'+name]!==false;return explicit?`${bw}pt solid ${safeColor(cell['border'+name+'Color'],bc)}`:'0';};
+    let content='';
+    if(cell.type==='image'){
+      const img=images?.[cell.imageFileId]||'';
+      content=img?`<img src="${nucleoRoModelEsc(img)}" style="display:block;width:100%;height:100%;max-height:${Math.max(3,Number(cell.height)||9)}mm;object-fit:${cell.imageFit==='cover'?'cover':'contain'}">`:'';
+    }else if(src){
+      content=nucleoRoModelEsc(nucleoRoModelValue(ro,src,model,pageNo,totalPages)).replace(/\n/g,'<br>');
+    }else content=nucleoRoModelEsc(cell.text||'').replace(/\n/g,'<br>');
+    const visibleLabel=String(cell.labelText||cell.systemLabelText||meta.label||'');
+    if(visibleLabel){content=`<div class="cell-stack"><span class="cell-label" style="font-size:${Math.max(5,Number(cell.labelFontSize)||7)}pt;font-weight:${cell.labelBold===false?'400':'700'}">${nucleoRoModelEsc(visibleLabel)}</span><span>${content||''}</span></div>`;}
+    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="height:${Math.max(3,Number(cell.height)||9)}mm;background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
+   }).join(''))+'</tr>';}).join('');
 }
 function nucleoRoEvidenceUrls(ro){
   const raw=ro?.raw||{};
@@ -12791,53 +12686,35 @@ async function adminCleanupDeleteRecord(collection,id){
 }
 
 async function adminCleanupSaveSharedState(key,value){
-  await adminCleanupEnsureTestBackend();
-
   const id='global:'+String(key);
-  const expectedValue=String(value??'');
   const record={
     id,
     key:String(key),
-    value:expectedValue,
+    value:String(value??''),
     scope:'global',
     userKey:'',
     updatedAt:new Date().toISOString(),
     updatedBy:getSession()?.name||'SGQ'
   };
 
-  // Usa a mesma rota central confirmada das demais gravações do Núcleo.
-  // Isso evita depender de fetch/form POST bloqueado pelo navegador/CORS.
-  const saveResult=await portalBackendSaveConfirmedPost(
-    'shared_state',
+  await adminCleanupMutation({
+    acao:'portal_save',
+    colecao:'shared_state',
     id,
-    record,
-    150000
-  );
+    dados:JSON.stringify(record),
+    ator:getSession()?.name||'SGQ'
+  },60000);
 
-  if(!saveResult){
-    throw new Error('A base central não confirmou a atualização do marcador administrativo.');
-  }
-
-  // Confirma novamente lendo o valor autoritativo.
-  const finalVerify=await portalJsonp({
+  const verify=await portalJsonp({
     acao:'portal_get_record',
     colecao:'shared_state',
     id
-  },20000).catch(()=>null);
+  },15000).catch(()=>null);
 
-  if(String(finalVerify?.registro?.value??'')===expectedValue){
-    return true;
+  if(!verify?.registro || String(verify.registro.value??'')!==String(value??'')){
+    throw new Error('A base central não confirmou o marcador da correção.');
   }
-
-  // Se a própria gravação confirmada retornou sucesso, aceita a confirmação
-  // mesmo que a leitura imediata ainda esteja propagando.
-  if(saveResult===true || saveResult?.ok===true || saveResult?.sucesso===true || saveResult?.registro){
-    return true;
-  }
-
-  throw new Error(
-    'A base central não confirmou a atualização do marcador administrativo.'
-  );
+  return true;
 }
 
 function cleanupRoKey(){
@@ -14615,9 +14492,9 @@ function getAdminModuleRecordsRaw(){
 
 
 
-
-
-
+function adminModuleRecord(id){
+  return getAdminModuleRecords().find(x=>String(x.id)===String(id))||null;
+}
 
 
 
@@ -14756,16 +14633,16 @@ const defaultDocumentTypes={fispq:'FISPQ / FDS',technical_sheet:'Ficha Técnica'
 
 
 
-
-
-
-
-
-
-
-
-
-
+function adminModuleStatusLabel(v){
+  return ({open:'Aberto',progress:'Em andamento',pending:'Pendente',done:'Concluído',
+    elaboration:'Em elaboração',review:'Em revisão',approval:'Aguardando aprovação',published:'Vigente',
+    doc_analysis:'Em análise',doc_preparation:'Em preparação',doc_ready:'Pronto para entrega',
+    cancelled:'Cancelado',obsolete:'Obsoleto / substituído'})[v]||v||'—';
+}
+function adminModuleDate(v){
+  const s=String(v||''); const m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?`${m[3]}/${m[2]}/${m[1]}`:(s||'—');
+}
 function isAdminModulePending(r,key){
   if(r.status==='done'||r.status==='published')return false;
   if(r.status==='pending'||r.status==='approval')return true;
@@ -14836,11 +14713,9 @@ function filterAdminModuleRecords(key,mode){
 
 
 
+function showAdminOperationalModule(...args){return nucleoOpenLazyAdmin('showAdminOperationalModule',args);}
 
-
-
-
-
+function openAdminOperationalWorkspace(...args){return nucleoOpenLazyAdmin('openAdminOperationalWorkspace',args);}
 
 
 
@@ -15311,57 +15186,57 @@ function collectAdminModuleForm(key,existing){
     updatedBy:getSession()?.name||'SGQ'
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+function saveAdminOperationalRecord(key,id){
+  const permissionModule={nccapa:'nc'}[key]||key,permissionKey=key==='documents'?(id?'prepare':'request'):'edit';if(!nucleoFeatureRequire(permissionModule,permissionKey))return;
+  const existing=id?adminModuleRecord(id):null;
+  const r=collectAdminModuleForm(key,existing);
+  if(key==='equipment'&&!['matriz','filial'].includes(r.unit)){alert('Selecione a unidade do equipamento.');return;}
+  if(!r.title){alert('Informe o título/nome principal do registro.');return}
+  if(key==='nccapa'&&r.ncType==='supplier'){
+    if(!r.supplier){alert('Informe o fornecedor da RNC.');return}
+    if(!r.rncNumber)r.rncNumber=nextRncNumber();
+  }
+  if(key==='documents'&&!r.code){alert('Selecione o documento solicitado.');return}
+  if(key==='documents'&&!isAdmin()){
+    r.status='open';
+    r.createdBy=existing?.createdBy||getSession()?.name||'Usuário';
+    r.createdByEmail=existing?.createdByEmail||getSession()?.email||'';
+    r.sector=existing?.sector||getSession()?.sector||r.sector||'';
+    r.recipient=r.recipient||getSession()?.name||'';
+    r.recipientEmail=r.recipientEmail||getSession()?.email||'';
+    r.responsible=existing?.responsible||'';
+    r.link=existing?.link||'';
+  }
+  if(key==='processes'){
+    if(!r.docType){alert('Selecione o tipo de documento interno.');return}
+    if(!r.code){alert('Informe o código do documento interno.');return}
+    if(!['matriz','filial'].includes(r.unit)){alert('Selecione a unidade do documento.');return}
+    if(existing?.processAttachments?.length&&explicitRecordUnit(existing)!==r.unit){alert('Remova os anexos antes de mudar a unidade do documento.');return}
+  }
+  if(key==='processes'){void nucleoSaveProcessRecordConfirmed(r);return;}
+  let all=getAdminModuleRecords();
+  const ix=all.findIndex(x=>String(x.id)===String(r.id));
+  if(ix>=0)all[ix]=r; else all.unshift(r);
+  saveAdminModuleRecords(all);
+  // RNC usa salvamento confirmado abaixo; não dispara um segundo POST em paralelo.
+  if(!(key==='nccapa'&&r.ncType==='supplier')) portalBackendSave('admin_modules',r.id,r);
+  if(key==='documents'&&!isAdmin()){
+    const match=findMatchingStandardDocument(r);
+    if(match){
+      alert('Solicitação registrada. Existe um documento padrão vigente; o Portal vai enviá-lo automaticamente para '+(r.recipientEmail||getSession()?.email||'seu e-mail')+'.');
+      autoFulfillDocumentRequest(r).then(ok=>{if(!ok)alert('A solicitação foi registrada, mas a entrega automática não pôde ser confirmada. O SGQ receberá a pendência normalmente.');showAdminOperationalModule(key)});
+      return;
+    }
+    alert('Solicitação registrada. Não há documento padrão compatível; o pedido foi encaminhado ao SGQ.');
+    showAdminOperationalModule(key);return;
+  }
+  if(key==='nccapa'&&r.ncType==='supplier'){
+    finishRncCreation(r,ix>=0);
+    return;
+  }
+  alert('Registro salvo.');
+  showAdminOperationalModule(key);
+}
 
 
 
@@ -16755,67 +16630,66 @@ let rncPreviewZoom='fit';
 
 
 
+function editAdminOperationalRecord(...args){return nucleoOpenLazyAdmin('editAdminOperationalRecord',args);}
 
+async function deleteAdminOperationalRecord(id){
+  const r=adminModuleRecord(id);if(!r)return;
+  if(!nucleoFeatureRequire(r.module==='nccapa'?'nc':r.module,r.module==='documents'?'prepare':'delete'))return;
 
+  if(r.module==='nccapa'&&!canOperateNcCapa()){
+    alert('Somente o SGQ/ADM pode excluir uma RNC.');
+    return;
+  }
 
+  const nome=String(r.rncNumber||r.title||'esta RNC').trim();
+  const fornecedor=String(r.supplier||'').trim();
+  const enviada=r.rncEmailStatus==='sent';
 
+  let msg=
+    `Excluir ${nome}${fornecedor?` — ${fornecedor}`:''}?\n\n`+
+    `A RNC será removida da central e a exclusão será sincronizada com a base.`;
 
+  if(enviada){
+    msg+=`\n\nATENÇÃO: esta RNC já foi enviada por e-mail. Excluir o registro não desfaz o e-mail já enviado.`;
+  }
 
+  if(!confirm(msg))return;
 
+  showNucleoLoading('Excluindo RNC...');
 
+  try{
+    await portalBackendDeleteConfirmed('admin_modules',id);
 
+    // Garante a remoção visual mesmo se a tela estiver usando um array antigo.
+    saveAdminModuleRecords(
+      getAdminModuleRecordsRaw().filter(x=>String(x?.id||'')!==String(id))
+    );
 
+    hideNucleoLoading();
 
+    if(document.getElementById('ncTreatmentList')){
+      renderNcCapaTreatmentList();
+    }else{
+      showAdminOperationalModule('nccapa');
+    }
 
+    // Reenvia mais uma vez alguns segundos depois.
+    setTimeout(()=>portalSendPendingRncDelete(id),2500);
+  }catch(e){
+    hideNucleoLoading();
 
+    // Mesmo em uma falha local inesperada, mantém a RNC marcada para
+    // exclusão e tenta sincronizar novamente.
+    markRncDeletedLocally(id);
+    setTimeout(()=>portalSendPendingRncDelete(id),2500);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    if(document.getElementById('ncTreatmentList')){
+      renderNcCapaTreatmentList();
+    }else{
+      showAdminOperationalModule('nccapa');
+    }
+  }
+}
 
 function openAdmin(){
   if(nucleoPersonPermissions(getSession()).sgq)nucleoReadAvatarGalleryConfig();
@@ -18016,10 +17890,10 @@ function render(){
         const pdcaMarcadoComoTem=reviewDecision==='yes';
         const pdcaJaRecebido=!!getPdcaReturnForRo(r)||pdcaExternalExists(r,renderTriageMap);
 
-        // pdcaRequired=true significa que o setor AINDA precisa responder.
-        // Só sai desta tela quando já existe PDCA real/externo ou quando
-        // a revisão histórica confirmou que já havia PDCA.
-        if(pdcaMarcadoComoTem||pdcaJaRecebido)return false;
+        // PDCA real/externo já recebido continua fora da fila operacional.
+        // A definição manual "Tem PDCA" permanece visível para o SGQ poder
+        // desfazer/desvincular a marcação diretamente em R.O.s atribuídas.
+        if(pdcaJaRecebido)return false;
 
         if(assignedLifecycle==='history'){
           if(!encerrada)return false;
@@ -18072,13 +17946,13 @@ function render(){
     const review2026Eligible=admin&&reviewDate&&reviewDate>=new Date(2026,0,1)&&!terminalAssigned&&!nucleoPdcaReviewOwnTerminal2026(r);
     const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
     const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
+    const reviewRoKeyEsc=escapeHtml(nucleoPdcaReviewRoKey2026(r));
+    const reviewOriginEsc=escapeHtml(String(r.origemBase||r.raw?.__origemBase||''));
     const pdcaReviewAction=review2026Eligible&&!reviewDecision
-      ? `<div class="pdca-review-choice" style="display:flex;gap:6px;align-items:center;justify-content:center;white-space:nowrap"><button class="btn primary" style="padding:5px 9px;font-size:11px;min-width:76px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${escapeHtml(nucleoPdcaReviewRoKey2026(r))}','${escapeHtml(String(r.origemBase||r.raw?.__origemBase||''))}','yes')">Tem PDCA</button><button class="btn secondary" style="padding:5px 9px;font-size:11px;min-width:92px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${escapeHtml(nucleoPdcaReviewRoKey2026(r))}','${escapeHtml(String(r.origemBase||r.raw?.__origemBase||''))}','no')">Não tem PDCA</button></div>`
-      : review2026Eligible&&reviewDecision==='no'
-        ? '<span class="status-badge answered">Sem PDCA</span>'
-        : review2026Eligible&&reviewDecision==='yes'
-          ? '<span class="status-badge answered">Tem PDCA</span>'
-          : '';
+      ? `<div class="pdca-review-choice" style="display:flex;gap:6px;align-items:center;justify-content:center;white-space:nowrap"><button class="btn primary" style="padding:5px 9px;font-size:11px;min-width:76px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}','yes')">Tem PDCA</button><button class="btn secondary" style="padding:5px 9px;font-size:11px;min-width:92px" type="button" onclick="event.stopPropagation();nucleoMarkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}','no')">Não tem PDCA</button></div>`
+      : review2026Eligible&&reviewDecision
+        ? `<div class="pdca-review-choice" style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap"><span class="status-badge answered">${reviewDecision==='yes'?'Tem PDCA':'Sem PDCA'}</span><button class="btn secondary" style="padding:4px 8px;font-size:10px" type="button" onclick="event.stopPropagation();nucleoUnlinkPdcaReview2026('${reviewRoKeyEsc}','${reviewOriginEsc}')">Desvincular PDCA</button></div>`
+        : '';
 
     let operationalActions='';
     const canRespondHere=currentUserCanRespondAssignedRo(r,tri);
@@ -20754,13 +20628,12 @@ function nucleoApplyFeatureAccess(){
  });
 }
 
-
-
-
-
-
-
-
+function nucleoWorkspaceFeature(key,mode){
+ const module=key==='nccapa'?'nc':key;
+ const maps={documents:{new:'request',mine:'consult',standards:'standards',deliveries:'history',doc_analysis:'prepare',doc_preparation:'prepare',doc_ready:'deliver',history:'consult'},processes:{new:'edit',published:'consult',review:'review',pending:'review',history:'history',templates:'templates'},equipment:{new:'edit',active:'consult',pending:'pending',history:'history'},training:{new:'edit',active:'consult',pending:'pending',history:'history'},nccapa:{new_rnc:'edit',new_internal:'edit',active:'consult',history:'consult',suppliers:'edit',supplier_indicators:'consult'}};
+ return [module,maps[key]?.[mode]||'consult'];
+}
+function nucleoWorkspaceAllowed(key,mode){const [module,feature]=nucleoWorkspaceFeature(key,mode);return nucleoPersonFeatureCan(module,feature);}
 function nucleoApplyFeatureButtons(){
  if(getSession()?.permissions?.detailVersion!==1)return;
  document.querySelectorAll('[onclick]').forEach(el=>{
