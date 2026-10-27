@@ -453,6 +453,62 @@ async function nucleoPdcaReviewPersist2026(ro,decision){
   return true;
 }
 
+async function nucleoUnlinkPdcaReview2026(roKey,origin){
+  if(!nucleoFeatureRequire('pdca','import'))return;
+
+  const target=nucleoPdcaReviewCanonical2026(roKey,origin);
+  if(!target){alert('R.O. não identificada.');return;}
+
+  const review=nucleoPdcaReviewMap2026();
+  const current=review[target];
+  const currentLabel=current?.decision==='yes'?'Tem PDCA':current?.decision==='no'?'Não tem PDCA':'sem definição';
+
+  if(!confirm(
+    'Desvincular a definição de PDCA desta R.O.?\n\n'+
+    'Situação atual: '+currentLabel+'\n\n'+
+    'A R.O. voltará a permitir a escolha entre "Tem PDCA" e "Não tem PDCA". '+
+    'Nenhuma R.O., arquivo ou PDCA salvo será excluído.'
+  ))return;
+
+  try{
+    await withNucleoLoading('Desvinculando definição de PDCA...',async()=>{
+      delete review[target];
+      nucleoSavePdcaReviewMap2026(review);
+
+      const map=getSavedTriageMap();
+      const records=getTriageRecordsForRoNumber(roKey,map);
+
+      for(const old of records){
+        const updated={...old};
+        delete updated.pdcaReviewDecision;
+        delete updated.pdcaReviewAt;
+        delete updated.pdcaReviewBy;
+
+        // Retorna à regra operacional da triagem sem excluir PDCA ou arquivo.
+        if(String(updated.decision||'')==='directed')updated.pdcaRequired=true;
+
+        map.set(String(updated.roKey||roKey),updated);
+        if(portalBackendEnabled()){
+          await portalBackendSaveConfirmed('triage',String(updated.roKey||roKey),updated);
+        }
+      }
+
+      localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
+
+      try{render()}catch(e){}
+      try{renderPdcaReview2026()}catch(e){}
+      try{renderPdcaPdfSummary()}catch(e){}
+      try{renderCurrentOverview()}catch(e){}
+      try{refreshRoSummary()}catch(e){}
+    },'Atualizando R.O.');
+
+    alert('Definição de PDCA desvinculada. Você pode escolher novamente entre Tem PDCA e Não tem PDCA.');
+  }catch(e){
+    console.error('[NUCLEO DESVINCULAR PDCA]',e);
+    alert('Não foi possível desvincular a definição de PDCA.\n\n'+String(e?.message||e));
+  }
+}
+
 async function nucleoMarkPdcaReview2026(roKey,origin,decision){
   if(!nucleoFeatureRequire('pdca','import'))return;
   const target=nucleoPdcaReviewCanonical2026(roKey,origin);

@@ -9,7 +9,7 @@
     "core.api",
     "ro"
   ],
-  "functionCount": 97,
+  "functionCount": 98,
   "functions": [
     "getPdcaDrafts",
     "getPdcaDraftForRo",
@@ -58,6 +58,7 @@
     "nucleoPdcaPreferredRo2026",
     "nucleoPdcaReviewCandidates2026",
     "nucleoPdcaReviewPersist2026",
+    "nucleoUnlinkPdcaReview2026",
     "nucleoMarkPdcaReview2026",
     "nucleoPdcaPdfSummaryRows",
     "nucleoPdcaPdfSummaryData",
