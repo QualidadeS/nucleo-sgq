@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261028-ro-removal-central-v4';
+window.NUCLEO_BUILD_VERSION = '20261028-unlink-pdca-v6';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -18140,25 +18140,85 @@ async function nucleoPersistTriageRemovalRecord(key,changes,reason,type){
 async function nucleoUnlinkPdcaFromAssignment(key,reason){
   const map=getSavedTriageMap(),tri=map.get(key);
   if(!tri)throw new Error('Direcionamento não encontrado.');
-  const ro=triageRoNumberPart(key),sector=String(tri.responsibleSector||'').trim();
-  const linked=getAllSentPdcas().filter(p=>String(p.ro||p.roId||p.numeroRo||'').trim()===ro&&(!sector||normalizeAnswer(p.setor||'')===normalizeAnswer(sector)));
+
+  const ro=triageRoNumberPart(key);
+  const sector=String(tri.responsibleSector||tri.setorDirecionado||'').trim();
+  const targetDigits=roDigits(ro);
+  const targetOrigin=roOriginFromNumber(
+    ro,
+    tri?.origin||tri?.origem||tri?.origemBase||tri?.sourceRoOrigin||''
+  );
+
+  const linked=getAllSentPdcas().filter(p=>{
+    const pRo=String(p?.ro||p?.roId||p?.numeroRo||p?.sourceRo||'').trim();
+    if(!pRo)return false;
+
+    const sameNumber=targetDigits && roDigits(pRo)===targetDigits;
+    if(!sameNumber)return false;
+
+    const pOrigin=roOriginFromNumber(
+      pRo,
+      p?.origin||p?.origem||p?.origemBase||p?.sourceRoOrigin||''
+    );
+
+    // Se ambos informarem origem, precisa ser a mesma. Se o PDCA antigo não
+    // tiver origem registrada, usa número + setor para localizar o vínculo.
+    if(targetOrigin&&pOrigin&&normalizeAnswer(targetOrigin)!==normalizeAnswer(pOrigin))return false;
+
+    return !sector || normalizeAnswer(p?.setor||p?.responsibleSector||'')===normalizeAnswer(sector);
+  });
+
   const now=new Date().toISOString(),actor=getSession()?.name||'SGQ';
+
   for(const p of linked){
     if(!p?.id)continue;
-    const detached={...p,unlinkedFromRo:ro,unlinkedFromSector:sector,unlinkedAt:now,unlinkedBy:actor,unlinkReason:reason,ro:'',roId:'',numeroRo:'',updatedAt:now};
-    await nucleoRemovalSaveVerified('pdca_sent',p.id,detached,(saved)=>{
-      return String(saved?.unlinkedFromRo||'').trim()===String(ro||'').trim() &&
-        String(saved?.unlinkReason||'').trim()===String(reason||'').trim() &&
-        !String(saved?.ro||saved?.roId||saved?.numeroRo||'').trim();
-    },90000);
-  }
-  await nucleoPersistTriageRemovalRecord(key,{
-    pdcaExternal:false,pdcaSource:'',pdcaFileId:'',pdcaExternalUpdatedAt:'',pdcaResponded:false,pdcaSent:false,pdcaPresented:false,
-    pdcaRequired:true,pdcaLinkRemovedAt:now,pdcaLinkRemovedBy:actor,pdcaLinkRemovalReason:reason
-  },reason,'unlink_pdca');
-  try{await syncPortalBackend(false,{foreground:true})}catch(e){}
-}
 
+    const detached={
+      ...p,
+      unlinkedFromRo:ro,
+      unlinkedFromSector:sector,
+      unlinkedAt:now,
+      unlinkedBy:actor,
+      unlinkReason:reason,
+      ro:'',
+      roId:'',
+      numeroRo:'',
+      updatedAt:now
+    };
+
+    await nucleoRemovalSaveVerified('pdca_sent',p.id,detached,null,90000);
+
+    // Atualiza o snapshot em memória imediatamente. Assim a própria tela não
+    // volta a considerar o PDCA vinculado enquanto a sincronização geral roda.
+    if(Array.isArray(nucleoCentralPdcaSent)){
+      const idx=nucleoCentralPdcaSent.findIndex(x=>String(x?.id||'')===String(p.id));
+      if(idx>=0)nucleoCentralPdcaSent[idx]=detached;
+    }
+  }
+
+  await nucleoPersistTriageRemovalRecord(key,{
+    pdcaExternal:false,
+    pdcaSource:'',
+    pdcaFileId:'',
+    pdcaExternalUpdatedAt:'',
+    pdcaResponded:false,
+    pdcaSent:false,
+    pdcaPresented:false,
+    pdcaRequired:true,
+    pdcaLinkRemovedAt:now,
+    pdcaLinkRemovedBy:actor,
+    pdcaLinkRemovalReason:reason
+  },reason,'unlink_pdca');
+
+  // Não bloqueia o botão esperando uma sincronização completa.
+  // O salvamento acima já foi confirmado pela base central.
+  try{
+    Promise.resolve(syncPortalBackend(false,{foreground:false}))
+      .catch(e=>console.warn('[NUCLEO REMOÇÃO] sincronização posterior falhou',e));
+  }catch(e){}
+
+  return {unlinkedPdcas:linked.length,ro,sector};
+}
 async function nucleoRemoveSingleAssignment(key,reason){
   const tri=getSavedTriageMap().get(key);
   if(!tri)throw new Error('Direcionamento não encontrado.');
@@ -18224,7 +18284,13 @@ async function nucleoConfirmRoRemoval(button){
   if(type==='duplicate'&&!duplicateOf){status.textContent='Informe qual R.O. original deve permanecer.';document.getElementById('nucleoRoRemovalDuplicateOf')?.focus();return;}
   button.disabled=true;status.textContent='Aplicando alteração e conferindo a base central…';
   try{
-    if(type==='unlink_pdca')await nucleoUnlinkPdcaFromAssignment(ctx.triageKey,reason);
+    if(type==='unlink_pdca'){
+      status.textContent='Desvinculando o PDCA e salvando o motivo…';
+      const result=await nucleoUnlinkPdcaFromAssignment(ctx.triageKey,reason);
+      status.textContent=result?.unlinkedPdcas
+        ? 'PDCA desvinculado. Atualizando a tela…'
+        : 'Vínculo removido da R.O. Atualizando a tela…';
+    }
     else if(type==='assignment')await nucleoRemoveSingleAssignment(ctx.triageKey,reason);
     else if(type==='person')await nucleoRemoveAssignedPerson(ctx.triageKey,reason);
     else if(type==='duplicate')await nucleoSetAdministrativeRoDecision(ctx.triageKey,'cancelled',reason,{type:'duplicate',duplicateOf});
