@@ -46,20 +46,172 @@ function nucleoDriveRenderPdca(){
 function nucleoDrivePdcaPage(panel){
  nucleoDriveState.pdcaPanel=panel;
  const host=document.getElementById('ndContent');
- host.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">'+[['import','Importar PDF'],['history','Histórico de importações'],['missing','R.O.s sem resposta']].map(([key,label])=>'<button class="btn '+(key===panel?'primary':'secondary')+'" onclick="nucleoDrivePdcaPage(\''+key+'\')">'+label+'</button>').join('')+'</div><div id="ndPdcaPanel"></div>';
+ const tabs=[
+   ['import','Importar PDF'],
+   ['history','Histórico de importações'],
+   ['missing','R.O.s sem resposta'],
+   ['no_pdca','R.O.s sem PDCA']
+ ];
+ host.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">'+
+   tabs.map(([key,label])=>'<button class="btn '+(key===panel?'primary':'secondary')+'" onclick="nucleoDrivePdcaPage(\''+key+'\')">'+label+'</button>').join('')+
+   '</div><div id="ndPdcaPanel"></div>';
+
  const box=document.getElementById('ndPdcaPanel');
- if(panel==='import'){nucleoDriveRenderPdca();const content=host.innerHTML;host.innerHTML='<div style="display:flex;gap:8px;margin:12px 0"><button class="btn primary" onclick="nucleoDrivePdcaPage(\'import\')">Importar PDF</button><button class="btn secondary" onclick="nucleoDrivePdcaPage(\'history\')">Histórico de importações</button><button class="btn secondary" onclick="nucleoDrivePdcaPage(\'missing\')">R.O.s sem resposta</button></div>'+content;return;}
- box.innerHTML='<input id="ndPdcaSearch" placeholder="Buscar R.O., setor ou arquivo" oninput="nucleoDrivePdcaRows()"><p class="small">Dados da unidade selecionada. Para conferir pendências, mantenha as R.O.s sincronizadas.</p><div id="ndPdcaRows"></div>';nucleoDrivePdcaRows();
+
+ if(panel==='import'){
+   nucleoDriveRenderPdca();
+   return;
+ }
+
+ if(panel==='no_pdca'){
+   box.innerHTML=
+     '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">'+
+       '<div><h3 style="margin:0">R.O.s marcadas como sem PDCA</h3>'+
+       '<p class="small" style="margin:5px 0 0">Lista das R.O.s em que o SGQ marcou “Não tem PDCA”. Esta lista não inclui R.O.s apenas aguardando resposta.</p></div>'+
+       '<input id="ndPdcaSearch" style="min-width:280px" placeholder="Buscar R.O., cliente ou setor" oninput="nucleoDrivePdcaRows()">'+
+     '</div>'+
+     '<div id="ndPdcaRows"></div>';
+   nucleoDrivePdcaRows();
+   return;
+ }
+
+ box.innerHTML=
+   '<input id="ndPdcaSearch" placeholder="Buscar R.O., setor ou arquivo" oninput="nucleoDrivePdcaRows()">'+
+   '<p class="small">Dados da unidade selecionada. Para conferir pendências, mantenha as R.O.s sincronizadas.</p>'+
+   '<div id="ndPdcaRows"></div>';
+ nucleoDrivePdcaRows();
 }
 function nucleoDrivePdcaRows(){
- const query=sectorCompareKey(document.getElementById('ndPdcaSearch')?.value||'');let rows=[];
- if(nucleoDriveState.pdcaPanel==='history')rows=nucleoDriveState.pdcaFiles.slice().reverse().map(p=>({text:p.fileName+' · '+p.links.map(l=>l.ro+' / '+l.sector).join(', '),status:p.importComplete===false?'Importação incompleta':'Importado · V'+p.version,fileId:p.fileId}));
- else{
-  const responses=getAllSentPdcas().filter(p=>explicitRecordUnit(p)===nucleoDriveState.unit);
-  nucleoDriveCandidates().forEach(r=>{const ro=String(r.numero||r.id),base=baseTriageSituation(r),triages=getTriageRecordsForRoNumber(ro);const sectors=nucleoDriveSectors(ro).filter(sector=>triages.some(t=>t.decision==='directed'&&sectorCompareKey(t.responsibleSector||t.sector||t.setor||t.directedSector)===sectorCompareKey(sector))||(base.decision==='directed'&&sectorCompareKey(base.sector)===sectorCompareKey(sector)));sectors.forEach(sector=>{const imported=nucleoDriveState.pdcaFiles.some(p=>p.importComplete!==false&&p.links.some(l=>l.ro===ro&&sectorCompareKey(l.sector)===sectorCompareKey(sector)));const answered=responses.some(p=>p.ro===ro&&sectorCompareKey(p.setor)===sectorCompareKey(sector)&&/respond|apresent/i.test(p.status||''));if(!imported&&!answered)rows.push({text:ro+' · '+(r.cliente||'')+' · '+sector,status:'Sem resposta de PDCA'});});});
+ const query=sectorCompareKey(document.getElementById('ndPdcaSearch')?.value||'');
+ let rows=[];
+
+ if(nucleoDriveState.pdcaPanel==='history'){
+   rows=nucleoDriveState.pdcaFiles.slice().reverse().map(p=>({
+     text:p.fileName+' · '+p.links.map(l=>l.ro+' / '+l.sector).join(', '),
+     status:p.importComplete===false?'Importação incompleta':'Importado · V'+p.version,
+     fileId:p.fileId
+   }));
+ }else if(nucleoDriveState.pdcaPanel==='no_pdca'){
+   const review=typeof nucleoPdcaReviewMap2026==='function'?nucleoPdcaReviewMap2026():{};
+   const triageMap=getSavedTriageMap();
+   const groups=new Map();
+
+   (getAllRoRecords()||[]).forEach(r=>{
+     if(explicitRecordUnit(r)!==nucleoDriveState.unit)return;
+     const ro=String(r?.numero||r?.id||r?.codigo||'').trim();
+     if(!ro)return;
+     const origin=String(r?.origemBase||r?.raw?.__origemBase||'').trim();
+     const canonical=typeof nucleoPdcaReviewCanonical2026==='function'
+       ? nucleoPdcaReviewCanonical2026(ro,origin)
+       : ro;
+     if(!canonical||review?.[canonical]?.decision!=='no')return;
+
+     const groupKey=canonical+'|'+normalizePortalUnit(explicitRecordUnit(r)||r?.unidade||'');
+     const list=groups.get(groupKey)||[];
+     list.push(r);
+     groups.set(groupKey,list);
+   });
+
+   groups.forEach(list=>{
+     const r=typeof nucleoPdcaPreferredRo2026==='function'
+       ? nucleoPdcaPreferredRo2026(list,triageMap)
+       : list[0];
+     if(!r)return;
+
+     const ro=String(r?.numero||r?.id||r?.codigo||'').trim();
+     const origin=String(r?.origemBase||r?.raw?.__origemBase||'').trim();
+     const sector=typeof effectiveRoSector==='function'
+       ? (effectiveRoSector(r,triageMap)||'Não direcionado')
+       : (r?.setor||'Não direcionado');
+     const date=typeof formatDateBR==='function'
+       ? formatDateBR(r?.data||r?.dataRegistro||r?.dataSolicitacao||'')
+       : String(r?.data||'');
+     const client=String(r?.cliente||r?.origem||'—').trim()||'—';
+     const unit=String(r?.unidade||'').trim()||'—';
+
+     rows.push({
+       text:[ro,client,sector,unit,date].join(' · '),
+       ro,origin,client,sector,unit,date,
+       status:'Não tem PDCA',
+       noPdca:true
+     });
+   });
+
+   rows.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ }else{
+   const responses=getAllSentPdcas().filter(p=>explicitRecordUnit(p)===nucleoDriveState.unit);
+   nucleoDriveCandidates().forEach(r=>{
+     const ro=String(r.numero||r.id),
+       base=baseTriageSituation(r),
+       triages=getTriageRecordsForRoNumber(ro);
+     const sectors=nucleoDriveSectors(ro).filter(sector=>
+       triages.some(t=>t.decision==='directed'&&sectorCompareKey(t.responsibleSector||t.sector||t.setor||t.directedSector)===sectorCompareKey(sector))||
+       (base.decision==='directed'&&sectorCompareKey(base.sector)===sectorCompareKey(sector))
+     );
+     sectors.forEach(sector=>{
+       const imported=nucleoDriveState.pdcaFiles.some(p=>
+         p.importComplete!==false&&p.links.some(l=>l.ro===ro&&sectorCompareKey(l.sector)===sectorCompareKey(sector))
+       );
+       const answered=responses.some(p=>
+         p.ro===ro&&sectorCompareKey(p.setor)===sectorCompareKey(sector)&&/respond|apresent/i.test(p.status||'')
+       );
+       if(!imported&&!answered)rows.push({
+         text:ro+' · '+(r.cliente||'')+' · '+sector,
+         status:'Sem resposta de PDCA'
+       });
+     });
+   });
  }
+
  rows=rows.filter(r=>!query||sectorCompareKey(r.text).includes(query));
- const host=document.getElementById('ndPdcaRows');host.innerHTML='<p>'+rows.length+' registro(s)</p>'+rows.slice(0,nucleoDriveState.pdcaListLimit||20).map(r=>'<div class="card" style="padding:12px;margin:8px 0"><b>'+nucleoDriveEscape(r.text)+'</b><p class="small">'+nucleoDriveEscape(r.status)+'</p>'+(r.fileId?'<button class="btn secondary" onclick="nucleoDriveViewFile(\''+nucleoDriveEscape(r.fileId)+'\',\'pdcas\')">Abrir PDF</button>':'')+'</div>').join('')+(rows.length>(nucleoDriveState.pdcaListLimit||20)?'<button class="btn secondary" onclick="nucleoDriveState.pdcaListLimit=(nucleoDriveState.pdcaListLimit||20)+20;nucleoDrivePdcaRows()">Mostrar mais 20</button>':'');
+ const host=document.getElementById('ndPdcaRows');
+ if(!host)return;
+
+ if(nucleoDriveState.pdcaPanel==='no_pdca'){
+   host.innerHTML=
+     '<p><b>'+rows.length+'</b> R.O.'+(rows.length===1?'':'s')+' marcada'+(rows.length===1?'':'s')+' como “Não tem PDCA”.</p>'+
+     (rows.length
+       ? '<div style="overflow:auto"><table class="action-table" style="min-width:900px">'+
+           '<thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Unidade</th><th>Situação</th><th></th></tr></thead>'+
+           '<tbody>'+rows.slice(0,nucleoDriveState.pdcaListLimit||50).map(r=>
+             '<tr>'+
+               '<td><b>'+nucleoDriveEscape(r.ro)+'</b></td>'+
+               '<td>'+nucleoDriveEscape(r.date||'—')+'</td>'+
+               '<td>'+nucleoDriveEscape(r.client||'—')+'</td>'+
+               '<td>'+nucleoDriveEscape(r.sector||'Não direcionado')+'</td>'+
+               '<td>'+nucleoDriveEscape(r.unit||'—')+'</td>'+
+               '<td><span class="status-badge">'+nucleoDriveEscape(r.status)+'</span></td>'+
+               '<td><button class="btn secondary" type="button" onclick="nucleoDriveUndoNoPdca(\''+
+                 nucleoDriveEscape(r.ro)+'\',\''+nucleoDriveEscape(r.origin)+'\')">Voltar a perguntar</button></td>'+
+             '</tr>'
+           ).join('')+'</tbody></table></div>'
+       : '<div class="card" style="padding:22px"><b>Nenhuma R.O. marcada como “Não tem PDCA”.</b></div>')+
+     (rows.length>(nucleoDriveState.pdcaListLimit||50)
+       ? '<button class="btn secondary" onclick="nucleoDriveState.pdcaListLimit=(nucleoDriveState.pdcaListLimit||50)+50;nucleoDrivePdcaRows()">Mostrar mais 50</button>'
+       : '');
+   return;
+ }
+
+ host.innerHTML=
+   '<p>'+rows.length+' registro(s)</p>'+
+   rows.slice(0,nucleoDriveState.pdcaListLimit||20).map(r=>
+     '<div class="card" style="padding:12px;margin:8px 0"><b>'+nucleoDriveEscape(r.text)+'</b><p class="small">'+
+     nucleoDriveEscape(r.status)+'</p>'+
+     (r.fileId?'<button class="btn secondary" onclick="nucleoDriveViewFile(\''+nucleoDriveEscape(r.fileId)+'\',\'pdcas\')">Abrir PDF</button>':'')+
+     '</div>'
+   ).join('')+
+   (rows.length>(nucleoDriveState.pdcaListLimit||20)
+     ? '<button class="btn secondary" onclick="nucleoDriveState.pdcaListLimit=(nucleoDriveState.pdcaListLimit||20)+20;nucleoDrivePdcaRows()">Mostrar mais 20</button>'
+     : '');
+}
+
+async function nucleoDriveUndoNoPdca(ro,origin){
+ if(typeof nucleoUnlinkPdcaReview2026!=='function'){
+   alert('Não foi possível abrir a alteração da definição de PDCA.');
+   return;
+ }
+ await nucleoUnlinkPdcaReview2026(ro,origin);
+ if(nucleoDriveState.pdcaPanel==='no_pdca')nucleoDrivePdcaRows();
 }
 function nucleoDriveStartRevision(id){const r=nucleoDriveState.pdcaFiles.find(x=>x.id===id);if(!r)return;nucleoDriveState.previousId=id;nucleoDriveState.links=r.links.map(l=>({...l}));nucleoDriveStatus('Nova revisão de '+r.fileName+'. Selecione o novo PDF; os vínculos serão preservados.');document.getElementById('ndPdf').scrollIntoView({behavior:'smooth'});}
 async function nucleoDriveListPdfs(more){try{if(!more){nucleoDriveState.files=[];nucleoDriveState.offset=0;}const r=await nucleoDriveApi('nucleo_drive_list',{kind:'pdcas',offset:nucleoDriveState.offset});nucleoDriveState.files.push(...r.items);nucleoDriveState.offset=r.nextOffset;document.getElementById('ndDriveFiles').innerHTML=nucleoDriveState.files.filter(f=>f.mimeType==='application/pdf'&&!nucleoDriveState.pdcaFiles.some(p=>p.fileId===f.id&&p.importComplete===true)).map(f=>'<div style="margin:8px"><button class="btn secondary" onclick="nucleoDriveSelectExisting(\''+nucleoDriveEscape(f.id)+'\')">'+nucleoDriveEscape(f.name)+'</button></div>').join('')+(r.hasMore?'<button class="btn secondary" onclick="nucleoDriveListPdfs(true)">Carregar mais 30 arquivos</button>':'');}catch(e){nucleoDriveStatus(e.message);}}
