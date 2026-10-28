@@ -14171,59 +14171,12 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
-
-function nucleoOfficialRoJsonp(settings,params={},timeoutMs=90000){
-  const s=settings||getSavedIntegrationSettings();
-  const baseUrl=String(s?.apiUrl||'').trim();
-  if(!baseUrl)return Promise.reject(new Error('URL da integração de R.O.s não configurada.'));
-
-  return new Promise((resolve,reject)=>{
-    const callback='nucleoOfficialRo_'+Date.now()+'_'+Math.floor(Math.random()*10000);
-    const script=document.createElement('script');
-    const timer=setTimeout(()=>{
-      cleanup();
-      reject(new Error('Tempo limite ao consultar as R.O.s oficiais.'));
-    },timeoutMs);
-
-    function cleanup(){
-      clearTimeout(timer);
-      try{delete window[callback];}catch(e){window[callback]=undefined;}
-      script.remove();
-    }
-
-    window[callback]=(data)=>{
-      cleanup();
-      resolve(data);
-    };
-
-    script.onerror=()=>{
-      cleanup();
-      reject(new Error('A integração oficial de R.O.s não respondeu.'));
-    };
-
-    const qs=new URLSearchParams();
-    qs.set('callback',callback);
-
-    // A leitura oficial das R.O.s usa a chave da integração.
-    // Não envia o token do login.
-    if(s.apiKey)qs.set('chave',String(s.apiKey));
-
-    Object.entries(params||{}).forEach(([k,v])=>{
-      if(v!==undefined&&v!==null&&String(v)!=='')qs.set(k,String(v));
-    });
-
-    qs.set('_',Date.now());
-    script.src=baseUrl+(baseUrl.includes('?')?'&':'?')+qs.toString();
-    document.head.appendChild(script);
-  });
-}
-
 async function loadOfficialRosFullFallback(settings,onProgress,reason){
   const s=settings||getSavedIntegrationSettings();
   const period=roSyncPeriodParams(s);
   if(onProgress)onProgress(0,null,'A leitura por páginas não respondeu. Tentando a leitura completa da base...');
   console.warn('[NÚCLEO SYNC] fallback para leitura completa',reason||'');
-  const data=await nucleoOfficialRoJsonp(s,{...period},150000);
+  const data=await portalJsonp({...period},150000);
   if(data?.sucesso===false)throw new Error(data.erro||'A planilha recusou a leitura completa.');
   if(!Array.isArray(data?.dados))throw new Error('A leitura completa não devolveu a lista de R.O.s.');
   const total=Number.isFinite(Number(data.quantidade))?Number(data.quantidade):data.dados.length;
@@ -14246,7 +14199,7 @@ async function loadOfficialRosPaged(settings,onProgress){
     let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        page=await nucleoOfficialRoJsonp(s,{acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
+        page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
         break;
       }catch(e){
         lastError=e;
