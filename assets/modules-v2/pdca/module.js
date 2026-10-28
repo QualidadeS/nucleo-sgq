@@ -1876,7 +1876,77 @@ async function confirmReceivedPdcaClaimant(id){
  }catch(e){const status=document.getElementById('ndStatus');if(status)status.textContent=e.message;else alert(e.message);}
 }
 
-function nucleoPdcaDelivery(p){const deliveries=Array.isArray(nucleoCentralPdcaDispatches)?nucleoCentralPdcaDispatches:[];return deliveries.find(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));}
+function nucleoPdcaDelivery(p){
+  if(!p)return null;
+
+  const deliveries=Array.isArray(nucleoCentralPdcaDispatches)?nucleoCentralPdcaDispatches:[];
+  const direct=deliveries.find(d=>
+    d.ro===p.ro &&
+    d.unit===explicitRecordUnit(p) &&
+    (d.pdcaFileId===p.pdcaFileId || (d.fileId&&d.fileId===p.fileId)) &&
+    Number(d.version||1)===Number(p.version||1)
+  );
+  if(direct)return direct;
+
+  // A própria resposta já pode ter a confirmação de entrega gravada pelo backend.
+  const deliveredAt=String(
+    p.claimantDeliveredAt ||
+    p.pdcaEnviadoReclamanteEm ||
+    p.deliveredAt ||
+    p.deliveryAt ||
+    ''
+  ).trim();
+  if(deliveredAt){
+    return {
+      ro:p.ro,
+      unit:explicitRecordUnit(p),
+      pdcaId:p.id,
+      deliveredAt,
+      deliveredBy:p.claimantDeliveredBy||p.deliveredBy||'',
+      source:'pdca_sent'
+    };
+  }
+
+  // A planilha/R.O. também é fonte válida de encerramento. É justamente esta
+  // informação que a tela de apresentação já usa para exibir "Apresentação concluída".
+  try{
+    const source=typeof findRoByAnyNumber==='function'
+      ? findRoByAnyNumber(p.ro||'',p.origemBase||p.sourceRoOrigin||'')
+      : null;
+
+    const sourceDeliveredAt=String(source?.pdcaEnviadoReclamanteEm||'').trim();
+    if(source?.reclamanteRecebeuPdca || sourceDeliveredAt){
+      return {
+        ro:p.ro,
+        unit:explicitRecordUnit(p),
+        pdcaId:p.id,
+        deliveredAt:sourceDeliveredAt,
+        deliveredBy:'Registrado na planilha',
+        source:'ro_sheet'
+      };
+    }
+  }catch(e){}
+
+  // Compatibilidade com apresentações registradas no Núcleo antes da criação
+  // do despacho central.
+  try{
+    const presentation=typeof getPdcaPresentationMap==='function'
+      ? getPdcaPresentationMap().get(String(p.id||''))
+      : null;
+    if(presentation?.presentationCompleted){
+      return {
+        ro:p.ro,
+        unit:explicitRecordUnit(p),
+        pdcaId:p.id,
+        deliveredAt:presentation.claimantDeliveredAt||presentation.completedAt||presentation.presentedAt||'',
+        deliveredBy:presentation.presentedBy||presentation.registeredBy||'',
+        source:'presentation'
+      };
+    }
+  }catch(e){}
+
+  return null;
+}
 
 function nucleoConsultPdcaClaimant(id){const p=getAllSentPdcas().find(p=>p.id===id);if(!p)return;const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===p.ro&&explicitRecordUnit(r)===explicitRecordUnit(p));const binding=ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro));const user=ro&&resolveRoClaimant(ro);alert('Reclamante confirmado: '+(user?personDisplayName(user):'Cadastro indisponível')+(binding?.confirmedBy?'\nConfirmado por: '+binding.confirmedBy:'')+(binding?.confirmedAt?'\nData: '+new Date(binding.confirmedAt).toLocaleString('pt-BR'):''));}
 
