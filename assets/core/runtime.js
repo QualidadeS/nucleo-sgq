@@ -13096,23 +13096,59 @@ async function adminDeleteTestDataForRo(){
 async function saveIntegrationSettingsConfirmed(){
   if(!isAdmin()){alert('Configuração indisponível.');return false}
   if(!requireIntegrationUnlock())return false;
+
   const candidate=String(document.getElementById('apiUrl')?.value||portalApiBase()).trim();
-  const currentBase=portalApiBase();
+  const currentBase=String(portalApiBase()||'').trim();
+  const apiChanged=!!candidate && candidate!==currentBase;
   const keys=[INTEGRATION_PERSIST_KEY,'ro-sync-settings',ADMIN_CONFIG_KEY];
   const before=keys.map(key=>localStorage.getItem(key));
   const st=document.getElementById('configSavedState');
-  if(st){st.classList.remove('hidden');st.textContent='Verificando conexão antes de salvar...'}
+
+  if(st){
+    st.classList.remove('hidden');
+    st.textContent=apiChanged
+      ? 'Validando a nova API...'
+      : 'Verificando conexão antes de salvar...';
+  }
+
   try{
     await nucleoCheckApiUrl(candidate);
+
     const sync=saveIntegrationSettings(true);
     if(!sync)return false;
-    const res=await portalJsonp({acao:'portal_save_config',dados:JSON.stringify(getAdminConfig()),ator:getSession()?.name||'SGQ'},60000,candidate);
+
+    if(apiChanged){
+      // A sessão atual pertence à API antiga. Não tente reutilizar esse token
+      // na API nova; isso sempre resulta em "Sessão inválida ou expirada".
+      nucleoConfirmedApiUrl=candidate;
+
+      try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+      try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}
+      try{nucleoSessionMemory=null}catch(e){}
+      try{nucleoSessionLastRaw=undefined}catch(e){}
+
+      if(st)st.textContent='Nova API salva. Entre novamente para criar uma sessão nesta API.';
+      alert('Nova API salva. Como a sessão atual pertence à API anterior, você será desconectado. Entre novamente no Núcleo para concluir a troca.');
+      location.reload();
+      return true;
+    }
+
+    // Se a API não mudou, a sessão atual continua válida e a confirmação
+    // central pode seguir normalmente.
+    const res=await portalJsonp({
+      acao:'portal_save_config',
+      dados:JSON.stringify(getAdminConfig()),
+      ator:getSession()?.name||'SGQ'
+    },60000,candidate);
+
     if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
+
     nucleoConfirmedApiUrl=candidate;
     if(st)st.textContent='Integração confirmada e salva na base central.';
     await syncPortalBackend(false);
     alert('Integração salva na base central. Todos os dispositivos usarão esta configuração ao atualizar o Núcleo.');
     return true;
+
   }catch(e){
     keys.forEach((key,i)=>before[i]===null?localStorage.removeItem(key):localStorage.setItem(key,before[i]));
     if(st)st.textContent='Alteração não confirmada. A conexão anterior foi mantida.';
@@ -13120,7 +13156,6 @@ async function saveIntegrationSettingsConfirmed(){
     return false;
   }
 }
-
 function saveIntegrationSettings(silent=false){
   if(!requireIntegrationUnlock())return;
 
