@@ -762,7 +762,10 @@ function nucleoPersonPermissions(user){
  if(user.permissions?.version===1)return user.permissions;
  const elevated=['admin','quality'].includes(user.role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
  if(!elevated){
-   if(!modules.documents)modules.documents={view:false,manage:false};
+   if(!modules || typeof modules!=='object')modules={};
+   ['ros','pdca','sac','documents','indicators','announcements','equipment','training','nc','processes'].forEach(k=>{
+     if(!modules[k] || typeof modules[k]!=='object')modules[k]={view:false,manage:false};
+   });
    modules.documents.view=['comercial interno','comercial externo','diretoria','sgq'].includes(normalizeAnswer(user.sector||''));
  }
  return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
