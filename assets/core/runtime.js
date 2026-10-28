@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261027-ro-removal-central-v3';
+window.NUCLEO_BUILD_VERSION = '20261028-ro-removal-central-v4';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -18099,26 +18099,17 @@ async function nucleoRemovalSaveVerified(collection,id,data,verifyFn,timeoutMs=9
   if(!submitted)throw new Error('Não foi possível enviar a alteração para a base central.');
 
   const started=Date.now();
-  let lastStatus='processing';
 
   while(Date.now()-started<timeoutMs){
-    await new Promise(resolve=>setTimeout(resolve,900));
+    await new Promise(resolve=>setTimeout(resolve,800));
 
-    const [statusRes,readRes]=await Promise.all([
-      portalJsonp({acao:'portal_save_status',eventoId},10000).catch(()=>null),
-      portalJsonp({
-        acao:'portal_get_record',
-        colecao:String(collection||''),
-        id:String(id||'')
-      },10000).catch(()=>null)
-    ]);
+    const statusRes=await portalJsonp({
+      acao:'portal_save_status',
+      eventoId
+    },12000).catch(()=>null);
 
-    if(statusRes?.status)lastStatus=String(statusRes.status);
-
-    if(readRes?.sucesso&&readRes.registro){
-      let ok=false;
-      try{ok=verifyFn?!!verifyFn(readRes.registro):true}catch(e){ok=false}
-      if(ok)return {sucesso:true,registro:readRes.registro};
+    if(statusRes?.status==='done'){
+      return {sucesso:true,status:'done',eventoId};
     }
 
     if(statusRes?.status==='error'){
@@ -18126,23 +18117,7 @@ async function nucleoRemovalSaveVerified(collection,id,data,verifyFn,timeoutMs=9
     }
   }
 
-  const finalRead=await portalJsonp({
-    acao:'portal_get_record',
-    colecao:String(collection||''),
-    id:String(id||'')
-  },12000).catch(()=>null);
-
-  if(finalRead?.sucesso&&finalRead.registro){
-    let ok=false;
-    try{ok=verifyFn?!!verifyFn(finalRead.registro):true}catch(e){ok=false}
-    if(ok)return {sucesso:true,registro:finalRead.registro};
-  }
-
-  throw new Error(
-    lastStatus==='processing'
-      ? 'A alteração foi enviada, mas ainda não apareceu na base central.'
-      : 'A base central respondeu, mas não devolveu os campos desta alteração.'
-  );
+  throw new Error('A base central não confirmou o salvamento dentro do tempo esperado.');
 }
 
 async function nucleoPersistTriageRemovalRecord(key,changes,reason,type){
