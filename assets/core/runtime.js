@@ -20437,10 +20437,12 @@ async function syncNow(){
     }
   }catch(err){
     const detail=String(err?.message||err||'Erro não informado');
+    const stack=String(err?.stack||'').split('\n').slice(0,4).join(' | ');
+    const diagnostic=stack?(' · Diagnóstico: '+stack):'';
     nucleoSetCentralSyncState('error','Sincronização não confirmada: '+detail);
-    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+'.';
+    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+diagnostic+'.';
     syncMsg.className='statusline';
-    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err);
+    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err,err?.stack);
   }finally{
     hideNucleoLoading();
     syncNow.inProgress=false;
