@@ -12286,7 +12286,24 @@ function renderSentPdcas(){
   const date=new Date(p.sentAt||p.envio),when=Number.isNaN(date.getTime())?p.envio:date.toLocaleString('pt-BR');
   const claimant=user?personDisplayName(user):(ro?roRegistrantName(ro):'');
   const delivery=nucleoPdcaDelivery(p),confirmed=!!delivery||!!(ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro))?.confirmedAt);
-  const pdfPending=!!(p.pdfPending||p.legacyMissingPdf||p.controlImported);
+  const realPdfOnThisRecord=!!(
+    p.externalPdf===true ||
+    String(p.fileId||p.pdfFileId||p.driveFileId||p.storageFileId||'').trim()
+  );
+  const realPdfOnSibling=data.some(other=>{
+    if(other===p)return false;
+    const sameRo=String(other?.ro||other?.roId||other?.numeroRo||'').trim()===String(p?.ro||p?.roId||p?.numeroRo||'').trim();
+    if(!sameRo)return false;
+    const sameSector=normalizeAnswer(other?.setor||other?.responsibleSector||'')===normalizeAnswer(p?.setor||p?.responsibleSector||'');
+    if(!sameSector)return false;
+    const sameUnit=!explicitRecordUnit(p)||!explicitRecordUnit(other)||explicitRecordUnit(p)===explicitRecordUnit(other);
+    if(!sameUnit)return false;
+    return !!(
+      other?.externalPdf===true ||
+      String(other?.fileId||other?.pdfFileId||other?.driveFileId||other?.storageFileId||'').trim()
+    );
+  });
+  const pdfPending=!!(p.pdfPending||p.legacyMissingPdf||p.controlImported) && !realPdfOnThisRecord && !realPdfOnSibling;
   const detail=pdfPending
     ? (String(p.status||'').toLowerCase().includes('apresent')?'Já apresentado — falta subir o PDF no Núcleo':'Já respondido — falta subir o PDF no Núcleo')
     : delivery?'Encerrada — entregue ao reclamante'
