@@ -1,6 +1,6 @@
 
 // Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261027-ro-removal-manager-v2';
+window.NUCLEO_BUILD_VERSION = '20261027-ro-removal-central-v3';
 (function nucleoBuildConsistencyGuard(){
   try {
     var meta=document.querySelector('meta[name="nucleo-build"]');
@@ -18081,6 +18081,70 @@ function openRoRemovalManager(triageKey){
   setTimeout(()=>document.getElementById('nucleoRoRemovalType')?.focus(),0);
 }
 
+
+async function nucleoRemovalSaveVerified(collection,id,data,verifyFn,timeoutMs=90000){
+  if(!nucleoRequireCentralData('salvar esta alteração'))throw new Error('A base central ainda não confirmou os dados.');
+  if(!portalBackendEnabled())throw new Error('Apps Script não configurado.');
+
+  const eventoId='ROREMOVE-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+  const submitted=portalPostForm({
+    acao:'portal_save',
+    colecao:String(collection||''),
+    id:String(id||''),
+    dados:JSON.stringify(data||{}),
+    ator:getSession()?.name||'SGQ',
+    eventoId
+  });
+
+  if(!submitted)throw new Error('Não foi possível enviar a alteração para a base central.');
+
+  const started=Date.now();
+  let lastStatus='processing';
+
+  while(Date.now()-started<timeoutMs){
+    await new Promise(resolve=>setTimeout(resolve,900));
+
+    const [statusRes,readRes]=await Promise.all([
+      portalJsonp({acao:'portal_save_status',eventoId},10000).catch(()=>null),
+      portalJsonp({
+        acao:'portal_get_record',
+        colecao:String(collection||''),
+        id:String(id||'')
+      },10000).catch(()=>null)
+    ]);
+
+    if(statusRes?.status)lastStatus=String(statusRes.status);
+
+    if(readRes?.sucesso&&readRes.registro){
+      let ok=false;
+      try{ok=verifyFn?!!verifyFn(readRes.registro):true}catch(e){ok=false}
+      if(ok)return {sucesso:true,registro:readRes.registro};
+    }
+
+    if(statusRes?.status==='error'){
+      throw new Error(statusRes.erro||'A base central recusou o salvamento.');
+    }
+  }
+
+  const finalRead=await portalJsonp({
+    acao:'portal_get_record',
+    colecao:String(collection||''),
+    id:String(id||'')
+  },12000).catch(()=>null);
+
+  if(finalRead?.sucesso&&finalRead.registro){
+    let ok=false;
+    try{ok=verifyFn?!!verifyFn(finalRead.registro):true}catch(e){ok=false}
+    if(ok)return {sucesso:true,registro:finalRead.registro};
+  }
+
+  throw new Error(
+    lastStatus==='processing'
+      ? 'A alteração foi enviada, mas ainda não apareceu na base central.'
+      : 'A base central respondeu, mas não devolveu os campos desta alteração.'
+  );
+}
+
 async function nucleoPersistTriageRemovalRecord(key,changes,reason,type){
   const map=getSavedTriageMap();
   const current=map.get(key);
@@ -18088,7 +18152,11 @@ async function nucleoPersistTriageRemovalRecord(key,changes,reason,type){
   const now=new Date().toISOString();
   const actor=getSession()?.name||'SGQ';
   const record={...current,...changes,updatedAt:now,updatedBy:actor,administrativeChange:{type,reason,at:now,by:actor}};
-  await portalBackendSaveConfirmedPost('triage',key,record,90000);
+  await nucleoRemovalSaveVerified('triage',key,record,(saved)=>{
+    const adm=saved?.administrativeChange||{};
+    return String(adm.type||'')===String(type||'') &&
+      String(adm.reason||'').trim()===String(reason||'').trim();
+  },90000);
   map.set(key,record);
   localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
   return record;
@@ -18103,7 +18171,11 @@ async function nucleoUnlinkPdcaFromAssignment(key,reason){
   for(const p of linked){
     if(!p?.id)continue;
     const detached={...p,unlinkedFromRo:ro,unlinkedFromSector:sector,unlinkedAt:now,unlinkedBy:actor,unlinkReason:reason,ro:'',roId:'',numeroRo:'',updatedAt:now};
-    await portalBackendSaveConfirmedPost('pdca_sent',p.id,detached,90000);
+    await nucleoRemovalSaveVerified('pdca_sent',p.id,detached,(saved)=>{
+      return String(saved?.unlinkedFromRo||'').trim()===String(ro||'').trim() &&
+        String(saved?.unlinkReason||'').trim()===String(reason||'').trim() &&
+        !String(saved?.ro||saved?.roId||saved?.numeroRo||'').trim();
+    },90000);
   }
   await nucleoPersistTriageRemovalRecord(key,{
     pdcaExternal:false,pdcaSource:'',pdcaFileId:'',pdcaExternalUpdatedAt:'',pdcaResponded:false,pdcaSent:false,pdcaPresented:false,
@@ -18117,7 +18189,11 @@ async function nucleoRemoveSingleAssignment(key,reason){
   if(!tri)throw new Error('Direcionamento não encontrado.');
   // Salva o motivo antes da exclusão para que a auditoria central registre a causa.
   const annotated={...tri,administrativeRemoval:{type:'assignment',reason,at:new Date().toISOString(),by:getSession()?.name||'SGQ'},updatedAt:new Date().toISOString()};
-  await portalBackendSaveConfirmedPost('triage',key,annotated,90000);
+  await nucleoRemovalSaveVerified('triage',key,annotated,(saved)=>{
+    const adm=saved?.administrativeRemoval||{};
+    return String(adm.type||'')==='assignment' &&
+      String(adm.reason||'').trim()===String(reason||'').trim();
+  },90000);
   await adminCleanupDeleteRecord('triage',key);
   const deleted=getDeletedTriageKeys();
   deleted.add(key);
@@ -18147,7 +18223,12 @@ async function nucleoSetAdministrativeRoDecision(key,decision,reason,extra={}){
       note:reason,updatedAt:now,updatedBy:actor,
       administrativeRemoval:{type:extra.type||decision,reason,duplicateOf:extra.duplicateOf||'',at:now,by:actor}
     };
-    await portalBackendSaveConfirmedPost('triage',recordKey,record,90000);
+    await nucleoRemovalSaveVerified('triage',recordKey,record,(saved)=>{
+      const adm=saved?.administrativeRemoval||{};
+      return String(saved?.decision||'')===String(decision||'') &&
+        String(adm.type||'')===String(extra.type||decision||'') &&
+        String(adm.reason||'').trim()===String(reason||'').trim();
+    },90000);
     map.set(recordKey,record);
   }
   localStorage.setItem(TRIAGE_KEY,JSON.stringify([...map.values()]));
