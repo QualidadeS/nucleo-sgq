@@ -106,13 +106,11 @@ function nucleoPersistedApiUrl(){
 }
 
 function portalApiBase(){
-  // BUILD MODULAR DE TESTE:
-  // 1) usa a URL publicada no build quando existir;
-  // 2) senão, reutiliza a URL /exec já configurada neste navegador.
+  // A URL salva pelo SGQ tem prioridade. A URL publicada no build é fallback.
   return String(
     nucleoConfirmedApiUrl||
-    NUCLEO_DEFAULT_API_URL||
     nucleoPersistedApiUrl()||
+    NUCLEO_DEFAULT_API_URL||
     ''
   ).trim().replace(/\/+$/,'');
 }
@@ -137,7 +135,7 @@ async function nucleoCheckApiUrl(url){
 async function nucleoEnsureApiConfigured(){
   const published=String(NUCLEO_DEFAULT_API_URL||'').trim();
   const persisted=String(nucleoPersistedApiUrl()||'').trim();
-  const current=published||persisted;
+  const current=persisted||published;
 
   if(!current){
     throw new Error(
