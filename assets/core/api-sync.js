@@ -1,4 +1,3 @@
-const NUCLEO_PENDING_API_KEY='nucleo-pending-api-switch-v1';
 /* NÚCLEO CORE: api-sync | V3 TESTE | funções: 37 */
 
 function portalResolveSyncWaiters_(result){
@@ -106,27 +105,14 @@ function nucleoPersistedApiUrl(){
   return valid||'';
 }
 
-
-function nucleoPendingApiSwitch(){
-  try{
-    const p=JSON.parse(localStorage.getItem(NUCLEO_PENDING_API_KEY)||'{}')||{};
-    const url=String(p.apiUrl||'').trim();
-    if(!nucleoValidApiUrl(url))return null;
-    return {
-      apiUrl:url,
-      apiKey:String(p.apiKey||'').trim(),
-      savedAt:String(p.savedAt||'')
-    };
-  }catch(e){return null}
-}
-
 function portalApiBase(){
-  const pending=nucleoPendingApiSwitch();
+  // BUILD MODULAR DE TESTE:
+  // 1) usa a URL publicada no build quando existir;
+  // 2) senão, reutiliza a URL /exec já configurada neste navegador.
   return String(
-    pending?.apiUrl||
     nucleoConfirmedApiUrl||
     NUCLEO_DEFAULT_API_URL||
-    (typeof nucleoPersistedApiUrl==='function'?nucleoPersistedApiUrl():'')||
+    nucleoPersistedApiUrl()||
     ''
   ).trim().replace(/\/+$/,'');
 }

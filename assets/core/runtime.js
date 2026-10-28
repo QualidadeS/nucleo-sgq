@@ -211,7 +211,6 @@ const DOCUMENT_DELIVERIES_KEY='portal-sgq-document-deliveries-v1';
 const RNC_DELETED_TOMBSTONES_KEY='portal-sgq-rnc-deleted-v1';
 const ADMIN_CONFIG_KEY='ro-pdca-admin-config-v1';
 const INTEGRATION_PERSIST_KEY='nucleo-integration-settings-v1';
-const NUCLEO_PENDING_API_KEY='nucleo-pending-api-switch-v1';
 const INTEGRATION_ADMIN_PASSWORD='TI1011';
 let integrationSettingsUnlocked=false;
 
@@ -6129,20 +6128,19 @@ function integrationPeriodLabel(settings){
 }
 
 function getSavedIntegrationSettings(){
+  // Esta leitura é apenas cache da última configuração CENTRAL confirmada.
+  // A URL jamais é escolhida pelo navegador: portalApiBase() é definida pelo bootstrap central/publicado.
   let admin={}, dedicated={};
   try{admin=JSON.parse(localStorage.getItem(ADMIN_CONFIG_KEY)||'{}')||{};}catch(e){admin={};}
   try{dedicated=JSON.parse(localStorage.getItem(INTEGRATION_PERSIST_KEY)||'{}')||{};}catch(e){dedicated={};}
-  const pending=typeof nucleoPendingApiSwitch==='function'?nucleoPendingApiSwitch():null;
-  const savedApiKey=(admin.apiKey!==undefined&&admin.apiKey!==null)?admin.apiKey:dedicated.apiKey;
-  const savedAt=(admin.__savedAt!==undefined&&admin.__savedAt!==null)?admin.__savedAt:dedicated.savedAt;
   return {
-    apiUrl:String((pending&&pending.apiUrl)||portalApiBase()||'').trim(),
-    apiKey:String((pending&&pending.apiKey)||savedApiKey||'').trim(),
+    apiUrl:portalApiBase(),
+    apiKey:String(admin.apiKey??dedicated.apiKey??'').trim(),
     autoSync:String(admin.autoSync??dedicated.autoSync??'0'),
     roSyncPeriod:String(admin.roSyncPeriod??dedicated.roSyncPeriod??'all'),
     roSyncDateFrom:String(admin.roSyncDateFrom??dedicated.roSyncDateFrom??''),
     roSyncDateTo:String(admin.roSyncDateTo??dedicated.roSyncDateTo??''),
-    savedAt:String((pending&&pending.savedAt)||savedAt||'')
+    savedAt:String(admin.__savedAt??dedicated.savedAt??'')
   };
 }
 
@@ -13120,13 +13118,6 @@ async function saveIntegrationSettingsConfirmed(){
     if(!sync)return false;
 
     if(apiChanged){
-      const pendingSwitch={
-        apiUrl:candidate,
-        apiKey:String(document.getElementById('apiKey')?.value||sync.apiKey||'').trim(),
-        savedAt:new Date().toISOString()
-      };
-      localStorage.setItem(NUCLEO_PENDING_API_KEY,JSON.stringify(pendingSwitch));
-
       // A sessão atual pertence à API antiga. Não tente reutilizar esse token
       // na API nova; isso sempre resulta em "Sessão inválida ou expirada".
       nucleoConfirmedApiUrl=candidate;
@@ -13153,7 +13144,6 @@ async function saveIntegrationSettingsConfirmed(){
     if(!res?.sucesso)throw new Error(res?.erro||'A base central não confirmou a integração.');
 
     nucleoConfirmedApiUrl=candidate;
-    try{localStorage.removeItem(NUCLEO_PENDING_API_KEY)}catch(e){}
     if(st)st.textContent='Integração confirmada e salva na base central.';
     await syncPortalBackend(false);
     alert('Integração salva na base central. Todos os dispositivos usarão esta configuração ao atualizar o Núcleo.');
