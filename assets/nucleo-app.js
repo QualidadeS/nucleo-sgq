@@ -211,6 +211,7 @@ const DOCUMENT_DELIVERIES_KEY='portal-sgq-document-deliveries-v1';
 const RNC_DELETED_TOMBSTONES_KEY='portal-sgq-rnc-deleted-v1';
 const ADMIN_CONFIG_KEY='ro-pdca-admin-config-v1';
 const INTEGRATION_PERSIST_KEY='nucleo-integration-settings-v1';
+const NUCLEO_PENDING_API_KEY='nucleo-pending-api-switch-v1';
 const INTEGRATION_ADMIN_PASSWORD='TI1011';
 let integrationSettingsUnlocked=false;
 
@@ -914,12 +915,27 @@ function nucleoPersistedApiUrl(){
     .find(nucleoValidApiUrl);
   return valid||'';
 }
+
+function nucleoPendingApiSwitch(){
+  try{
+    const p=JSON.parse(localStorage.getItem(NUCLEO_PENDING_API_KEY)||'{}')||{};
+    const url=String(p.apiUrl||'').trim();
+    if(!nucleoValidApiUrl(url))return null;
+    return {
+      apiUrl:url,
+      apiKey:String(p.apiKey||'').trim(),
+      savedAt:String(p.savedAt||'')
+    };
+  }catch(e){return null}
+}
+
 function portalApiBase(){
-  // A URL do backend é global para o Núcleo inteiro.
-  // Não depende mais de localStorage, conta, navegador ou computador.
+  const pending=nucleoPendingApiSwitch();
   return String(
+    pending?.apiUrl||
     nucleoConfirmedApiUrl||
     NUCLEO_DEFAULT_API_URL||
+    (typeof nucleoPersistedApiUrl==='function'?nucleoPersistedApiUrl():'')||
     ''
   ).trim().replace(/\/+$/,'');
 }
