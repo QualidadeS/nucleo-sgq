@@ -19927,10 +19927,12 @@ async function syncNow(){
     }
   }catch(err){
     const detail=String(err?.message||err||'Erro não informado');
+    const stack=String(err?.stack||'').split('\n').slice(0,4).join(' | ');
+    const diagnostic=stack?(' · Diagnóstico: '+stack):'';
     nucleoSetCentralSyncState('error','Sincronização não confirmada: '+detail);
-    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+'.';
+    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+diagnostic+'.';
     syncMsg.className='statusline';
-    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err);
+    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err,err?.stack);
   }finally{
     hideNucleoLoading();
     syncNow.inProgress=false;
@@ -20335,8 +20337,11 @@ function nucleoPersonPermissions(user){
  });
 
  if(!elevated && !(savedModules.documents&&typeof savedModules.documents.view==='boolean')){
-   modules.documents.view=['comercial interno','comercial externo','diretoria','sgq']
-     .includes(normalizeAnswer(user.sector||''));
+   modules.documents={
+     ...(modules.documents&&typeof modules.documents==='object'?modules.documents:{}),
+     view:['comercial interno','comercial externo','diretoria','sgq']
+       .includes(normalizeAnswer(user.sector||''))
+   };
  }
 
  return {
