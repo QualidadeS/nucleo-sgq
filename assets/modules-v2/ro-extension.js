@@ -1,9 +1,9 @@
-/* NÚCLEO | Estender R.O. para novos setores | v2
+/* NÚCLEO | Estender R.O. para novos setores | v3
    Uma nova atribuição por setor, justificativa individual e e-mail explícito.
 */
 (function(){
-  if(window.__nucleoRoExtensionV2)return;
-  window.__nucleoRoExtensionV2=true;
+  if(window.__nucleoRoExtensionV3)return;
+  window.__nucleoRoExtensionV3=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -171,7 +171,7 @@
 
           <div style="margin-top:14px;padding:12px 14px;border-radius:12px;background:#f0f7ff;border:1px solid #d7e8fb">
             <b style="font-size:13px">Envio automático</b>
-            <div class="small" style="margin-top:4px">Ao confirmar, o Núcleo envia a R.O. por e-mail para os destinatários cadastrados de cada setor e cria também a notificação interna.</div>
+            <div class="small" style="margin-top:4px">Ao confirmar, o Núcleo cria as novas atribuições e encaminha o envio de e-mail para os destinatários cadastrados de cada setor. A confirmação do e-mail pode aparecer depois no histórico.</div>
           </div>
 
           <p id="nucleoRoExtensionStatus" class="small" role="status" style="min-height:18px;margin:12px 0 0"></p>
@@ -282,8 +282,8 @@
         created++;
 
         try{
-          status.textContent=`Enviando e-mail para ${sector} (${pos+1}/${selected.length})…`;
-          const emailResult=await portalJsonp({
+          status.textContent=`Encaminhando e-mail para ${sector} (${pos+1}/${selected.length})…`;
+          const emailSubmitted=portalPostForm({
             acao:'portal_send_directed_ro_email',
             ro:ctx.roNumber,
             setor:sector,
@@ -296,10 +296,12 @@
               'A '+ctx.roNumber+' foi estendida para '+sector+'. '+
               'Motivo do direcionamento: '+reason+'. '+
               'É necessário analisar a ocorrência e responder o PDCA.'
-          },45000);
-          emailsSent+=(emailResult?.enviados||[]).length;
-          if(!emailResult?.sucesso){
-            emailErrors.push(sector+': '+(emailResult?.erro||(emailResult?.erros||[]).join(' | ')||'erro não informado'));
+          });
+
+          if(emailSubmitted){
+            emailsSent++;
+          }else{
+            emailErrors.push(sector+': não foi possível encaminhar o envio ao Apps Script');
           }
         }catch(emailErr){
           emailErrors.push(sector+': '+String(emailErr?.message||emailErr));
@@ -349,12 +351,12 @@
 
       const parts=[];
       parts.push(created+' nova'+(created===1?' atribuição criada':'s atribuições criadas'));
-      if(emailsSent)parts.push(emailsSent+' e-mail'+(emailsSent===1?' enviado':'s enviados'));
+      if(emailsSent)parts.push(emailsSent+' envio'+(emailsSent===1?' de e-mail encaminhado':'s de e-mail encaminhados'));
       if(skipped.length)parts.push(skipped.length+' setor'+(skipped.length===1?' já estava vinculado':'es já estavam vinculados'));
-      if(emailErrors.length)parts.push('falha de e-mail: '+emailErrors.join(' | '));
+      if(emailErrors.length)parts.push('atenção no e-mail: '+emailErrors.join(' | '));
       status.textContent=parts.join(' · ')+'.';
 
-      if(created&&!emailErrors.length)setTimeout(nucleoCloseRoExtension,1200);
+      if(created)setTimeout(nucleoCloseRoExtension,1400);
       else button.disabled=false;
     }catch(e){
       console.error('[NÚCLEO EXTENDER R.O.]',e);
