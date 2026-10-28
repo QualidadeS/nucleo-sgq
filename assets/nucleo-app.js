@@ -20313,16 +20313,43 @@ async function nucleoSyncAfterLogin(token){
 }
 
 function nucleoPersonPermissions(user){
- if(user.permissions?.version===1)return user.permissions;
- const elevated=['admin','quality'].includes(user.role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
- if(!elevated){
-   if(!modules || typeof modules!=='object')modules={};
-   ['ros','pdca','sac','documents','indicators','announcements','equipment','training','nc','processes'].forEach(k=>{
-     if(!modules[k] || typeof modules[k]!=='object')modules[k]={view:false,manage:false};
-   });
-   modules.documents.view=['comercial interno','comercial externo','diretoria','sgq'].includes(normalizeAnswer(user.sector||''));
+ user=user||{};
+ const elevated=['admin','quality'].includes(user.role);
+ const moduleKeys=[...new Set([
+   ...Object.keys(typeof NUCLEO_PERSON_MODULES==='object'&&NUCLEO_PERSON_MODULES?NUCLEO_PERSON_MODULES:{}),
+   'ros','pdca','sac','documents','indicators','announcements','equipment','training','nc','processes'
+ ])];
+
+ const saved=(user.permissions&&typeof user.permissions==='object')?user.permissions:{};
+ const savedModules=(saved.modules&&typeof saved.modules==='object')?saved.modules:{};
+ const modules={};
+
+ moduleKeys.forEach(k=>{
+   const existing=(savedModules[k]&&typeof savedModules[k]==='object')?savedModules[k]:{};
+   const defaultView=elevated||['ros','pdca','sac'].includes(k);
+   modules[k]={
+     ...existing,
+     view:typeof existing.view==='boolean'?existing.view:defaultView,
+     manage:typeof existing.manage==='boolean'?existing.manage:elevated
+   };
+ });
+
+ if(!elevated && !(savedModules.documents&&typeof savedModules.documents.view==='boolean')){
+   modules.documents.view=['comercial interno','comercial externo','diretoria','sgq']
+     .includes(normalizeAnswer(user.sector||''));
  }
- return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
+
+ return {
+   ...saved,
+   version:1,
+   modules,
+   registerRo:typeof saved.registerRo==='boolean'?saved.registerRo:user.role!=='admin',
+   registerExternal:typeof saved.registerExternal==='boolean'
+     ? saved.registerExternal
+     : user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq']
+       .includes(normalizeAnswer(user.sector||'')),
+   sgq:typeof saved.sgq==='boolean'?saved.sgq:user.role==='admin'
+ };
 }
 function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
 function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
