@@ -781,8 +781,11 @@ function nucleoPersonPermissions(user){
  });
 
  if(!elevated && !(savedModules.documents&&typeof savedModules.documents.view==='boolean')){
-   modules.documents.view=['comercial interno','comercial externo','diretoria','sgq']
-     .includes(normalizeAnswer(user.sector||''));
+   modules.documents={
+     ...(modules.documents&&typeof modules.documents==='object'?modules.documents:{}),
+     view:['comercial interno','comercial externo','diretoria','sgq']
+       .includes(normalizeAnswer(user.sector||''))
+   };
  }
 
  return {
