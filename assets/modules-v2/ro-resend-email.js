@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v8 | mostrar apenas erros */
+/* NÚCLEO | Reenviar e-mail | v10 | ações fixas */
 (function(){
-  if(window.__nucleoRoResendEmailV8)return;
-  window.__nucleoRoResendEmailV8=true;
+  if(window.__nucleoRoResendEmailV10)return;
+  window.__nucleoRoResendEmailV10=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -509,17 +509,37 @@
   };
 
   function findActionWrap(tr){
-    const wrap=tr.querySelector('.ro-row-actions')||tr.querySelector('.ro-eye-cell');
-    if(wrap){
-      wrap.style.display='flex';
-      wrap.style.alignItems='center';
-      wrap.style.justifyContent='center';
-      wrap.style.gap='7px';
-      wrap.style.flexWrap='nowrap';
-      wrap.style.whiteSpace='nowrap';
-      wrap.style.minWidth='max-content';
+    const cell=tr.querySelector('.ro-eye-cell');
+    if(!cell)return null;
+
+    let stack=cell.querySelector('.nucleo-actions-stack');
+    if(!stack){
+      stack=document.createElement('div');
+      stack.className='nucleo-actions-stack';
+
+      const icons=document.createElement('div');
+      icons.className='nucleo-icons-row';
+
+      const oldWrap=cell.querySelector('.ro-row-actions');
+      if(oldWrap){
+        [...oldWrap.children].forEach(el=>icons.appendChild(el));
+        oldWrap.remove();
+      }else{
+        [...cell.querySelectorAll(':scope > button.ro-eye-btn')].forEach(el=>icons.appendChild(el));
+      }
+
+      stack.appendChild(icons);
+      cell.appendChild(stack);
     }
-    return wrap;
+
+    let icons=stack.querySelector('.nucleo-icons-row');
+    if(!icons){
+      icons=document.createElement('div');
+      icons.className='nucleo-icons-row';
+      stack.appendChild(icons);
+    }
+
+    return icons;
   }
 
   function ensureResendButton(tr,ro,sector){
