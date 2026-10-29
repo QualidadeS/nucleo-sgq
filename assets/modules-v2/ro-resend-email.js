@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail + status do envio | v6 | ações alinhadas */
+/* NÚCLEO | Reenviar e-mail | v8 | mostrar apenas erros */
 (function(){
-  if(window.__nucleoRoResendEmailV6)return;
-  window.__nucleoRoResendEmailV6=true;
+  if(window.__nucleoRoResendEmailV8)return;
+  window.__nucleoRoResendEmailV8=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -207,6 +207,67 @@
     };
   }
 
+  function sectorUsersForRo(sector,ro){
+    const wanted=String(sector||'').trim();
+    if(!wanted)return [];
+    const unit=String(
+      (typeof explicitRecordUnit==='function'?explicitRecordUnit(ro):'')||
+      ro?.unidade||''
+    );
+    try{
+      return usersList()
+        .filter(u=>u && String(u.email||'').trim())
+        .filter(u=>{
+          try{
+            if(typeof userHasUnitSector==='function'){
+              return userHasUnitSector(
+                u,
+                typeof normalizePortalUnit==='function'?normalizePortalUnit(unit):unit,
+                wanted
+              );
+            }
+          }catch(e){}
+          const direct=norm(u?.sector||'')===norm(wanted);
+          const membership=(u?.sectorMemberships||[]).some(m=>
+            norm(m?.sector||'')===norm(wanted) &&
+            (!unit || norm(m?.unit||'')===norm(unit))
+          );
+          return direct||membership;
+        })
+        .sort((a,b)=>String(a?.name||'').localeCompare(String(b?.name||''),'pt-BR'));
+    }catch(e){
+      return [];
+    }
+  }
+
+  function sectorRecipientOptionsHtml(sector,ro,currentEmail=''){
+    const users=sectorUsersForRo(sector,ro);
+    const seen=new Set();
+    const opts=[];
+
+    const current=String(currentEmail||'').trim().toLowerCase();
+    if(current){
+      seen.add(current);
+      opts.push(
+        `<option value="${esc(current)}">${esc(current)}${users.some(u=>String(u?.email||'').trim().toLowerCase()===current)?'':''}</option>`
+      );
+    }
+
+    users.forEach(u=>{
+      const email=String(u?.email||'').trim().toLowerCase();
+      if(!email||seen.has(email))return;
+      seen.add(email);
+      const name=String(u?.name||'').trim();
+      opts.push(`<option value="${esc(email)}">${esc(name?name+' · '+email:email)}</option>`);
+    });
+
+    if(!opts.length){
+      return '<option value="">Nenhum e-mail cadastrado para este setor</option>';
+    }
+
+    return '<option value="">Escolha um destinatário cadastrado</option>'+opts.join('');
+  }
+
   let ctx=null;
 
   window.nucleoCloseRoResendEmail=function(){
@@ -279,11 +340,21 @@
           </div>`:''}
 
           <div style="margin-top:14px">
+            <label for="nucleoRoResendSectorRecipient" style="display:block">
+              <div style="font-size:13px;font-weight:800;margin-bottom:6px">Destinatários cadastrados em ${esc(responsibleSector||'este setor')}</div>
+              <select id="nucleoRoResendSectorRecipient" style="width:100%;box-sizing:border-box">
+                ${sectorRecipientOptionsHtml(responsibleSector,ro,email)}
+              </select>
+              <div class="small" style="margin-top:6px">Ao escolher uma pessoa, o e-mail abaixo é preenchido automaticamente.</div>
+            </label>
+          </div>
+
+          <div style="margin-top:12px">
             <label for="nucleoRoResendEmailRecipient" style="display:block">
               <div style="font-size:13px;font-weight:800;margin-bottom:6px">E-mail para reenvio</div>
               <input id="nucleoRoResendEmailRecipient" type="email" autocomplete="off"
                 value="${esc(email||'')}" placeholder="nome@setaembalagens.com.br" style="width:100%;box-sizing:border-box">
-              <div class="small" style="margin-top:6px">Você pode alterar o destinatário somente para este reenvio.</div>
+              <div class="small" style="margin-top:6px">Você ainda pode digitar outro endereço manualmente; isso vale somente para este reenvio.</div>
             </label>
           </div>
 
@@ -309,7 +380,23 @@
     document.body.appendChild(ov);
 
     const recipient=document.getElementById('nucleoRoResendEmailRecipient');
+    const sectorPicker=document.getElementById('nucleoRoResendSectorRecipient');
     const changedNotice=document.getElementById('nucleoRoResendChangedNotice');
+
+    if(sectorPicker){
+      if(email && [...sectorPicker.options].some(o=>String(o.value||'').toLowerCase()===String(email||'').toLowerCase())){
+        sectorPicker.value=String(email||'').toLowerCase();
+      }
+      sectorPicker.addEventListener('change',()=>{
+        const selected=String(sectorPicker.value||'').trim();
+        if(selected && recipient){
+          recipient.value=selected;
+          recipient.dispatchEvent(new Event('input',{bubbles:true}));
+          recipient.focus();
+        }
+      });
+    }
+
     if(recipient){
       const original=String(ctx.email||'').trim().toLowerCase();
       const refreshChanged=()=>{
@@ -323,25 +410,35 @@
     }
   };
 
-  window.nucleoConfirmRoResendEmail=function(button){
+  window.nucleoConfirmRoResendEmail=async function(button){
     if(!ctx)return;
+
     const status=document.getElementById('nucleoRoResendEmailStatus');
     const recipientInput=document.getElementById('nucleoRoResendEmailRecipient');
+    const sectorPicker=document.getElementById('nucleoRoResendSectorRecipient');
     const recipient=String(recipientInput?.value||'').trim().toLowerCase();
+
     if(!status)return;
 
     if(!recipient){
       status.textContent='Informe o e-mail que deve receber este reenvio.';
-      recipientInput?.focus();return;
+      status.style.color='#b42318';
+      recipientInput?.focus();
+      return;
     }
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)){
       status.textContent='Informe um e-mail válido.';
-      recipientInput?.focus();return;
+      status.style.color='#b42318';
+      recipientInput?.focus();
+      return;
     }
 
     button.disabled=true;
     if(recipientInput)recipientInput.disabled=true;
-    status.textContent='Encaminhando o reenvio ao Apps Script…';
+    if(sectorPicker)sectorPicker.disabled=true;
+
+    status.style.color='';
+    status.textContent='Enviando e aguardando confirmação do Apps Script…';
 
     try{
       const msgParts=['A '+ctx.roNumber+' está sendo reenviada'];
@@ -351,30 +448,63 @@
       if(ctx.deadline)msgParts.push('Prazo informado na atribuição: '+ctx.deadline+'.');
       msgParts.push('Este é um reenvio da atribuição já existente no Núcleo.');
 
-      const submitted=portalPostForm({
+      const assignment={
+        sector:(norm(ctx.sector)==='nao direcionado'?'':ctx.sector),
+        email:recipient,
+        reason:msgParts.join(' ')
+      };
+
+      const result=await portalJsonp({
         acao:'portal_send_directed_ro_email',
         ro:ctx.roNumber,
-        setor:(norm(ctx.sector)==='nao direcionado'?'':ctx.sector),
+        setor:assignment.sector,
         email:recipient,
         unidade:ctx.ro?.unidade||'',
         tipoRO:ctx.ro?.tipoRO||ctx.ro?.tipo||'',
         cliente:ctx.ro?.cliente||'',
         registrante:ctx.ro?.registrante||'',
-        mensagem:msgParts.join(' ')
-      });
-      if(!submitted)throw new Error('Não foi possível encaminhar o e-mail ao Apps Script.');
+        mensagem:assignment.reason,
+        assignments:JSON.stringify([assignment])
+      },90000);
 
-      status.textContent='Reenvio encaminhado para '+recipient+'.';
+      if(!result?.sucesso && !Array.isArray(result?.results)){
+        throw new Error(result?.erro||'O Apps Script não confirmou o envio.');
+      }
+
+      const rows=Array.isArray(result?.results)?result.results:[];
+      const confirmed=rows.length?rows.find(r=>r?.sucesso):null;
+      const failed=rows.find(r=>!r?.sucesso);
+
+      if(failed && !confirmed){
+        throw new Error(failed?.erro||failed?.error||'O envio foi recusado pelo Apps Script.');
+      }
+
+      if(rows.length && !confirmed){
+        throw new Error('O Apps Script respondeu, mas nenhum envio foi confirmado.');
+      }
+
+      status.style.color='#087443';
+      status.textContent='✓ E-mail enviado com sucesso para '+recipient+'.';
+
       historyLoadedAt=0;
-      setTimeout(async()=>{
-        await loadHistory(true);
-        await updateAssignedEmailMarkers();
-      },1800);
-      setTimeout(nucleoCloseRoResendEmail,1400);
+      await loadHistory(true);
+      await updateAssignedEmailMarkers();
+
+      // Deixa a confirmação visível por um momento.
+      setTimeout(nucleoCloseRoResendEmail,2200);
+
     }catch(e){
-      status.textContent='Não foi possível reenviar: '+String(e?.message||e);
+      status.style.color='#b42318';
+      status.textContent='✕ Erro ao enviar: '+String(e?.message||e);
       button.disabled=false;
       if(recipientInput)recipientInput.disabled=false;
+      if(sectorPicker)sectorPicker.disabled=false;
+
+      historyLoadedAt=0;
+      try{
+        await loadHistory(true);
+        await updateAssignedEmailMarkers();
+      }catch(_){}
     }
   };
 
@@ -414,29 +544,62 @@
     };
   }
 
-  function ensureStatusBadge(tr,status){
+  function ensureStatusBadge(tr,status,events){
     const sectorCell=tr.children[2];
     if(!sectorCell)return;
+
     let badge=sectorCell.querySelector('[data-ro-email-status]');
+
+    // Lista limpa: só mostra marcação quando houver ERRO.
+    if(status.code!=='error'){
+      if(badge)badge.remove();
+      return;
+    }
+
     if(!badge){
-      badge=document.createElement('span');
+      badge=document.createElement('button');
+      badge.type='button';
       badge.dataset.roEmailStatus='1';
-      badge.style.cssText='display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;vertical-align:middle;white-space:nowrap';
+      badge.style.cssText='display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;vertical-align:middle;white-space:nowrap;cursor:pointer;background:#fff0f0;color:#b42318;border:1px solid #fecdca';
       sectorCell.appendChild(badge);
     }
-    const styles={
-      sent:['#ecfdf3','#087443','#abefc6','✉ Enviado'],
-      error:['#fff0f0','#b42318','#fecdca','✉ Erro'],
-      queued:['#fff8e6','#8a5a00','#f0d58a','✉ Pendente'],
-      none:['#f2f4f7','#667085','#d0d5dd','✉ Sem registro'],
-      other:['#f2f4f7','#475467','#d0d5dd','✉ '+status.label]
+
+    badge.textContent='✉ Erro';
+
+    const failed=(events||[])
+      .filter(x=>String(x?.status||'').toLowerCase()==='error')
+      .sort((a,b)=>eventTime(b)-eventTime(a));
+
+    const last=failed[0]||{};
+    const recipient=String(last?.email||last?.recipient||last?.destinatario||'').trim();
+    const when=String(last?.sentAt||last?.at||last?.createdAt||'').trim();
+    const error=String(last?.erro||last?.error||last?.message||last?.mensagem||'Erro não detalhado pelo servidor.').trim();
+
+    badge.title='Clique para ver o erro do último envio.';
+    badge.onclick=function(e){
+      e.stopPropagation();
+
+      const parts=[
+        'Erro no envio de e-mail'
+      ];
+
+      if(recipient)parts.push('Destino: '+recipient);
+      if(when){
+        let formatted=when;
+        try{
+          if(typeof formatDateTimeBR==='function')formatted=formatDateTimeBR(when)||when;
+        }catch(_){}
+        parts.push('Data: '+formatted);
+      }
+
+      parts.push('Motivo: '+error);
+
+      if(failed.length>1){
+        parts.push('Falhas registradas para esta atribuição: '+failed.length);
+      }
+
+      alert(parts.join('\n'));
     };
-    const st=styles[status.code]||styles.other;
-    badge.style.background=st[0];
-    badge.style.color=st[1];
-    badge.style.border='1px solid '+st[2];
-    badge.textContent=st[3];
-    badge.title=status.title||'';
   }
 
   async function updateAssignedEmailMarkers(){
@@ -454,7 +617,7 @@
         if(!ro)return;
         ensureResendButton(tr,ro,sector);
         const events=relevantHistory(history,ro,sector,roObj);
-        ensureStatusBadge(tr,statusFromEvents(events));
+        ensureStatusBadge(tr,statusFromEvents(events),events);
       });
     }catch(e){
       console.warn('[NÚCLEO EMAIL STATUS] Falha ao marcar R.O.s atribuídas.',e);
