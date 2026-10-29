@@ -3,7 +3,7 @@
 <html lang="pt-BR"><head>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta name="nucleo-build" content="20261029-ro-email-column-v12">
+<meta name="nucleo-build" content="20261029-assigned-stable-v13">
 <meta http-equiv="Expires" content="0"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Núcleo SGQ</title><style>
 :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#244f86;--blue2:#173b67;--soft:#edf4fb;--danger:#b42318;--warn:#b54708;--ok:#087443}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}header h1{font-size:19px;margin:0}.head-actions{display:flex;gap:8px;align-items:center}.user{font-size:12px;opacity:.9}main{max-width:1180px;margin:22px auto;padding:0 18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,24,40,.05);padding:18px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}input,select,textarea{width:100%;border:1px solid #cfd5df;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolbar input{flex:1;min-width:240px}.toolbar select{width:auto}table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{font-size:12px;color:var(--muted);text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--soft);color:var(--blue2)}.badge.warn{background:#fff4e5;color:var(--warn)}.badge.off{background:#f2f4f7;color:#475467}.badge.danger{background:#fee4e2;color:var(--danger)}.badge.ok{background:#ecfdf3;color:var(--ok)}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef2f6;color:#344054}.danger{background:#fff1f0;color:var(--danger);border:1px solid #fecdca}.btn:disabled{opacity:.45}.iconbtn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.value{font-weight:600}.back{background:none;border:0;color:var(--blue);font-weight:700;cursor:pointer;padding:0;margin-bottom:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;margin-top:14px;font-size:14px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}.section-title{margin:0 0 10px;font-size:18px}.stage-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.stage-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:700}.stage-tab.active{background:var(--blue);color:white;border-color:var(--blue)}.question{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}.question h4{margin:0 0 5px;font-size:15px}.question p{margin:0 0 10px;color:var(--muted);font-size:13px}textarea{min-height:78px;resize:vertical}.meta-box{background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:13px;margin:14px 0}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.settings-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px}.settings-block h3{margin:0 0 5px;font-size:16px}.help{font-size:12px;color:var(--muted);margin:0 0 12px}.statusline{font-size:13px;margin:10px 0;padding:10px 12px;border-radius:10px;background:#f8fafc}.okline{background:#ecfdf3;color:#087443}.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal-box{width:min(620px,100%);background:#fff;border-radius:16px;padding:20px}.modal-box h3{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .settings-side-tab{
@@ -2803,49 +2803,50 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 </style>
 
 
-<style id="nucleoAssignedPdcaColumnV11">
-#roListView table{
-  table-layout:fixed;
+
+<style id="nucleoAssignedStableColumnsV13">
+#roListView .ro-control-table{
   width:100%;
+  table-layout:fixed;
 }
-#roListView th:nth-last-child(2),
-#roListView td.nucleo-pdca-cell{
-  width:150px;
-  min-width:150px;
-  text-align:center;
+#roListView .ro-control-table th,
+#roListView .ro-control-table td{
   vertical-align:middle;
 }
-#roListView th:last-child,
+#roListView .ro-control-table th:nth-child(1){width:95px}
+#roListView .ro-control-table th:nth-child(2){width:150px}
+#roListView .ro-control-table th:nth-child(3){width:160px}
+#roListView .ro-control-table th:nth-child(4){width:100px}
+#roListView .ro-control-table th:nth-child(5){width:100px}
+#roListView .ro-control-table th:nth-child(6){width:110px}
+#roListView .ro-control-table th:nth-child(7){width:125px}
+#roListView .ro-control-table th:nth-child(8){width:115px}
+#roListView .ro-control-table th:nth-child(9){width:165px}
+#roListView td.nucleo-pdca-cell,
+#roListView td.nucleo-email-cell,
 #roListView td.ro-eye-cell{
-  width:170px;
-  min-width:170px;
   text-align:center;
-  vertical-align:middle;
+  white-space:nowrap;
 }
-#roListView td.nucleo-pdca-cell .pdca-source-control,
-#roListView td.nucleo-pdca-cell > span,
-#roListView td.nucleo-pdca-cell > div{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  flex-wrap:nowrap;
+#roListView td.nucleo-pdca-cell{
+  width:125px;
 }
-#roListView td.ro-eye-cell .nucleo-icons-row{
-  justify-content:center!important;
-}
-</style>
-
-
-<style id="nucleoAssignedEmailColumnV12">
-#roListView th[data-nucleo-email-header],
 #roListView td.nucleo-email-cell{
-  width:110px;
-  min-width:110px;
-  text-align:center;
-  vertical-align:middle;
+  width:115px;
 }
-#roListView td.nucleo-email-cell .nucleo-email-state{
+#roListView td.ro-eye-cell{
+  width:165px;
+}
+#roListView .ro-row-actions,
+#roListView .nucleo-icons-row{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap!important;
+}
+#roListView .nucleo-email-state{
   display:inline-flex;
   align-items:center;
   justify-content:center;
@@ -2855,22 +2856,46 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   font-size:10px;
   font-weight:800;
   white-space:nowrap;
-}
-#roListView td.nucleo-email-cell .nucleo-email-state.sent{
-  background:#ecfdf3;
-  color:#087443;
-  border:1px solid #abefc6;
-}
-#roListView td.nucleo-email-cell .nucleo-email-state.none{
+  border:1px solid #d0d5dd;
   background:#f2f4f7;
   color:#667085;
-  border:1px solid #d0d5dd;
 }
-#roListView td.nucleo-email-cell .nucleo-email-state.error{
+#roListView .nucleo-email-state.sent{
+  background:#ecfdf3;
+  color:#087443;
+  border-color:#abefc6;
+}
+#roListView .nucleo-email-state.error{
   background:#fff0f0;
   color:#b42318;
-  border:1px solid #fecdca;
+  border-color:#fecdca;
   cursor:pointer;
+}
+#nucleoAssignedQuotaBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:7px 10px;
+  border-radius:10px;
+  border:1px solid #d0d5dd;
+  background:#f8fafc;
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+}
+#nucleoAssignedQuotaBadge.low{
+  background:#fff8e6;
+  color:#8a5a00;
+  border-color:#f0d58a;
+}
+#nucleoAssignedQuotaBadge.zero{
+  background:#fff0f0;
+  color:#b42318;
+  border-color:#fecdca;
+}
+@media(max-width:1200px){
+  #roListView .ro-control-table{min-width:1180px}
+  #roListView .ro-control-table-wrap{overflow-x:auto}
 }
 </style>
 
@@ -3094,7 +3119,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <h2 style="margin:4px 0 0">R.O.s atribuídas</h2>
       <p class="small" style="margin:6px 0 0">Consulte as ocorrências disponíveis para sua atuação.</p>
     </div>
-    <button class="btn secondary" type="button" onclick="nucleoOpenAssignedExcelExport()">Exportar Excel</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="nucleoAssignedQuotaBadge">✉ E-mail hoje: —</span><button class="btn secondary" type="button" onclick="nucleoOpenAssignedExcelExport()">Exportar Excel</button></div>
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
   <div id="assignedLifecycleTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px">
@@ -3108,7 +3133,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
     <select id="filter" onchange="render()"><option value="todas">Todas as situações</option><option value="precisa_resposta">Precisa de resposta</option><option value="ja_respondeu">Já tem resposta</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
   </div>
-  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th aria-label="Visualizar R.O."></th><th class="operational-action-col">AÇÕES</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th>PDCA</th><th>E-mail</th><th>Ações</th><th class="operational-action-col">Ações operacionais</th></tr></thead><tbody id="rows"></tbody></table></div>
   <div id="roListMore" class="small" style="margin-top:12px;text-align:center"></div>
 </section>
 
@@ -5738,6 +5763,5 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/ro-resend-email.js?v=20261029-ro-resend-email-v8-errors-only"></script>
 <script src="assets/modules-v2/email-quota-panel.js?v=20261029-email-quota-v1"></script>
 <script src="assets/modules-v2/assigned-actions-layout.js?v=20261029-v10"></script>
-<script src="assets/modules-v2/assigned-pdca-column.js?v=20261029-v11"></script>
-<script src="assets/modules-v2/assigned-email-column.js?v=20261029-v12"></script>
+<script src="assets/modules-v2/assigned-table-stable-v13.js?v=20261029-v13"></script>
 </body></html>
