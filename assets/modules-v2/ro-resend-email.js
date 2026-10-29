@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail + status do envio | v5 */
+/* NÚCLEO | Reenviar e-mail + status do envio | v6 | ações alinhadas */
 (function(){
-  if(window.__nucleoRoResendEmailV5)return;
-  window.__nucleoRoResendEmailV5=true;
+  if(window.__nucleoRoResendEmailV6)return;
+  window.__nucleoRoResendEmailV6=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -379,7 +379,17 @@
   };
 
   function findActionWrap(tr){
-    return tr.querySelector('.ro-row-actions')||tr.querySelector('.ro-eye-cell');
+    const wrap=tr.querySelector('.ro-row-actions')||tr.querySelector('.ro-eye-cell');
+    if(wrap){
+      wrap.style.display='flex';
+      wrap.style.alignItems='center';
+      wrap.style.justifyContent='center';
+      wrap.style.gap='7px';
+      wrap.style.flexWrap='nowrap';
+      wrap.style.whiteSpace='nowrap';
+      wrap.style.minWidth='max-content';
+    }
+    return wrap;
   }
 
   function ensureResendButton(tr,ro,sector){
@@ -392,6 +402,8 @@
       btn.className='ro-eye-btn';
       btn.dataset.roResendEmail='1';
       btn.textContent='✉';
+      btn.style.flex='0 0 auto';
+      btn.style.margin='0';
       wrap.appendChild(btn);
     }
     btn.title='Reenviar e-mail da atribuição';
