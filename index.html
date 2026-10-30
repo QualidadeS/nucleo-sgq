@@ -3,7 +3,7 @@
 <html lang="pt-BR"><head>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta name="nucleo-build" content="20261030-assigned-maintenance-v1">
+<meta name="nucleo-build" content="20261030-maintenance-ro-training-processes-v1">
 <meta http-equiv="Expires" content="0"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Núcleo SGQ</title><style>
 :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#244f86;--blue2:#173b67;--soft:#edf4fb;--danger:#b42318;--warn:#b54708;--ok:#087443}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}header h1{font-size:19px;margin:0}.head-actions{display:flex;gap:8px;align-items:center}.user{font-size:12px;opacity:.9}main{max-width:1180px;margin:22px auto;padding:0 18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,24,40,.05);padding:18px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}input,select,textarea{width:100%;border:1px solid #cfd5df;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolbar input{flex:1;min-width:240px}.toolbar select{width:auto}table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{font-size:12px;color:var(--muted);text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--soft);color:var(--blue2)}.badge.warn{background:#fff4e5;color:var(--warn)}.badge.off{background:#f2f4f7;color:#475467}.badge.danger{background:#fee4e2;color:var(--danger)}.badge.ok{background:#ecfdf3;color:var(--ok)}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef2f6;color:#344054}.danger{background:#fff1f0;color:var(--danger);border:1px solid #fecdca}.btn:disabled{opacity:.45}.iconbtn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.value{font-weight:600}.back{background:none;border:0;color:var(--blue);font-weight:700;cursor:pointer;padding:0;margin-bottom:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;margin-top:14px;font-size:14px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}.section-title{margin:0 0 10px;font-size:18px}.stage-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.stage-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:700}.stage-tab.active{background:var(--blue);color:white;border-color:var(--blue)}.question{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}.question h4{margin:0 0 5px;font-size:15px}.question p{margin:0 0 10px;color:var(--muted);font-size:13px}textarea{min-height:78px;resize:vertical}.meta-box{background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:13px;margin:14px 0}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.settings-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px}.settings-block h3{margin:0 0 5px;font-size:16px}.help{font-size:12px;color:var(--muted);margin:0 0 12px}.statusline{font-size:13px;margin:10px 0;padding:10px 12px;border-radius:10px;background:#f8fafc}.okline{background:#ecfdf3;color:#087443}.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal-box{width:min(620px,100%);background:#fff;border-radius:16px;padding:20px}.modal-box h3{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .settings-side-tab{
@@ -3092,6 +3092,23 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   </div>
 </section>
 
+
+<section id="moduleMaintenanceView" class="card hidden" style="min-height:420px">
+  <div style="min-height:380px;display:flex;align-items:center;justify-content:center;padding:30px">
+    <div style="max-width:620px;text-align:center">
+      <div style="width:54px;height:54px;margin:0 auto 16px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#eef6ff;border:1px solid #cfe3f8;font-size:26px">🛠</div>
+      <div id="moduleMaintenanceEyebrow" class="overview-eyebrow">Módulo</div>
+      <h2 style="margin:8px 0 10px">Página em manutenção</h2>
+      <p style="margin:0;color:#667085;line-height:1.6">
+        Este módulo está passando por ajustes e ficará temporariamente indisponível.
+      </p>
+      <p class="small" style="margin:10px 0 0">
+        Os demais módulos do Núcleo continuam disponíveis normalmente.
+      </p>
+    </div>
+  </div>
+</section>
+
 <section id="audit5sView" class="card hidden" style="padding:0;overflow:hidden">
   <div style="padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <div>
@@ -5713,6 +5730,81 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
 <script src="assets/nucleo-app.js?v=20261028-login-view-fix-v5"></script>
+
+<script id="nucleoModuleMaintenanceGuardV1">
+(function(){
+  const MODULE_MAINTENANCE = {
+    training: 'Treinamentos e competências',
+    processes: 'Gestão de processos'
+  };
+
+  const TEST_USERS = [
+    'gabrielly.silva@setaembalagens.com.br'
+  ];
+
+  function currentEmail(){
+    try{
+      return String((typeof getSession==='function' ? getSession()?.email : '') || '')
+        .trim()
+        .toLowerCase();
+    }catch(e){
+      return '';
+    }
+  }
+
+  function isTestUser(){
+    return TEST_USERS.includes(currentEmail());
+  }
+
+  function openMaintenance(moduleKey){
+    const label = MODULE_MAINTENANCE[moduleKey] || 'Módulo';
+    const eyebrow = document.getElementById('moduleMaintenanceEyebrow');
+    if(eyebrow)eyebrow.textContent = label;
+
+    if(typeof view==='function')view('moduleMaintenanceView');
+
+    try{
+      document.querySelectorAll('.side-item.active').forEach(el=>el.classList.remove('active'));
+      const navId = moduleKey==='training' ? 'navTraining' : moduleKey==='processes' ? 'navProcesses' : '';
+      if(navId)document.getElementById(navId)?.classList.add('active');
+    }catch(e){}
+  }
+
+  function install(){
+    const original = window.showAdminOperationalModule;
+    if(typeof original!=='function' || original.__moduleMaintenanceGuardInstalled)return false;
+
+    const wrapped = function(key){
+      key = String(key||'').trim();
+
+      if(MODULE_MAINTENANCE[key] && !isTestUser()){
+        openMaintenance(key);
+        return;
+      }
+
+      return original.apply(this, arguments);
+    };
+
+    wrapped.__moduleMaintenanceGuardInstalled = true;
+    wrapped.__original = original;
+    window.showAdminOperationalModule = wrapped;
+    return true;
+  }
+
+  if(!install()){
+    let tries=0;
+    const timer=setInterval(function(){
+      if(install() || ++tries>100)clearInterval(timer);
+    },100);
+  }
+
+  window.nucleoModuleMaintenance = {
+    modules: Object.assign({}, MODULE_MAINTENANCE),
+    allowed: TEST_USERS.slice()
+  };
+})();
+</script>
+
 
 <script id="nucleoAssignedMaintenanceGuardV1">
 (function(){
