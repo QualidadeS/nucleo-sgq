@@ -2864,10 +2864,13 @@ function refreshSectorSelectors(){
 }
 
 async function saveSectorConfiguration(){
-  if(!nucleoFeatureRequire('sectors','edit'))return;
-
   const session=getSession();
   const isFilialQuality=session?.role==='quality';
+
+  // Qualidade da filial pode manter a lista de setores da própria unidade.
+  // Para os demais perfis, respeita a permissão detalhada normal.
+  if(!isFilialQuality && !nucleoFeatureRequire('sectors','edit'))return;
+
   if(!isAdmin() && !isFilialQuality){
     alert('Configuração indisponível.');
     return;
