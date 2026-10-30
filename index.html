@@ -5955,6 +5955,14 @@ function renderSupplierIndicatorsWorkspace(){
         adminModule.style.display='none';
       }
 
+      // Administração geral (settingsView) também precisa sair da tela.
+      // Ela não é escondida de forma confiável pelo view() quando já estava aberta.
+      const settings=document.getElementById('settingsView');
+      if(settings){
+        settings.classList.add('hidden');
+        settings.style.display='none';
+      }
+
       if(typeof view==='function')view('assignedMaintenanceView');
 
       const maint=document.getElementById('assignedMaintenanceView');
@@ -6045,6 +6053,164 @@ function renderSupplierIndicatorsWorkspace(){
     install();
     if(++tries>80)clearInterval(timer);
   },100);
+})();
+</script>
+
+
+
+<style id="nucleoAssignedLayoutOnlyV7">
+/* SOMENTE LAYOUT: não altera status, PDCA, handlers ou regras de negócio. */
+#roListView .ro-control-table{
+  width:100%!important;
+  min-width:1240px!important;
+  table-layout:fixed!important;
+}
+#roListView .ro-control-table th:nth-child(1),
+#roListView .ro-control-table td:nth-child(1){width:8%!important}
+#roListView .ro-control-table th:nth-child(2),
+#roListView .ro-control-table td:nth-child(2){width:15%!important}
+#roListView .ro-control-table th:nth-child(3),
+#roListView .ro-control-table td:nth-child(3){width:15%!important}
+#roListView .ro-control-table th:nth-child(4),
+#roListView .ro-control-table td:nth-child(4){width:8%!important}
+#roListView .ro-control-table th:nth-child(5),
+#roListView .ro-control-table td:nth-child(5){width:8%!important}
+#roListView .ro-control-table th:nth-child(6),
+#roListView .ro-control-table td:nth-child(6){width:12%!important;text-align:center!important}
+#roListView .ro-control-table th:nth-child(7),
+#roListView .ro-control-table td:nth-child(7){width:14%!important;text-align:center!important}
+#roListView .ro-control-table th:nth-child(8),
+#roListView .ro-control-table td:nth-child(8){width:20%!important;text-align:center!important}
+
+#roListView #rows tr{height:70px!important}
+#roListView #rows td{padding-top:10px!important;padding-bottom:10px!important}
+
+/* PDCA fica exclusivamente na 7ª coluna. */
+#roListView #rows td:nth-child(7){
+  white-space:nowrap!important;
+  overflow:visible!important;
+}
+#roListView #rows td:nth-child(7) .assigned-pdca-control{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:4px!important;
+  margin:0!important;
+}
+#roListView #rows td:nth-child(7) .assigned-pdca-option{
+  margin:0!important;
+  white-space:nowrap!important;
+}
+
+/* Ações operacionais ficam exclusivamente na 8ª coluna. */
+#roListView #rows td:nth-child(8){
+  white-space:nowrap!important;
+  overflow:visible!important;
+}
+#roListView .assigned-actions-layout-only{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  flex-wrap:nowrap!important;
+  min-height:34px!important;
+  width:100%!important;
+}
+#roListView .assigned-actions-layout-only > button,
+#roListView .assigned-actions-layout-only > a,
+#roListView .assigned-actions-layout-only [data-ro-resend-email],
+#roListView #rows td:nth-child(8) .ro-eye-btn{
+  width:32px!important;
+  height:32px!important;
+  min-width:32px!important;
+  min-height:32px!important;
+  padding:0!important;
+  margin:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid #d0d5dd!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  line-height:1!important;
+  vertical-align:middle!important;
+}
+#roListView .assigned-actions-layout-only > button:hover,
+#roListView .assigned-actions-layout-only > a:hover,
+#roListView #rows td:nth-child(8) .ro-eye-btn:hover{
+  background:#f2f4f7!important;
+  border-color:#98a2b3!important;
+}
+</style>
+
+<script id="nucleoAssignedLayoutOnlyV7Script">
+(function(){
+  /*
+   * SOMENTE LAYOUT.
+   * Move os mesmos elementos já renderizados para a coluna visual correta.
+   * Não cria ação, não altera onclick, não altera PDCA, status ou dados.
+   */
+  function isPdcaControl(el){
+    return !!(el && el.closest && el.closest('.assigned-pdca-control')) ||
+      !!(el && el.classList && el.classList.contains('assigned-pdca-option'));
+  }
+
+  function normalizeRow(tr){
+    if(!tr || !tr.cells || tr.cells.length < 8)return;
+    const pdcaCell=tr.cells[6];
+    const actionsCell=tr.cells[7];
+    if(!pdcaCell || !actionsCell)return;
+
+    let wrap=actionsCell.querySelector(':scope > .assigned-actions-layout-only');
+    if(!wrap){
+      wrap=document.createElement('div');
+      wrap.className='assigned-actions-layout-only';
+
+      // Preserva tudo que já estava na célula de ações, sem recriar handlers.
+      const existing=Array.from(actionsCell.childNodes);
+      existing.forEach(n=>wrap.appendChild(n));
+      actionsCell.appendChild(wrap);
+    }
+
+    // Alguns módulos antigos injetam os ícones dentro da célula de PDCA.
+    // Só relocamos visualmente controles que NÃO são os controles Tem/Não tem PDCA.
+    const candidates=Array.from(pdcaCell.querySelectorAll('button, a, [data-ro-resend-email]'));
+    candidates.forEach(el=>{
+      if(isPdcaControl(el))return;
+      wrap.appendChild(el); // mover mantém o mesmo onclick/listener
+    });
+
+    // Remove invólucros que ficaram vazios após a relocação.
+    Array.from(pdcaCell.querySelectorAll('.ro-row-actions, .assigned-operational-icons')).forEach(box=>{
+      if(!box.children.length && !box.textContent.trim())box.remove();
+    });
+
+    pdcaCell.classList.add('assigned-pdca-cell');
+    actionsCell.classList.add('operational-action-col');
+  }
+
+  function normalizeAll(){
+    document.querySelectorAll('#roListView #rows tr').forEach(normalizeRow);
+  }
+
+  let scheduled=false;
+  function schedule(){
+    if(scheduled)return;
+    scheduled=true;
+    requestAnimationFrame(()=>{scheduled=false;normalizeAll();});
+  }
+
+  const start=()=>{
+    normalizeAll();
+    const rows=document.getElementById('rows');
+    if(rows){
+      const obs=new MutationObserver(schedule);
+      obs.observe(rows,{childList:true,subtree:true});
+    }
+  };
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
 })();
 </script>
 
