@@ -3,7 +3,7 @@
 <html lang="pt-BR"><head>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta name="nucleo-build" content="20261030-maintenance-mutual-exclusion-v3">
+<meta name="nucleo-build" content="20261030-ro-assigned-test-v4">
 <meta http-equiv="Expires" content="0"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Núcleo SGQ</title><style>
 :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#244f86;--blue2:#173b67;--soft:#edf4fb;--danger:#b42318;--warn:#b54708;--ok:#087443}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}header h1{font-size:19px;margin:0}.head-actions{display:flex;gap:8px;align-items:center}.user{font-size:12px;opacity:.9}main{max-width:1180px;margin:22px auto;padding:0 18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,24,40,.05);padding:18px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}input,select,textarea{width:100%;border:1px solid #cfd5df;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolbar input{flex:1;min-width:240px}.toolbar select{width:auto}table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{font-size:12px;color:var(--muted);text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--soft);color:var(--blue2)}.badge.warn{background:#fff4e5;color:var(--warn)}.badge.off{background:#f2f4f7;color:#475467}.badge.danger{background:#fee4e2;color:var(--danger)}.badge.ok{background:#ecfdf3;color:var(--ok)}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef2f6;color:#344054}.danger{background:#fff1f0;color:var(--danger);border:1px solid #fecdca}.btn:disabled{opacity:.45}.iconbtn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.value{font-weight:600}.back{background:none;border:0;color:var(--blue);font-weight:700;cursor:pointer;padding:0;margin-bottom:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;margin-top:14px;font-size:14px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}.section-title{margin:0 0 10px;font-size:18px}.stage-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.stage-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:700}.stage-tab.active{background:var(--blue);color:white;border-color:var(--blue)}.question{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}.question h4{margin:0 0 5px;font-size:15px}.question p{margin:0 0 10px;color:var(--muted);font-size:13px}textarea{min-height:78px;resize:vertical}.meta-box{background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:13px;margin:14px 0}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.settings-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px}.settings-block h3{margin:0 0 5px;font-size:16px}.help{font-size:12px;color:var(--muted);margin:0 0 12px}.statusline{font-size:13px;margin:10px 0;padding:10px 12px;border-radius:10px;background:#f8fafc}.okline{background:#ecfdf3;color:#087443}.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal-box{width:min(620px,100%);background:#fff;border-radius:16px;padding:20px}.modal-box h3{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .settings-side-tab{
@@ -2744,41 +2744,37 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 
 
 
-<style id="nucleoAssignedLayoutOnlyV16">
-/* SOMENTE LAYOUT — estrutura alinhada ao HTML real das linhas */
-#roListView .ro-control-table-wrap{
-  width:100%;
-  overflow-x:auto;
-}
 
+<style id="nucleoAssignedTestLayoutV4">
+#roListView .ro-control-table-wrap{width:100%;overflow-x:auto}
 #roListView .ro-control-table{
   width:100%;
+  min-width:1180px;
   table-layout:fixed;
   border-collapse:collapse;
 }
-
 #roListView .ro-control-table th,
 #roListView .ro-control-table td{
   vertical-align:middle!important;
   box-sizing:border-box;
 }
-
 #roListView .ro-control-table th:nth-child(1){width:100px}
-#roListView .ro-control-table th:nth-child(2){width:190px}
-#roListView .ro-control-table th:nth-child(3){width:190px}
-#roListView .ro-control-table th:nth-child(4){width:110px}
-#roListView .ro-control-table th:nth-child(5){width:105px}
-#roListView .ro-control-table th:nth-child(6){width:160px;text-align:center}
-#roListView .ro-control-table th:nth-child(7){width:210px;text-align:center}
-#roListView .ro-control-table th:nth-child(8){width:260px;text-align:center}
+#roListView .ro-control-table th:nth-child(2){width:185px}
+#roListView .ro-control-table th:nth-child(3){width:185px}
+#roListView .ro-control-table th:nth-child(4){width:105px}
+#roListView .ro-control-table th:nth-child(5){width:100px}
+#roListView .ro-control-table th:nth-child(6){width:145px;text-align:center}
+#roListView .ro-control-table th:nth-child(7){width:240px;text-align:center}
+#roListView .ro-control-table th:nth-child(8){width:220px;text-align:center}
 
-/* PDCA */
-#roListView .ro-control-table td:nth-child(6){
+#roListView .assigned-status-cell,
+#roListView .assigned-pdca-cell,
+#roListView .operational-action-col{
   text-align:center!important;
   white-space:nowrap!important;
 }
 
-#roListView .pdca-source-control{
+#roListView .assigned-pdca-control{
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
@@ -2787,43 +2783,40 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   white-space:nowrap!important;
 }
 
-/* Ações */
-#roListView td.ro-eye-cell{
-  text-align:center!important;
-  white-space:nowrap!important;
+#roListView .assigned-pdca-control .btn{
+  padding:5px 8px!important;
+  min-height:28px!important;
+  font-size:11px!important;
 }
 
-#roListView .ro-row-actions{
+#roListView .assigned-pdca-control .btn.is-selected{
+  background:#075da8!important;
+  color:#fff!important;
+  border-color:#075da8!important;
+}
+
+#roListView .assigned-operational-icons{
   display:flex!important;
   align-items:center!important;
   justify-content:center!important;
-  gap:11px!important;
+  gap:10px!important;
   flex-wrap:nowrap!important;
   white-space:nowrap!important;
-  width:100%!important;
+  width:100%;
 }
 
-#roListView .ro-row-actions .ro-eye-btn,
-#roListView [data-ro-resend-email]{
+#roListView .assigned-operational-icons .ro-eye-btn,
+#roListView .assigned-operational-icons [data-ro-resend-email]{
   flex:0 0 auto!important;
   margin:0!important;
 }
 
-/* O botão de reenvio injetado depois também permanece na mesma faixa visual */
-#roListView td.ro-eye-cell{
-  min-width:210px!important;
-}
-
-/* Admin não usa a coluna operacional */
-#roListView th.operational-action-col[style*="display: none"],
-#roListView td.operational-action-col[style*="display: none"]{
-  display:none!important;
-}
-
-@media(max-width:1150px){
-  #roListView .ro-control-table{
-    min-width:1080px;
-  }
+#roListView .assigned-status-cell .badge,
+#roListView .assigned-status-cell .status-badge{
+  max-width:135px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 </style>
 
@@ -3067,8 +3060,8 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 <th>Setor responsável</th>
 <th>Origem</th>
 <th>Prazo</th>
+<th>Status</th>
 <th>PDCA</th>
-<th>Ações</th>
 <th class="operational-action-col">Ações operacionais</th>
 </tr></thead><tbody id="rows"></tbody></table></div>
   <div id="roListMore" class="small" style="margin-top:12px;text-align:center"></div>
@@ -5729,7 +5722,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app.js?v=20261028-login-view-fix-v5"></script>
+<script src="assets/nucleo-app.js?v=20261030-ro-assigned-test-v4"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
 (function(){
