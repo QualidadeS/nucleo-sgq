@@ -4659,7 +4659,6 @@ Diretoria"></textarea>
   <p class="small" style="margin-top:5px">Usuários, setores, triagem, avisos, base central e integração.</p>
 
   <div class="admin-config-nav" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-    <button class="sgq-only" type="button" onclick="nucleoOpenAvatarGalleryConfig()">🖼 Galeria de avatares</button>
     <button type="button" onclick="openUnitDriveSettings()">🏭 Unidades e pastas do Drive</button>
     <button type="button" onclick="document.getElementById('cfgUsers')?.scrollIntoView({behavior:'smooth'})">👥 Usuários e acessos</button>
     <button type="button" onclick="document.getElementById('cfgUnits')?.scrollIntoView({behavior:'smooth'})">🏭 Setores</button>
@@ -4678,7 +4677,6 @@ Diretoria"></textarea>
   </div>
 
   <div id="cfgUsers" class="config-section active"><h2 style="margin:0 0 12px">1. Usuários e acessos</h2><button class="btn secondary" type="button" onclick="openPersonIdentityManager()">Identidades e confirmação de reclamantes</button>
-    <div class="settings-block" id="avatarGalleryConfig"><h3>Galeria de avatares</h3><p class="small">Cole o link da pasta do Drive com as imagens aprovadas (JPG, PNG ou WebP). Cada pessoa pode escolher em Meu perfil.</p><input id="avatarGalleryFolder" placeholder="Link da pasta do Drive"><button type="button" class="btn primary" onclick="nucleoConfigureAvatarGallery(this)">Salvar pasta da galeria</button><p id="avatarGalleryConfigStatus" role="status"></p></div>
     <div class="settings-block sgq-only" id="sgqAdminRegistration">
       <h3>Administradores / SGQ</h3>
       <p class="help">Usuários com acesso à triagem, indicadores, conferência de ações e configurações.</p>
