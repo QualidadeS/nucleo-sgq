@@ -14445,7 +14445,19 @@ function assignedRoDisplayStatusV4(r,tri){
     ''
   ).trim();
 
-  if(raw && normalizeAnswer(raw)!=='pendente'){
+  const rawNormalized=normalizeAnswer(raw);
+
+  // Nesta tela a R.O. JÁ foi atribuída a um setor. Portanto, "Não enviada"
+  // é um estado anterior ao direcionamento e nunca deve aparecer aqui.
+  // Registros antigos que ainda tragam esse valor são tratados como pendência
+  // de resposta do setor, sem alterar o valor original na planilha.
+  if(['nao enviada','não enviada'].includes(rawNormalized)){
+    return 'Pendente';
+  }
+
+  // Mantém os estados operacionais válidos vindos da planilha, como
+  // Respondida e Apresentada, quando o Núcleo ainda não tem estado mais atual.
+  if(raw && rawNormalized!=='pendente'){
     return raw;
   }
 
