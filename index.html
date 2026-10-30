@@ -3,7 +3,7 @@
 <html lang="pt-BR"><head>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta name="nucleo-build" content="20261029-layout-only-v15">
+<meta name="nucleo-build" content="20261030-assigned-maintenance-v1">
 <meta http-equiv="Expires" content="0"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Núcleo SGQ</title><style>
 :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#244f86;--blue2:#173b67;--soft:#edf4fb;--danger:#b42318;--warn:#b54708;--ok:#087443}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}header h1{font-size:19px;margin:0}.head-actions{display:flex;gap:8px;align-items:center}.user{font-size:12px;opacity:.9}main{max-width:1180px;margin:22px auto;padding:0 18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,24,40,.05);padding:18px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}input,select,textarea{width:100%;border:1px solid #cfd5df;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolbar input{flex:1;min-width:240px}.toolbar select{width:auto}table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{font-size:12px;color:var(--muted);text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--soft);color:var(--blue2)}.badge.warn{background:#fff4e5;color:var(--warn)}.badge.off{background:#f2f4f7;color:#475467}.badge.danger{background:#fee4e2;color:var(--danger)}.badge.ok{background:#ecfdf3;color:var(--ok)}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef2f6;color:#344054}.danger{background:#fff1f0;color:var(--danger);border:1px solid #fecdca}.btn:disabled{opacity:.45}.iconbtn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.value{font-weight:600}.back{background:none;border:0;color:var(--blue);font-weight:700;cursor:pointer;padding:0;margin-bottom:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;margin-top:14px;font-size:14px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}.section-title{margin:0 0 10px;font-size:18px}.stage-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.stage-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:700}.stage-tab.active{background:var(--blue);color:white;border-color:var(--blue)}.question{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}.question h4{margin:0 0 5px;font-size:15px}.question p{margin:0 0 10px;color:var(--muted);font-size:13px}textarea{min-height:78px;resize:vertical}.meta-box{background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:13px;margin:14px 0}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.settings-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px}.settings-block h3{margin:0 0 5px;font-size:16px}.help{font-size:12px;color:var(--muted);margin:0 0 12px}.statusline{font-size:13px;margin:10px 0;padding:10px 12px;border-radius:10px;background:#f8fafc}.okline{background:#ecfdf3;color:#087443}.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal-box{width:min(620px,100%);background:#fff;border-radius:16px;padding:20px}.modal-box h3{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .settings-side-tab{
@@ -2743,9 +2743,9 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 
 
 
-<style id="nucleoAssignedLayoutOnlyV15">
-/* APENAS LAYOUT — não altera lógica, dados, e-mail, PDCA ou backend */
 
+<style id="nucleoAssignedLayoutOnlyV16">
+/* SOMENTE LAYOUT — estrutura alinhada ao HTML real das linhas */
 #roListView .ro-control-table-wrap{
   width:100%;
   overflow-x:auto;
@@ -2753,118 +2753,76 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 
 #roListView .ro-control-table{
   width:100%;
-  min-width:1180px;
   table-layout:fixed;
   border-collapse:collapse;
 }
 
 #roListView .ro-control-table th,
 #roListView .ro-control-table td{
-  vertical-align:middle !important;
+  vertical-align:middle!important;
   box-sizing:border-box;
 }
 
-/* Colunas principais */
-#roListView .ro-control-table th:nth-child(1){width:95px}
-#roListView .ro-control-table th:nth-child(2){width:180px}
-#roListView .ro-control-table th:nth-child(3){width:185px}
-#roListView .ro-control-table th:nth-child(4){width:105px}
-#roListView .ro-control-table th:nth-child(5){width:100px}
-#roListView .ro-control-table th:nth-child(6){width:105px}
+#roListView .ro-control-table th:nth-child(1){width:100px}
+#roListView .ro-control-table th:nth-child(2){width:190px}
+#roListView .ro-control-table th:nth-child(3){width:190px}
+#roListView .ro-control-table th:nth-child(4){width:110px}
+#roListView .ro-control-table th:nth-child(5){width:105px}
+#roListView .ro-control-table th:nth-child(6){width:160px;text-align:center}
+#roListView .ro-control-table th:nth-child(7){width:210px;text-align:center}
+#roListView .ro-control-table th:nth-child(8){width:260px;text-align:center}
 
-/* Células criadas pela lógica já existente */
-#roListView td.nucleo-pdca-cell{
-  width:135px !important;
-  min-width:135px !important;
-  max-width:135px !important;
-  text-align:center !important;
-  white-space:nowrap !important;
-  overflow:visible !important;
+/* PDCA */
+#roListView .ro-control-table td:nth-child(6){
+  text-align:center!important;
+  white-space:nowrap!important;
 }
 
-#roListView td.nucleo-email-cell{
-  width:120px !important;
-  min-width:120px !important;
-  max-width:120px !important;
-  text-align:center !important;
-  white-space:nowrap !important;
-  overflow:visible !important;
+#roListView .pdca-source-control{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap!important;
 }
 
+/* Ações */
 #roListView td.ro-eye-cell{
-  width:185px !important;
-  min-width:185px !important;
-  max-width:185px !important;
-  text-align:center !important;
-  white-space:nowrap !important;
-  overflow:visible !important;
+  text-align:center!important;
+  white-space:nowrap!important;
 }
 
-/* PDCA: uma faixa centralizada, sem invadir E-mail */
-#roListView td.nucleo-pdca-cell > *,
-#roListView td.nucleo-pdca-cell .nucleo-pdca-wrap{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  gap:6px !important;
-  flex-wrap:nowrap !important;
-  white-space:nowrap !important;
-  max-width:100% !important;
-}
-
-/* E-mail: badge centralizado */
-#roListView td.nucleo-email-cell > *,
-#roListView td.nucleo-email-cell .nucleo-email-wrap{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  width:100% !important;
-  white-space:nowrap !important;
-}
-
-/* Ações: todos os ícones na mesma linha */
-#roListView .ro-row-actions,
-#roListView .nucleo-icons-row{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  gap:9px !important;
-  flex-wrap:nowrap !important;
-  white-space:nowrap !important;
-  width:100% !important;
+#roListView .ro-row-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:11px!important;
+  flex-wrap:nowrap!important;
+  white-space:nowrap!important;
+  width:100%!important;
 }
 
 #roListView .ro-row-actions .ro-eye-btn,
-#roListView .nucleo-icons-row .ro-eye-btn,
 #roListView [data-ro-resend-email]{
-  flex:0 0 auto !important;
-  margin:0 !important;
+  flex:0 0 auto!important;
+  margin:0!important;
 }
 
-/* Evita badges antigos grudados no setor */
-#roListView td:nth-child(3) [data-ro-email-status]{
-  display:none !important;
+/* O botão de reenvio injetado depois também permanece na mesma faixa visual */
+#roListView td.ro-eye-cell{
+  min-width:210px!important;
 }
 
-/* Mantém os status compactos */
-#roListView .nucleo-email-state{
-  max-width:108px !important;
-  justify-content:center !important;
+/* Admin não usa a coluna operacional */
+#roListView th.operational-action-col[style*="display: none"],
+#roListView td.operational-action-col[style*="display: none"]{
+  display:none!important;
 }
 
-/* Cabeçalhos finais visualmente alinhados */
-#roListView .ro-control-table thead th{
-  text-align:left;
-}
-
-#roListView .ro-control-table thead th:nth-last-child(-n+3){
-  text-align:center;
-}
-
-/* Em telas menores, rola a tabela em vez de esmagar as colunas */
-@media(max-width:1250px){
+@media(max-width:1150px){
   #roListView .ro-control-table{
-    min-width:1180px;
+    min-width:1080px;
   }
 }
 </style>
@@ -3103,10 +3061,36 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
     <select id="filter" onchange="render()"><option value="todas">Todas as situações</option><option value="precisa_resposta">Precisa de resposta</option><option value="ja_respondeu">Já tem resposta</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
   </div>
-  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr><th>R.O.</th><th>Unidade</th><th>Setor responsável</th><th>Origem</th><th>Prazo</th><th>Status</th><th>PDCA</th><th>E-mail</th><th>Ações</th><th class="operational-action-col">Ações operacionais</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr>
+<th>R.O.</th>
+<th>Unidade</th>
+<th>Setor responsável</th>
+<th>Origem</th>
+<th>Prazo</th>
+<th>PDCA</th>
+<th>Ações</th>
+<th class="operational-action-col">Ações operacionais</th>
+</tr></thead><tbody id="rows"></tbody></table></div>
   <div id="roListMore" class="small" style="margin-top:12px;text-align:center"></div>
 </section>
 
+
+
+<section id="assignedMaintenanceView" class="card hidden" style="min-height:420px">
+  <div style="min-height:380px;display:flex;align-items:center;justify-content:center;padding:30px">
+    <div style="max-width:620px;text-align:center">
+      <div style="width:54px;height:54px;margin:0 auto 16px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:#eef6ff;border:1px solid #cfe3f8;font-size:26px">🛠</div>
+      <div class="overview-eyebrow">R.O.s atribuídas</div>
+      <h2 style="margin:8px 0 10px">Página em manutenção</h2>
+      <p style="margin:0;color:#667085;line-height:1.6">
+        Este módulo está passando por ajustes e ficará temporariamente indisponível.
+      </p>
+      <p class="small" style="margin:10px 0 0">
+        Os demais módulos do Núcleo continuam disponíveis normalmente.
+      </p>
+    </div>
+  </div>
+</section>
 
 <section id="audit5sView" class="card hidden" style="padding:0;overflow:hidden">
   <div style="padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
@@ -5729,9 +5713,64 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
 <script src="assets/nucleo-app.js?v=20261028-login-view-fix-v5"></script>
+
+<script id="nucleoAssignedMaintenanceGuardV1">
+(function(){
+  const ASSIGNED_MAINTENANCE_MODE = true;
+  const ASSIGNED_TEST_USERS = [
+    'gabrielly.silva@setaembalagens.com.br'
+  ];
+
+  function currentEmail(){
+    try{
+      return String((typeof getSession==='function' ? getSession()?.email : '') || '')
+        .trim()
+        .toLowerCase();
+    }catch(e){
+      return '';
+    }
+  }
+
+  function canSeeAssignedTestVersion(){
+    if(!ASSIGNED_MAINTENANCE_MODE)return true;
+    return ASSIGNED_TEST_USERS.includes(currentEmail());
+  }
+
+  function installGuard(){
+    const original = window.showAssignedRos;
+    if(typeof original !== 'function' || original.__maintenanceGuardInstalled)return false;
+
+    const wrapped = function(){
+      if(canSeeAssignedTestVersion()){
+        return original.apply(this, arguments);
+      }
+
+      try{ roListMode='assigned'; }catch(e){}
+      if(typeof view==='function')view('assignedMaintenanceView');
+      if(typeof setNav==='function')setNav('assigned');
+    };
+
+    wrapped.__maintenanceGuardInstalled = true;
+    wrapped.__original = original;
+    window.showAssignedRos = wrapped;
+    return true;
+  }
+
+  if(!installGuard()){
+    let tries=0;
+    const timer=setInterval(function(){
+      if(installGuard() || ++tries>80)clearInterval(timer);
+    },100);
+  }
+
+  window.nucleoAssignedMaintenance = {
+    enabled: ASSIGNED_MAINTENANCE_MODE,
+    allowed: ASSIGNED_TEST_USERS.slice()
+  };
+})();
+</script>
+
 <script src="assets/modules-v2/ro-extension.js?v=20261028-ro-extension-v3-email-async"></script>
 <script src="assets/modules-v2/ro-resend-email.js?v=20261029-ro-resend-email-v8-errors-only"></script>
 <script src="assets/modules-v2/email-quota-panel.js?v=20261029-email-quota-v1"></script>
-<script src="assets/modules-v2/assigned-actions-layout.js?v=20261029-v10"></script>
-<script src="assets/modules-v2/assigned-table-stable-v13.js?v=20261029-v13"></script>
 </body></html>
