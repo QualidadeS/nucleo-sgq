@@ -2820,6 +2820,85 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 }
 </style>
 
+
+<style id="nucleoAssignedTestLayoutV6Final">
+#roListView .ro-control-table{min-width:1260px}
+#roListView .ro-control-table th:nth-child(7){width:260px!important}
+#roListView .ro-control-table th:nth-child(8){width:250px!important}
+
+#roListView .assigned-pdca-control{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:4px!important;
+  padding:3px!important;
+  border:1px solid #d0d5dd!important;
+  border-radius:10px!important;
+  background:#f9fafb!important;
+}
+#roListView .assigned-pdca-option{
+  border:0!important;
+  border-radius:7px!important;
+  background:transparent!important;
+  color:#475467!important;
+  font:600 11px/1.2 inherit!important;
+  padding:7px 9px!important;
+  cursor:pointer!important;
+  white-space:nowrap!important;
+}
+#roListView .assigned-pdca-option:hover{background:#eef2f6!important}
+#roListView .assigned-pdca-option.yes.is-selected{background:#e8f3ff!important;color:#075da8!important;box-shadow:inset 0 0 0 1px #84c5f4!important}
+#roListView .assigned-pdca-option.no.is-selected{background:#fff1f0!important;color:#b42318!important;box-shadow:inset 0 0 0 1px #fda29b!important}
+
+#roListView td.operational-action-col{
+  text-align:center!important;
+  white-space:nowrap!important;
+}
+#roListView td.operational-action-col br{display:none!important}
+#roListView td.operational-action-col > *{vertical-align:middle!important}
+#roListView .assigned-operational-icons{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:5px!important;
+  flex-wrap:nowrap!important;
+  width:auto!important;
+  vertical-align:middle!important;
+}
+#roListView .assigned-operational-icons .ro-eye-btn,
+#roListView td.operational-action-col > button,
+#roListView td.operational-action-col [data-ro-resend-email]{
+  width:32px!important;
+  height:32px!important;
+  min-width:32px!important;
+  padding:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  border:1px solid #d0d5dd!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  color:#344054!important;
+  font-size:15px!important;
+  line-height:1!important;
+  margin:0 2px!important;
+  vertical-align:middle!important;
+}
+#roListView .assigned-operational-icons .ro-eye-btn:hover,
+#roListView td.operational-action-col > button:hover,
+#roListView td.operational-action-col [data-ro-resend-email]:hover{background:#f2f4f7!important;border-color:#98a2b3!important}
+#roListView .assigned-operational-icons .ro-delete-btn{color:#b42318!important}
+
+/* Qualquer ação injetada pelos módulos de e-mail/encaminhamento permanece na mesma linha. */
+#roListView td.operational-action-col > div:not(.assigned-operational-icons){
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:4px!important;
+  flex-wrap:nowrap!important;
+  vertical-align:middle!important;
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -5722,7 +5801,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app.js?v=20261030-ro-assigned-test-v4"></script>
+<script src="assets/nucleo-app.js?v=20261030-ro-assigned-test-v6"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
 (function(){
