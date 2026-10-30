@@ -2899,8 +2899,14 @@ async function saveSectorConfiguration(){
   if(st){st.classList.remove('hidden');st.textContent='Salvando setores desta unidade…';}
   setFeedback('Salvando setores…','pending');
 
+  const saveBtn=document.getElementById('saveSectorConfigurationBtn');
+  const originalBtnText=saveBtn?.textContent||'Salvar setores';
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Salvando…';}
+
   try{
-    const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},60000);
+    const request=portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},12000);
+    const hardTimeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('A base central não respondeu em até 12 segundos. Tente novamente.')),12500));
+    const result=await Promise.race([request,hardTimeout]);
     if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou os setores.');
 
     const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};
@@ -2917,6 +2923,8 @@ async function saveSectorConfiguration(){
     const message=e?.message||String(e);
     if(st)st.textContent='Não foi possível salvar: '+message;
     setFeedback('✕ Erro ao salvar: '+message,'error');
+  }finally{
+    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalBtnText;}
   }
 }
 
