@@ -14602,18 +14602,19 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const pdcaMarkedYes=tri?.pdcaExternal===true || hasRealPdca;
 
     const pdcaControl = admin && !noPdca
-      ? `<div class="assigned-pdca-control">
-          <span class="${pdcaMarkedYes?'badge ok':'status-badge'}">${pdcaMarkedYes?'Tem PDCA':'Sem PDCA'}</span>
-          <button class="btn secondary ${pdcaMarkedYes?'is-selected':''}" type="button"
+      ? `<div class="assigned-pdca-control" role="group" aria-label="Situação do PDCA da ${escapeHtml(r.numero)}">
+          <button class="assigned-pdca-option yes ${pdcaMarkedYes?'is-selected':''}" type="button"
+            title="Marcar que esta R.O. já tem PDCA"
             onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">
-            Tem PDCA
+            ✓ Tem PDCA
           </button>
-          <button class="btn secondary ${pdcaMarkedNo?'is-selected':''}" type="button"
+          <button class="assigned-pdca-option no ${pdcaMarkedNo?'is-selected':''}" type="button"
+            title="Marcar que esta R.O. ainda não tem PDCA"
             onclick="setExternalPdca('${escapeHtml(r.numero)}',false,'${escapeHtml(responsibleSector)}')">
-            Não tem PDCA
+            × Não tem PDCA
           </button>
         </div>`
-      : `<span class="${hasRealPdca?'badge ok':'status-badge'}">${hasRealPdca?'Tem PDCA':'Sem PDCA'}</span>`;
+      : `<span class="${hasRealPdca?'badge ok':'status-badge'}">${hasRealPdca?'Tem PDCA':'Não tem PDCA'}</span>`;
 
     let operationalActions='';
     if(admin){
