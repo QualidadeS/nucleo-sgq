@@ -4693,8 +4693,10 @@ Diretoria"></textarea>
     </div>
 
     <div class="settings-block">
-      <h3>Usuários e acessos</h3>
-      <p class="help">O setor define quais R.O.s e PDCAs o usuário pode visualizar. Por segurança, o painel mostra apenas se existe senha cadastrada; a senha atual não é exibida.</p>
+      <div style="margin-bottom:12px">
+        <h3 style="margin:0 0 4px">Cadastro de usuário</h3>
+        <p class="help" style="margin:0">O setor define quais R.O.s e PDCAs o usuário pode visualizar. Por segurança, o painel mostra apenas se existe senha cadastrada; a senha atual não é exibida.</p>
+      </div>
       <div class="settings-grid">
         <label><div class="label">Nome</div><input id="newUserName" placeholder="Nome de acesso único"></label>
         <label><div class="label">E-mail SETA</div><input id="newUserEmail" type="email" placeholder="nome@seta..."></label>
@@ -4708,6 +4710,11 @@ Diretoria"></textarea>
         <button class="btn primary" type="button" onclick="addOperationalUser()">Adicionar usuário</button>
         <button class="btn secondary" type="button" onclick="refreshPendingRegistrations(true)">↻ Atualizar cadastros pendentes</button><button class="btn secondary" type="button" onclick="diagnoseUserRegistry()">Diagnosticar cadastro</button>
         <span id="pendingRegistrationStatus" class="small"></span>
+      </div>
+
+      <div style="border-top:1px solid #d7e0ea;margin:20px 0 14px;padding-top:16px">
+        <h3 style="margin:0 0 4px">Consulta de usuários</h3>
+        <p class="help" style="margin:0">Pesquise, filtre e consulte os usuários já cadastrados.</p>
       </div>
       <div id="operationalUsersList" class="admin-users"></div>
     </div>
@@ -5800,7 +5807,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app.js?v=20261030-ro-assigned-test-v6"></script>
+<script src="assets/nucleo-app.js?v=20261030-setores-filial-save-v14"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
 (function(){
