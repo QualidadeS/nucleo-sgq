@@ -2865,31 +2865,56 @@ function refreshSectorSelectors(){
 
 async function saveSectorConfiguration(){
   if(!nucleoFeatureRequire('sectors','edit'))return;
-  if(!isAdmin()){
+
+  const session=getSession();
+  const isFilialQuality=session?.role==='quality';
+  if(!isAdmin() && !isFilialQuality){
     alert('Configuração indisponível.');
     return;
   }
 
   const field=document.getElementById('sectorList');
   const sectors=normalizeSectorList(field?.value||'');
+  const feedback=document.getElementById('sectorSaveStatus');
+  const st=document.getElementById('configSavedState');
+  const setFeedback=(message,type)=>{
+    if(!feedback)return;
+    feedback.textContent=message;
+    feedback.style.color=type==='error'?'#b42318':type==='success'?'#067647':'#475467';
+  };
+
   if(!sectors.length){
+    setFeedback('Cadastre pelo menos um setor.','error');
     alert('Cadastre pelo menos um setor.');
     return;
   }
 
   field.value=sectors.join('\n');
-  const unit=getSession()?.role==='quality'?'filial':document.getElementById('qualityConfigUnit')?.value||'matriz';
-  const st=document.getElementById('configSavedState');if(st){st.classList.remove('hidden');st.textContent='Salvando setores desta unidade…';}
+  // Qualidade da filial só pode salvar a configuração da própria filial.
+  // SGQ/Matriz continua podendo escolher Matriz ou Filial.
+  const unit=isFilialQuality?'filial':document.getElementById('qualityConfigUnit')?.value||'matriz';
+  if(st){st.classList.remove('hidden');st.textContent='Salvando setores desta unidade…';}
+  setFeedback('Salvando setores…','pending');
+
   try{
     const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},60000);
     if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou os setores.');
+
     const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};
     localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!==unit),{...old,id:unit,unit,sectorList:field.value}]));
     const unitField=document.getElementById('qualityConfigSectors');if(unitField)unitField.value=field.value;
-    refreshSectorSelectors();try{populateTriageSectors()}catch(_){}try{renderOperationalUsers()}catch(_){}
-    if(st)st.textContent='Setores da '+(unit==='filial'?'filial':'matriz')+' salvos na base central.';
-  }catch(e){if(st)st.textContent='Não foi possível salvar: '+e.message;else alert(e.message);}
+    refreshSectorSelectors();
+    try{populateTriageSectors()}catch(_){}
+    try{renderOperationalUsers()}catch(_){}
 
+    const label=unit==='filial'?'filial':'matriz';
+    if(st)st.textContent='Setores da '+label+' salvos na base central.';
+    setFeedback('✓ Setores da '+label+' salvos com sucesso.','success');
+  }catch(e){
+    const message=e?.message||String(e);
+    if(st)st.textContent='Não foi possível salvar: '+message;
+    setFeedback('✕ Erro ao salvar: '+message,'error');
+  }
 }
 
 async function syncPublicPortalConfig(){
@@ -14428,44 +14453,6 @@ function assignedRoStatus(r){
   return 'Pendente';
 }
 
-
-function assignedRoDisplayStatusV4(r,tri){
-  const live=assignedRoStatus(r);
-
-  // Se o Núcleo já tem uma situação mais específica/atual, ela prevalece.
-  if(['PDCA externo','PDCA respondido','PDCA apresentado','Cancelada','Obsoleto','Registro'].includes(live)){
-    return live;
-  }
-
-  // Caso contrário, preserva o valor operacional vindo da planilha quando existir.
-  const raw=String(
-    r?.statusPlanilha||
-    r?.raw?.__statusOperacional||
-    r?.status||
-    ''
-  ).trim();
-
-  const rawNormalized=normalizeAnswer(raw);
-
-  // Nesta tela a R.O. JÁ foi atribuída a um setor. Portanto, "Não enviada"
-  // é um estado anterior ao direcionamento e nunca deve aparecer aqui.
-  // Registros antigos que ainda tragam esse valor são tratados como pendência
-  // de resposta do setor, sem alterar o valor original na planilha.
-  if(['nao enviada','não enviada'].includes(rawNormalized)){
-    return 'Pendente';
-  }
-
-  // Mantém os estados operacionais válidos vindos da planilha, como
-  // Respondida e Apresentada, quando o Núcleo ainda não tem estado mais atual.
-  if(raw && rawNormalized!=='pendente'){
-    return raw;
-  }
-
-  // Decisões salvas no Núcleo também podem fornecer o rótulo atual.
-  const decisionLabel=nucleoAssignedDecisionLabel(r,tri,live);
-  return String(decisionLabel||live||'Pendente').trim()||'Pendente';
-}
-
 function assignedRoDeadline(r){
   const status=assignedRoStatus(r);
   if(status!=='Pendente') return '—';
@@ -14584,68 +14571,20 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const displayStatus=assignedRoStatus(r);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus);
 
-    const statusLabel=assignedRoDisplayStatusV4(r,tri);
-    const statusClass=
-      ['PDCA externo','PDCA respondido','PDCA apresentado','Apresentada','Respondida'].includes(statusLabel)
-        ? 'badge ok'
-        : statusLabel==='Pendente'
-          ? 'badge warn'
-          : badgeClass(statusLabel);
-
-    const hasRealPdca=
-      pdcaExternalExists(r)||
-      !!getPdcaReturnForRo(r)||
-      pdcaExternalExists(r,renderTriageMap)||
-      ['PDCA externo','PDCA respondido','PDCA apresentado'].includes(displayStatus);
-
-    const pdcaMarkedNo=tri?.pdcaRequired===true && !hasRealPdca;
-    const pdcaMarkedYes=tri?.pdcaExternal===true || hasRealPdca;
-
-    const pdcaControl = admin && !noPdca
-      ? `<div class="assigned-pdca-control" role="group" aria-label="Situação do PDCA da ${escapeHtml(r.numero)}">
-          <button class="assigned-pdca-option yes ${pdcaMarkedYes?'is-selected':''}" type="button"
-            title="Marcar que esta R.O. já tem PDCA"
-            onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">
-            ✓ Tem PDCA
-          </button>
-          <button class="assigned-pdca-option no ${pdcaMarkedNo?'is-selected':''}" type="button"
-            title="Marcar que esta R.O. ainda não tem PDCA"
-            onclick="setExternalPdca('${escapeHtml(r.numero)}',false,'${escapeHtml(responsibleSector)}')">
-            × Não tem PDCA
-          </button>
-        </div>`
-      : `<span class="${hasRealPdca?'badge ok':'status-badge'}">${hasRealPdca?'Tem PDCA':'Não tem PDCA'}</span>`;
-
     let operationalActions='';
-    if(admin){
-      operationalActions=`
-        <td class="operational-action-col ro-eye-cell">
-          <div class="assigned-operational-icons ro-row-actions">
-            <button class="ro-eye-btn" type="button"
-              onclick="openRoReport('${escapeHtml(r.numero)}')"
-              title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>
-            ${tri?.roKey?`
-              <button class="ro-eye-btn ro-edit-btn" type="button"
-                onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')"
-                title="Editar setor causa" aria-label="Editar setor causa">✎</button>
-              <button class="ro-eye-btn ro-delete-btn" type="button"
-                onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')"
-                title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>
-            `:''}
-          </div>
-        </td>`;
-    }else{
+    if(!admin){
       const respondDisabled=noPdca||contest||alreadySent;
       const contestDisabled=noPdca||contest;
+
       operationalActions=`
         <td class="operational-action-col">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;min-width:230px">
             <button class="btn primary" type="button"
               ${respondDisabled?'disabled':''}
               onclick="startPdcaFromList('${escapeHtml(r.numero)}')">
               ${alreadySent?'PDCA enviado':pdcaActionLabel(r.numero)}
             </button>
-            ${(!alreadySent&&isPdcaStarted(r.numero))?'<span class="status-badge pending">Rascunho iniciado</span>':''}
+            ${(!alreadySent&&isPdcaStarted(r.numero))?'<span class="status-badge pending" style="align-self:center">Rascunho iniciado</span>':''}
             <button class="btn secondary" type="button"
               ${contestDisabled?'disabled':''}
               onclick="contestRoFromList('${escapeHtml(r.numero)}')">
@@ -14653,7 +14592,13 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
             </button>
           </div>
         </td>`;
+    }else{
+      operationalActions='<td class="operational-action-col" style="display:none"></td>';
     }
+
+    const statusControl = admin && !noPdca && displayStatus==='Pendente'
+      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">✓ Temos PDCA</button></div>`
+      : `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
 
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
@@ -14661,8 +14606,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r))}</td>
-      <td class="assigned-status-cell"><span class="${statusClass}">${escapeHtml(statusLabel)}</span></td>
-      <td class="assigned-pdca-cell">${pdcaControl}</td>
+      <td>${statusControl}</td>
+      <td class="ro-eye-cell"><div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -14671,9 +14616,9 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     ? `Mostrando ${roListVisibleLimit} de ${list.length} R.O.s · <button class="btn secondary" type="button" onclick="showMoreRos()">Mostrar mais 60</button>`
     : (list.length?`Mostrando ${list.length} R.O.s`:'');
 
-  // Nesta versão de teste, Ações operacionais concentra todas as ações disponíveis.
+  // A coluna "Ações" é exclusiva da visão operacional.
   document.querySelectorAll('.operational-action-col').forEach(el=>{
-    el.style.display='';
+    el.style.display=admin?'none':'';
   });
 }
 
