@@ -5807,7 +5807,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/core/runtime.js?v=20261028-api-switch-session-fix-v1"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app.js?v=20261030-setores-filial-save-v16"></script>
+<script src="assets/nucleo-app.js?v=20261030-setores-filial-save-v17-direct"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
 (function(){
@@ -6285,38 +6285,81 @@ function renderSupplierIndicatorsWorkspace(){
 })();
 </script>
 
-<script id="nucleoSectorSaveFeedbackOnlyV12">
-(function(){
-  let sectorSaveWindowUntil=0;
-  const originalAlert=window.alert.bind(window);
 
-  function status(message,type){
+
+
+<script id="nucleoSectorSaveDirectV17">
+(function(){
+  function setStatus(message,type){
     const el=document.getElementById('sectorSaveStatus');
     if(!el)return;
     el.textContent=message||'';
     el.style.color=type==='error'?'#b42318':type==='success'?'#067647':'#475467';
   }
 
-  // Espelha o retorno que o salvamento original já produz, sem alterar
-  // a função saveSectorConfiguration nem suas regras de permissão.
-  window.alert=function(message){
-    const msg=String(message||'');
-    if(Date.now() < sectorSaveWindowUntil){
-      if(/não foi|erro|falha|indisponível|não possui|cadastre pelo menos/i.test(msg)){
-        status('✕ '+msg,'error');
-      }else if(/salv|atualiz|confirmad/i.test(msg)){
-        status('✓ '+msg,'success');
-      }
-    }
-    return originalAlert(message);
-  };
+  async function saveDirect(){
+    const btn=document.getElementById('saveSectorConfigurationBtn');
+    const field=document.getElementById('sectorList');
+    if(!btn||!field)return;
 
-  document.addEventListener('click',function(event){
-    const btn=event.target && event.target.closest ? event.target.closest('#saveSectorConfigurationBtn') : null;
-    if(!btn)return;
-    sectorSaveWindowUntil=Date.now()+30000;
-    status('Salvando setores…','pending');
-  },true);
+    const session=typeof getSession==='function'?getSession():null;
+    const isFilialQuality=session?.role==='quality';
+    const isSgq=typeof isAdmin==='function'&&isAdmin();
+    if(!isSgq&&!isFilialQuality){
+      setStatus('✕ Configuração indisponível para este acesso.','error');
+      return;
+    }
+
+    const sectors=typeof normalizeSectorList==='function'
+      ? normalizeSectorList(field.value||'')
+      : String(field.value||'').split(/\n+/).map(v=>v.trim()).filter(Boolean);
+    if(!sectors.length){
+      setStatus('✕ Cadastre pelo menos um setor.','error');
+      return;
+    }
+
+    field.value=sectors.join('\n');
+    const unit=isFilialQuality?'filial':(document.getElementById('qualityConfigUnit')?.value||'matriz');
+    const original=btn.textContent;
+    btn.disabled=true;
+    btn.textContent='Salvando…';
+    setStatus('Salvando setores…','pending');
+
+    try{
+      if(typeof portalJsonp!=='function')throw new Error('A função de conexão com a base central não foi carregada. Atualize a página com Ctrl+F5.');
+      const req=portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},10000);
+      const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('A base central não respondeu em até 10 segundos.')),10500));
+      const result=await Promise.race([req,timeout]);
+      if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a alteração.');
+
+      try{
+        const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');
+        const old=configs.find(c=>c.id===unit)||{};
+        localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!==unit),{...old,id:unit,unit,sectorList:field.value}]));
+      }catch(_){}
+      try{refreshSectorSelectors();}catch(_){}
+      try{populateTriageSectors();}catch(_){}
+      try{renderOperationalUsers();}catch(_){}
+      setStatus('✓ Setores da '+(unit==='filial'?'filial':'matriz')+' salvos com sucesso.','success');
+    }catch(err){
+      setStatus('✕ Erro ao salvar: '+(err?.message||String(err)),'error');
+    }finally{
+      btn.disabled=false;
+      btn.textContent=original||'Salvar setores';
+    }
+  }
+
+  function install(){
+    const btn=document.getElementById('saveSectorConfigurationBtn');
+    if(!btn||btn.dataset.directSaveV17==='1')return false;
+    btn.dataset.directSaveV17='1';
+    btn.removeAttribute('onclick');
+    btn.addEventListener('click',saveDirect);
+    return true;
+  }
+  install();
+  let tries=0;
+  const timer=setInterval(function(){if(install()||++tries>100)clearInterval(timer);},100);
 })();
 </script>
 
