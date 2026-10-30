@@ -6212,4 +6212,69 @@ function renderSupplierIndicatorsWorkspace(){
 })();
 </script>
 
+
+<script id="nucleoRestrictUnitDriveSettingsToMatrixV10">
+(function(){
+  function session(){
+    try{return typeof getSession==='function' ? (getSession()||{}) : {};}
+    catch(e){return {};}
+  }
+
+  function isFilialQuality(){
+    const s=session();
+    return String(s.role||'').trim().toLowerCase()==='quality';
+  }
+
+  function applyVisibility(){
+    const restricted=isFilialQuality();
+
+    // Atalho da Administração: disponível somente para SGQ/Matriz.
+    document.querySelectorAll('button[onclick*="openUnitDriveSettings"]').forEach(btn=>{
+      btn.style.display=restricted?'none':'';
+      btn.hidden=restricted;
+    });
+
+    // Caso o bloco já tenha sido criado dinamicamente, a Qualidade da filial
+    // não pode vê-lo nem editá-lo.
+    const box=document.getElementById('unitQualitySettings');
+    if(box && restricted){
+      box.classList.add('hidden');
+      box.hidden=true;
+      box.style.display='none';
+    }
+  }
+
+  function installGuard(){
+    const original=window.openUnitDriveSettings;
+    if(typeof original!=='function' || original.__matrixOnlyV10)return false;
+
+    const wrapped=function(){
+      if(isFilialQuality()){
+        applyVisibility();
+        return;
+      }
+      return original.apply(this,arguments);
+    };
+    wrapped.__matrixOnlyV10=true;
+    wrapped.__original=original;
+    window.openUnitDriveSettings=wrapped;
+    return true;
+  }
+
+  function install(){
+    installGuard();
+    applyVisibility();
+  }
+
+  install();
+  let tries=0;
+  const timer=setInterval(function(){
+    install();
+    if(++tries>120)clearInterval(timer);
+  },100);
+
+  document.addEventListener('click',function(){setTimeout(applyVisibility,0);},true);
+})();
+</script>
+
 </body></html>
