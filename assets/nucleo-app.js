@@ -2864,68 +2864,32 @@ function refreshSectorSelectors(){
 }
 
 async function saveSectorConfiguration(){
-  const session=getSession();
-  const isFilialQuality=session?.role==='quality';
-
-  // Qualidade da filial pode manter a lista de setores da própria unidade.
-  // Para os demais perfis, respeita a permissão detalhada normal.
-  if(!isFilialQuality && !nucleoFeatureRequire('sectors','edit'))return;
-
-  if(!isAdmin() && !isFilialQuality){
+  if(!nucleoFeatureRequire('sectors','edit'))return;
+  if(!isAdmin()){
     alert('Configuração indisponível.');
     return;
   }
 
   const field=document.getElementById('sectorList');
   const sectors=normalizeSectorList(field?.value||'');
-  const feedback=document.getElementById('sectorSaveStatus');
-  const st=document.getElementById('configSavedState');
-  const setFeedback=(message,type)=>{
-    if(!feedback)return;
-    feedback.textContent=message;
-    feedback.style.color=type==='error'?'#b42318':type==='success'?'#067647':'#475467';
-  };
-
   if(!sectors.length){
-    setFeedback('Cadastre pelo menos um setor.','error');
     alert('Cadastre pelo menos um setor.');
     return;
   }
 
   field.value=sectors.join('\n');
-  // Qualidade da filial só pode salvar a configuração da própria filial.
-  // SGQ/Matriz continua podendo escolher Matriz ou Filial.
-  const unit=isFilialQuality?'filial':document.getElementById('qualityConfigUnit')?.value||'matriz';
-  if(st){st.classList.remove('hidden');st.textContent='Salvando setores desta unidade…';}
-  setFeedback('Salvando setores…','pending');
-
-  const saveBtn=document.getElementById('saveSectorConfigurationBtn');
-  const originalBtnText=saveBtn?.textContent||'Salvar setores';
-  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Salvando…';}
-
+  const unit=getSession()?.role==='quality'?'filial':document.getElementById('qualityConfigUnit')?.value||'matriz';
+  const st=document.getElementById('configSavedState');if(st){st.classList.remove('hidden');st.textContent='Salvando setores desta unidade…';}
   try{
-    const request=portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},12000);
-    const hardTimeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('A base central não respondeu em até 12 segundos. Tente novamente.')),12500));
-    const result=await Promise.race([request,hardTimeout]);
+    const result=await portalJsonp({acao:'portal_save_unit_config',unit,data:JSON.stringify({sectorList:field.value})},60000);
     if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou os setores.');
-
     const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]'),old=configs.find(c=>c.id===unit)||{};
     localStorage.setItem('nucleo-unit-configs',JSON.stringify([...configs.filter(c=>c.id!==unit),{...old,id:unit,unit,sectorList:field.value}]));
     const unitField=document.getElementById('qualityConfigSectors');if(unitField)unitField.value=field.value;
-    refreshSectorSelectors();
-    try{populateTriageSectors()}catch(_){}
-    try{renderOperationalUsers()}catch(_){}
+    refreshSectorSelectors();try{populateTriageSectors()}catch(_){}try{renderOperationalUsers()}catch(_){}
+    if(st)st.textContent='Setores da '+(unit==='filial'?'filial':'matriz')+' salvos na base central.';
+  }catch(e){if(st)st.textContent='Não foi possível salvar: '+e.message;else alert(e.message);}
 
-    const label=unit==='filial'?'filial':'matriz';
-    if(st)st.textContent='Setores da '+label+' salvos na base central.';
-    setFeedback('✓ Setores da '+label+' salvos com sucesso.','success');
-  }catch(e){
-    const message=e?.message||String(e);
-    if(st)st.textContent='Não foi possível salvar: '+message;
-    setFeedback('✕ Erro ao salvar: '+message,'error');
-  }finally{
-    if(saveBtn){saveBtn.disabled=false;saveBtn.textContent=originalBtnText;}
-  }
 }
 
 async function syncPublicPortalConfig(){
@@ -14582,34 +14546,40 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const displayStatus=assignedRoStatus(r);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus);
 
-    let operationalActions='';
-    if(!admin){
-      const respondDisabled=noPdca||contest||alreadySent;
-      const contestDisabled=noPdca||contest;
+    const statusControl = `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
 
-      operationalActions=`
-        <td class="operational-action-col">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;min-width:230px">
-            <button class="btn primary" type="button"
-              ${respondDisabled?'disabled':''}
-              onclick="startPdcaFromList('${escapeHtml(r.numero)}')">
-              ${alreadySent?'PDCA enviado':pdcaActionLabel(r.numero)}
-            </button>
-            ${(!alreadySent&&isPdcaStarted(r.numero))?'<span class="status-badge pending" style="align-self:center">Rascunho iniciado</span>':''}
-            <button class="btn secondary" type="button"
-              ${contestDisabled?'disabled':''}
-              onclick="contestRoFromList('${escapeHtml(r.numero)}')">
-              ${contest?'Em contestação':'Contestar'}
-            </button>
-          </div>
-        </td>`;
-    }else{
-      operationalActions='<td class="operational-action-col" style="display:none"></td>';
+    let pdcaControl='—';
+    if(admin && !noPdca){
+      const hasExternal=externalPdca===true;
+      pdcaControl=`<div class="assigned-pdca-control" role="group" aria-label="Situação do PDCA">
+        <button class="assigned-pdca-option yes ${hasExternal?'is-selected':''}" type="button"
+          onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">Tem PDCA</button>
+        <button class="assigned-pdca-option no ${!hasExternal?'is-selected':''}" type="button"
+          onclick="setExternalPdca('${escapeHtml(r.numero)}',false,'${escapeHtml(responsibleSector)}')">Não tem PDCA</button>
+      </div>`;
+    }else if(!admin){
+      pdcaControl=`<span class="${externalPdca||alreadySent?'badge ok':'badge'}">${escapeHtml(pdcaSituation)}</span>`;
     }
 
-    const statusControl = admin && !noPdca && displayStatus==='Pendente'
-      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">✓ Temos PDCA</button></div>`
-      : `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+    let operationalActions='';
+    if(admin){
+      operationalActions=`<td class="operational-action-col ro-eye-cell">
+        <div class="assigned-operational-icons ro-row-actions">
+          <button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>
+          ${tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}
+        </div>
+      </td>`;
+    }else{
+      const respondDisabled=noPdca||contest||alreadySent;
+      const contestDisabled=noPdca||contest;
+      operationalActions=`<td class="operational-action-col">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;min-width:230px">
+          <button class="btn primary" type="button" ${respondDisabled?'disabled':''} onclick="startPdcaFromList('${escapeHtml(r.numero)}')">${alreadySent?'PDCA enviado':pdcaActionLabel(r.numero)}</button>
+          ${(!alreadySent&&isPdcaStarted(r.numero))?'<span class="status-badge pending" style="align-self:center">Rascunho iniciado</span>':''}
+          <button class="btn secondary" type="button" ${contestDisabled?'disabled':''} onclick="contestRoFromList('${escapeHtml(r.numero)}')">${contest?'Em contestação':'Contestar'}</button>
+        </div>
+      </td>`;
+    }
 
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
@@ -14617,8 +14587,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td>${escapeHtml(responsibleSector)}</td>
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r))}</td>
-      <td>${statusControl}</td>
-      <td class="ro-eye-cell"><div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
+      <td class="assigned-status-cell">${statusControl}</td>
+      <td class="assigned-pdca-cell">${pdcaControl}</td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -14627,9 +14597,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     ? `Mostrando ${roListVisibleLimit} de ${list.length} R.O.s · <button class="btn secondary" type="button" onclick="showMoreRos()">Mostrar mais 60</button>`
     : (list.length?`Mostrando ${list.length} R.O.s`:'');
 
-  // A coluna "Ações" é exclusiva da visão operacional.
+  // A coluna "Ações operacionais" permanece visível também para o SGQ/admin,
+  // contendo apenas os ícones operacionais. PDCA possui coluna própria.
   document.querySelectorAll('.operational-action-col').forEach(el=>{
-    el.style.display=admin?'none':'';
+    el.style.display='';
   });
 }
 
