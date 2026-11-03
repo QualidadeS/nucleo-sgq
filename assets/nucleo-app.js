@@ -14635,9 +14635,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
     const displayStatus=assignedRoStatus(r,externalPdca);
-    const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus);
 
-    const statusControl = `<span class="${displayStatus==='Respondida'||displayStatus==='Apresentada'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+    // A coluna STATUS deve mostrar exclusivamente o status calculado/oficial.
+    // Não sobrescrever com decisionLabel de triagens antigas.
+    const statusControl = `<span class="${displayStatus==='Respondida'||displayStatus==='Apresentada'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span>`;
 
     let pdcaControl='—';
     if(admin && !noPdca){
