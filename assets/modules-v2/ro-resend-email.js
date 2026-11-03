@@ -11,11 +11,40 @@
     try{return typeof normalizeAnswer==='function'?normalizeAnswer(v):String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
     catch(e){return String(v||'').toLowerCase().trim()}
   }
-  function roDigits(v){
-    const m=String(v||'').match(/\d+/g);
-    return m&&m.length?String(parseInt(m[m.length-1],10)):'';
+  function roIdentity(v){
+    const raw=String(v||'').trim().toUpperCase();
+    if(!raw)return '';
+
+    const compact=raw
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/\s+/g,'')
+      .replace(/_/g,'-');
+
+    const typeMatch=compact.match(/(?:^|-)RO-?(IN|EX)(?:-|$)/) || compact.match(/^RO(IN|EX)/);
+    const type=typeMatch?typeMatch[1]:'';
+
+    const nums=compact.match(/\d+/g);
+    if(!nums||!nums.length)return '';
+    const number=String(parseInt(nums[nums.length-1],10));
+    if(!number)return '';
+
+    return (type?type+'|':'')+number;
   }
-  function sameRo(a,b){return !!roDigits(a)&&roDigits(a)===roDigits(b)}
+  function sameRo(a,b){
+    const ka=roIdentity(a);
+    const kb=roIdentity(b);
+    if(!ka||!kb)return false;
+
+    // Se ambos informam a origem, IN e EX nunca podem se cruzar.
+    const aTyped=ka.includes('|');
+    const bTyped=kb.includes('|');
+    if(aTyped&&bTyped)return ka===kb;
+
+    // Compatibilidade com históricos antigos que tenham apenas o número.
+    const na=ka.split('|').pop();
+    const nb=kb.split('|').pop();
+    return na===nb;
+  }
   function eventTime(x){
     const d=Date.parse(String(x?.sentAt||x?.at||x?.createdAt||''));
     return Number.isFinite(d)?d:0;
