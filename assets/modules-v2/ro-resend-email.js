@@ -15,34 +15,35 @@
     const m=String(v||'').match(/\d+/g);
     return m&&m.length?String(parseInt(m[m.length-1],10)):'';
   }
-  function roOriginCode(value,fallback){
-    const raw=String(value||'').trim().toUpperCase();
-    if(/(?:^|-)IN(?:-|$)/.test(raw))return 'IN';
-    if(/(?:^|-)EX(?:-|$)/.test(raw))return 'EX';
-    const fb=norm(fallback||'');
-    if(fb==='in'||fb.indexOf('interna')>=0)return 'IN';
-    if(fb==='ex'||fb.indexOf('externa')>=0)return 'EX';
+  function roOrigin(v,obj){
+    const raw=String(v||obj?.ro||obj?.roNumber||obj?.numeroRo||'').toUpperCase();
+    if(/RO\s*-?\s*EX/.test(raw))return 'EX';
+    if(/RO\s*-?\s*IN/.test(raw))return 'IN';
+    const extra=String(obj?.origin||obj?.origem||obj?.origemBase||obj?.typeOrigin||'').toUpperCase();
+    if(extra.includes('EXTER'))return 'EX';
+    if(extra.includes('INTER'))return 'IN';
     return '';
   }
-  function roIdentityKey(value,fallbackOrigin){
-    const digits=roDigits(value);
-    const origin=roOriginCode(value,fallbackOrigin);
-    return digits&&origin ? origin+'|'+digits : '';
+  function roHistoryKey(v,obj){
+    const digits=roDigits(v||obj?.ro||obj?.roNumber||obj?.numeroRo||'');
+    const origin=roOrigin(v,obj);
+    return digits&&origin?origin+'|'+digits:'';
   }
-  function historyRoKey(h){
-    return roIdentityKey(
-      h?.ro||h?.roNumber||h?.numeroRo||h?.numero||'',
-      h?.origin||h?.origem||h?.origemBase||h?.roOrigin||h?.tipoRo||''
-    );
-  }
-  function sameRo(a,b,aOrigin,bOrigin){
-    const ka=roIdentityKey(a,aOrigin);
-    const kb=roIdentityKey(b,bOrigin);
-    return !!ka && ka===kb;
+  function sameRo(a,b,aObj,bObj){
+    const ka=roHistoryKey(a,aObj), kb=roHistoryKey(b,bObj);
+    if(ka&&kb)return ka===kb;
+    return false;
   }
   function eventTime(x){
-    const d=Date.parse(String(x?.sentAt||x?.at||x?.createdAt||''));
-    return Number.isFinite(d)?d:0;
+    const raw=String(x?.sentAt||x?.at||x?.createdAt||'').trim();
+    let d=Date.parse(raw);
+    if(Number.isFinite(d))return d;
+    const m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(m){
+      d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
+      if(Number.isFinite(d))return d;
+    }
+    return 0;
   }
   function findRo(roNumber){
     const key=String(roNumber||'').trim();
@@ -107,20 +108,18 @@
   let historyLoadedAt=0;
   let historyPromise=null;
 
-  // Índice global de erros — atualizado toda vez que o histórico é carregado.
-  // Chave inclui ORIGEM + número (ex.: EX|489), para nunca misturar RO-IN e RO-EX.
+  // Índice global de erros do histórico.
+  // Chave: origem + número (ex.: EX|490 / IN|490).
   window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
 
   function rebuildErrorIndex(history){
-    const idx = new Set();
+    const idx=new Set();
     (history||[]).forEach(h=>{
       if(String(h?.status||'').toLowerCase()!=='error')return;
-      const key=historyRoKey(h);
-      // Histórico sem origem identificável não entra no filtro automático.
+      const key=roHistoryKey(h?.ro,h);
       if(key)idx.add(key);
     });
-    window.__nucleoEmailErrorIndex = idx;
-    // Força re-render da lista para aplicar o filtro com dados novos.
+    window.__nucleoEmailErrorIndex=idx;
     try{ if(typeof render==='function') render(); }catch(e){}
   }
 
@@ -152,10 +151,11 @@
   }
 
   function relevantHistory(history,roNumber,sector,ro){
-    const roOrigin=String(ro?.origemBase||ro?.raw?.__origemBase||ro?.origem||'').trim();
+    const targetKey=roHistoryKey(roNumber,ro);
+    if(!targetKey)return [];
     const all=(history||[]).filter(h=>
       String(h?.type||'ro').toLowerCase()==='ro' &&
-      historyRoKey(h)===roIdentityKey(roNumber,roOrigin)
+      roHistoryKey(h?.ro,h)===targetKey
     );
     if(!all.length)return [];
 
@@ -713,12 +713,13 @@
       if(!assigned)return;
       const history=await loadHistory();
 
-      // Índice exato: origem + número. Nunca cruza RO-IN com RO-EX do mesmo número.
+      // Índice de erros por origem + número da R.O.
       const roErrorIndex=new Set();
       (history||[]).forEach(h=>{
-        if(String(h?.status||'').toLowerCase()!=='error')return;
-        const key=historyRoKey(h);
-        if(key)roErrorIndex.add(key);
+        if(String(h?.status||'').toLowerCase()==='error'){
+          const key=roHistoryKey(h?.ro,h);
+          if(key)roErrorIndex.add(key);
+        }
       });
 
       document.querySelectorAll('#rows tr').forEach(tr=>{
@@ -734,15 +735,16 @@
 
         // Se o histórico por setor não identificou erro, mas esta R.O. tem erro
         // registrado em qualquer envio, força o badge para que apareça no filtro.
-        const roKey=roIdentityKey(
-          ro,
-          roObj?.origemBase||roObj?.raw?.__origemBase||roObj?.origem||''
-        );
-        if(emailStatus.code==='none' && roKey && roErrorIndex.has(roKey)){
+        const rowKey=roHistoryKey(ro,roObj);
+        if(emailStatus.code==='none' && rowKey && roErrorIndex.has(rowKey)){
           const allRoEvents=(history||[]).filter(h=>
-            String(h?.type||'ro').toLowerCase()==='ro' && historyRoKey(h)===roKey
+            String(h?.type||'ro').toLowerCase()==='ro' && roHistoryKey(h?.ro,h)===rowKey
           );
-          emailStatus=statusFromEvents(allRoEvents);
+          // O filtro "Erro no envio" representa a existência de falha registrada.
+          // Se houver erro para esta R.O./origem, não perde o registro por falta de setor no histórico.
+          if(allRoEvents.some(h=>String(h?.status||'').toLowerCase()==='error')){
+            emailStatus={code:'error',label:'Erro',title:'Existe erro de envio registrado no histórico desta R.O.'};
+          }
         }
 
         ensureStatusBadge(tr,emailStatus,events);
