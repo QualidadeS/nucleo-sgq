@@ -11264,6 +11264,7 @@ function normalizeImportedRo(raw,index){
     // Valor literal da coluna Status da planilha-base (Interna: AD / Externa: AE).
     // Não confundir com `status`, que é o rótulo transformado usado na interface.
     statusOperacional:statusPlanilha,
+    statusControle:String(raw?.__statusControle||'').trim(),
     descricao,
     pdca,
     pdfUrl: '',
@@ -11584,7 +11585,7 @@ function compactRoForStorage(r){
   [
     '__origemBase','__ehSac','__numeroPlanilha','__numeroApp','__unidade','__descricaoProblema',
     '__setorResponsavel','__pessoaResponsavel','__pdcaReclamanteData',
-    '__acaoPreventiva','__prazoConclusaoAcao','__statusOperacional',
+    '__acaoPreventiva','__prazoConclusaoAcao','__statusOperacional','__statusControle',
     '__dataEnvioOperacional','__resultadoOperacional'
   ].forEach(k=>{
     if(raw[k]!==undefined)keepRaw[k]=raw[k];
@@ -11626,7 +11627,8 @@ function saveImportedRosByOrigin(internas,externas){
     setorResponsavelPlanilha:r?.setorResponsavelPlanilha||'',
     pessoaResponsavel:r?.pessoaResponsavel||'',
     status:r?.status||'',
-    statusOperacional:r?.statusOperacional||r?.raw?.__statusOperacional||''
+    statusOperacional:r?.statusOperacional||r?.raw?.__statusOperacional||'',
+    statusControle:r?.statusControle||r?.raw?.__statusControle||''
   });
 
   // Salva apenas se couber; a persistência real já está no IndexedDB.
@@ -14411,6 +14413,13 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 function assignedRoStatus(r){
   const rawObj=r?.raw||{};
 
+  // FONTE OFICIAL: aba Controle (A = R.O.; C = origem; G = status).
+  const statusControle=String(
+    r?.statusControle ||
+    rawObj?.__statusControle ||
+    ''
+  ).trim();
+
   const statusOperacional=String(
     r?.statusOperacional ||
     r?.statusPlanilha ||
@@ -14421,67 +14430,17 @@ function assignedRoStatus(r){
     ''
   ).trim();
 
-  const resultadoOperacional=String(
-    r?.resultadoEnvio ||
-    rawObj?.__resultadoOperacional ||
-    rawObj?.['Resultado'] ||
-    ''
-  ).trim();
+  // Controle prevalece. O operacional serve apenas como fallback de segurança.
+  const rawStatus=statusControle || statusOperacional || String(r?.status||'').trim();
+  const sheet=normalizeAnswer(rawStatus);
 
-  const statusVisual=String(r?.status||'').trim();
+  if(sheet.includes('cancel')) return 'Cancelada';
+  if(sheet.includes('obsolet')) return 'Obsoleto';
+  if(sheet.includes('registro')||sheet==='falta de caixa'||sheet==='falta de caixas') return 'Registro';
 
-  const sheet=normalizeAnswer(statusOperacional);
-  const result=normalizeAnswer(resultadoOperacional);
-  const visual=normalizeAnswer(statusVisual);
+  if(sheet.includes('apresentad') || sheet.includes('retorno entregue ao reclamante')) return 'Apresentada';
+  if(sheet.includes('respondid')) return 'Respondida';
 
-  // 1. Estados oficiais/terminais da planilha.
-  if(sheet.includes('cancel') || visual.includes('cancel')) return 'Cancelada';
-  if(sheet.includes('obsolet') || visual.includes('obsolet')) return 'Obsoleto';
-  if(
-    sheet.includes('registro') ||
-    visual.includes('registro') ||
-    sheet==='falta de caixa' || sheet==='falta de caixas' ||
-    visual==='falta de caixa' || visual==='falta de caixas'
-  ) return 'Registro';
-
-  // 2. Apresentada: entrega/apresentação ao reclamante é a evidência mais forte.
-  const entregueAoReclamante =
-    r?.reclamanteRecebeuPdca===true ||
-    !!String(r?.pdcaEnviadoReclamanteEm||'').trim() ||
-    !!String(rawObj?.__pdcaReclamanteData||'').trim() ||
-    !!String(rawObj?.['PDCA ENVIADO PARA O RECLAMANTE (DATA)']||'').trim();
-
-  if(
-    entregueAoReclamante ||
-    sheet.includes('apresentad') ||
-    result.includes('apresentad') ||
-    visual.includes('apresentad') ||
-    visual.includes('retorno entregue ao reclamante')
-  ) return 'Apresentada';
-
-  // 3. Respondida: considera Status e Resultado da própria planilha.
-  if(
-    sheet.includes('respondid') ||
-    result.includes('respondid') ||
-    visual.includes('respondid')
-  ) return 'Respondida';
-
-  // 4. O Núcleo pode complementar quando existe um PDCA real recebido.
-  const sentPdca=getPdcaReturnForRo(r);
-  if(sentPdca){
-    const presented = Boolean(
-      sentPdca.apresentadoEm ||
-      sentPdca.presented ||
-      sentPdca.presentedAt
-    ) || (
-      !sentPdca.externalPdf &&
-      typeof getPdcaPresentationMap==='function' &&
-      getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
-    );
-    return presented ? 'Apresentada' : 'Respondida';
-  }
-
-  // 5. Situações ainda aguardando resposta.
   if(
     sheet.includes('pendente') ||
     sheet.includes('nao enviada') ||
@@ -14489,14 +14448,26 @@ function assignedRoStatus(r){
     sheet==='enviado' ||
     sheet==='enviada' ||
     sheet.includes('aguardando resposta') ||
-    sheet.includes('aguardando') ||
-    result.includes('pendente') ||
-    visual.includes('pendente') ||
-    visual.includes('aguardando resposta') ||
-    visual.includes('aguardando')
+    sheet.includes('aguardando')
   ) return 'Pendente';
 
-  // "Tem PDCA / Não tem PDCA" pertence somente à coluna PDCA e não decide o Status.
+  // Se Controle ainda estiver sem situação, um PDCA real do Núcleo pode complementar.
+  if(!statusControle){
+    const sentPdca=getPdcaReturnForRo(r);
+    if(sentPdca){
+      const presented = Boolean(
+        sentPdca.apresentadoEm ||
+        sentPdca.presented ||
+        sentPdca.presentedAt
+      ) || (
+        !sentPdca.externalPdf &&
+        typeof getPdcaPresentationMap==='function' &&
+        getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
+      );
+      return presented ? 'Apresentada' : 'Respondida';
+    }
+  }
+
   return 'Pendente';
 }
 
