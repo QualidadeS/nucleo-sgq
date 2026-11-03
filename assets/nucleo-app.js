@@ -14559,6 +14559,22 @@ function nucleoAssignedSectorVisualKey(value){
   }).join(' ');
   return n;
 }
+
+function nucleoRoEmailHistoryKey2026(r){
+  const raw=String(r?.numero||r?.id||r?.codigo||'').toUpperCase();
+  const m=raw.match(/\d+/g);
+  const digits=m&&m.length?String(parseInt(m[m.length-1],10)):'';
+  let origin='';
+  if(/RO\s*-?\s*EX/.test(raw))origin='EX';
+  else if(/RO\s*-?\s*IN/.test(raw))origin='IN';
+  else{
+    const o=String(r?.origemBase||r?.raw?.__origemBase||'').toUpperCase();
+    if(o.includes('EXTER'))origin='EX';
+    else if(o.includes('INTER'))origin='IN';
+  }
+  return digits&&origin?origin+'|'+digits:'';
+}
+
 function showMoreRos(){roListVisibleLimit+=60;render()}
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
@@ -14666,19 +14682,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
         if(assignedEmailFilter==='error'){
           const idx=window.__nucleoEmailErrorIndex;
-          const rawRo=String(r.numero||r.id||r.codigo||'').trim();
-          const originRaw=String(r.origemBase||r.raw?.__origemBase||r.origem||'').trim();
-          const rawUpper=rawRo.toUpperCase();
-          let origin='';
-          if(/(?:^|-)IN(?:-|$)/.test(rawUpper))origin='IN';
-          else if(/(?:^|-)EX(?:-|$)/.test(rawUpper))origin='EX';
-          else{
-            const on=normalizeAnswer(originRaw);
-            if(on==='in'||on.includes('interna'))origin='IN';
-            else if(on==='ex'||on.includes('externa'))origin='EX';
-          }
-          const digits=roDigits(rawRo);
-          const emailKey=origin&&digits ? origin+'|'+digits : '';
+          const emailKey=nucleoRoEmailHistoryKey2026(r);
           if(!idx||!emailKey||!idx.has(emailKey)){
             return false;
           }
