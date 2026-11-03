@@ -622,6 +622,32 @@
     };
   }
 
+  function ensureAssignedEmailFilter(){
+    const base=document.getElementById('filter');
+    if(!base)return null;
+    let sel=document.getElementById('assignedEmailFilter');
+    if(sel)return sel;
+
+    sel=document.createElement('select');
+    sel.id='assignedEmailFilter';
+    sel.setAttribute('aria-label','Status do envio de e-mail');
+    sel.innerHTML='<option value="all">Todos os envios</option><option value="error">Erro no envio</option>';
+    sel.value='all';
+    sel.addEventListener('change',()=>{
+      updateAssignedEmailMarkers();
+    });
+    base.insertAdjacentElement('afterend',sel);
+    return sel;
+  }
+
+  function applyAssignedEmailFilter(tr,statusCode){
+    if(!tr)return;
+    const sel=ensureAssignedEmailFilter();
+    const mode=sel?.value||'all';
+    tr.dataset.roEmailStatus=statusCode||'none';
+    tr.style.display=(mode==='error' && statusCode!=='error')?'none':'';
+  }
+
   async function updateAssignedEmailMarkers(){
     try{
       let assigned=false;
@@ -637,7 +663,9 @@
         if(!ro)return;
         ensureResendButton(tr,ro,sector);
         const events=relevantHistory(history,ro,sector,roObj);
-        ensureStatusBadge(tr,statusFromEvents(events),events);
+        const emailStatus=statusFromEvents(events);
+        ensureStatusBadge(tr,emailStatus,events);
+        applyAssignedEmailFilter(tr,emailStatus.code);
       });
     }catch(e){
       console.warn('[NÚCLEO EMAIL STATUS] Falha ao marcar R.O.s atribuídas.',e);
@@ -653,6 +681,7 @@
       try{assigned=typeof roListMode!=='undefined'&&roListMode==='assigned'}catch(e){}
       if(!assigned)return;
 
+      ensureAssignedEmailFilter();
       document.querySelectorAll('#rows tr').forEach(tr=>{
         const roBtn=tr.querySelector('td:first-child .ro-link-btn');
         if(!roBtn)return;
