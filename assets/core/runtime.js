@@ -17213,27 +17213,72 @@ let selected=ros[0],activeStage=0;let answers={};
 
 
 function assignedRoStatus(r,preloadedMap=null){
-  const raw=String(r?.status||'').trim().toLowerCase();
+  const rawObj=r?.raw||{};
   const tri=getRoTriageRecord(r,preloadedMap)||{};
+  const raw=String(r?.status||'').trim();
   const triDecision=String(tri?.decision||tri?.status||'').trim().toLowerCase();
 
-  // O encerramento pode estar registrado apenas na triagem central.
-  // Considerar a decisão da triagem evita que "Cancelar R.O." permaneça
-  // em Em andamento e evita exibir ações de PDCA para uma R.O. encerrada.
-  if(raw.includes('cancel')||['cancelled','canceled','cancelada','cancelado','cancel'].includes(triDecision)) return 'Cancelada';
-  if(raw.includes('obsolet')||['obsolete','obsoleto','obsoleta'].includes(triDecision)) return 'Obsoleto';
-  if(['record','registro'].includes(triDecision)||raw==='falta de caixa'||raw==='falta de caixas'||raw.includes('registro')) return 'Registro';
-  if(tri.pdcaExternal===true&&!tri.pdcaFileId) return 'PDCA externo';
+  function interpretarStatus(v){
+    const s=normalizeAnswer(String(v||'').trim());
+    if(!s)return '';
+    if(s.includes('cancel'))return 'Cancelada';
+    if(s.includes('obsolet'))return 'Obsoleto';
+    if(s.includes('registro')||s==='falta de caixa'||s==='falta de caixas')return 'Registro';
+    if(s.includes('apresentad')||s.includes('retorno entregue ao reclamante'))return 'Apresentada';
+    if(s.includes('respondid'))return 'Respondida';
+    if(s.includes('pendente')||s.includes('nao enviada')||s.includes('não enviada')||s==='enviado'||s==='enviada'||s.includes('aguardando'))return 'Pendente';
+    return '';
+  }
 
-  // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
-  // salvo/enviado na coleção pdca_sent para esta R.O. Não usa mais r.status/r.pdca
-  // das planilhas antigas, pois esses campos estavam promovendo registros sem resposta.
+  // 1) Se a R.O. realmente tem situação da aba Controle, ela é a fonte oficial.
+  const statusControle=String(r?.statusControle||rawObj?.__statusControle||'').trim();
+  const controleEncontrado=(
+    r?.statusControleEncontrado===true||
+    rawObj?.__statusControleEncontrado===true||
+    !!statusControle
+  );
+  if(controleEncontrado){
+    const st=interpretarStatus(statusControle);
+    if(st)return st;
+  }
+
+  // 2) Estados administrativos/terminais continuam prevalecendo.
+  const rawNorm=normalizeAnswer(raw);
+  if(rawNorm.includes('cancel')||['cancelled','canceled','cancelada','cancelado','cancel'].includes(triDecision))return 'Cancelada';
+  if(rawNorm.includes('obsolet')||['obsolete','obsoleto','obsoleta'].includes(triDecision))return 'Obsoleto';
+  if(['record','registro'].includes(triDecision)||rawNorm==='falta de caixa'||rawNorm==='falta de caixas'||rawNorm.includes('registro'))return 'Registro';
+
+  // 3) A MESMA marcação que desenha "Tem PDCA / Sem PDCA" decide o fallback.
+  const reviewCanonical=nucleoPdcaReviewCanonical2026(
+    nucleoPdcaReviewRoKey2026(r),
+    String(r?.origemBase||rawObj?.__origemBase||'')
+  );
+  const reviewState=nucleoPdcaReviewMap2026()[reviewCanonical];
+  const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
+  const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
+
+  if(reviewDecision==='yes'){
+    const sentPdca=getPdcaReturnForRo(r);
+    if(sentPdca){
+      const presented=Boolean(sentPdca.apresentadoEm||sentPdca.presented||sentPdca.presentedAt)||
+        (!sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function'&&getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+      if(presented)return 'Apresentada';
+    }
+    return 'Respondida';
+  }
+  if(reviewDecision==='no')return 'Pendente';
+
+  // 4) PDCA real recebido também significa respondida/apresentada.
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
-    const presented = Boolean(sentPdca.apresentadoEm) ||
-      (!sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function' && getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
-    return presented ? 'PDCA apresentado' : 'PDCA respondido';
+    const presented=Boolean(sentPdca.apresentadoEm||sentPdca.presented||sentPdca.presentedAt)||
+      (!sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function'&&getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+    return presented?'Apresentada':'Respondida';
   }
+
+  // Compatibilidade com marcação externa antiga quando não há revisão 2026.
+  if(tri.pdcaExternal===true||pdcaExternalExists(r,preloadedMap))return 'Respondida';
+
   return 'Pendente';
 }
 
@@ -17964,7 +18009,7 @@ function render(){
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r,renderTriageMap);
       const statusKey={'Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'';
-      const hasAnswer=assignedHasAnswerWithoutPdca(r,renderTriageMap);
+      const hasAnswer=['Respondida','Apresentada'].includes(displayStatus)||assignedHasAnswerWithoutPdca(r,renderTriageMap);
       const filt=
         f==='todas'||
         (f==='precisa_resposta'&&!assignedTerminalStatus(displayStatus)&&!hasAnswer)||
@@ -18034,7 +18079,7 @@ function render(){
     }
 
     const statusControl =
-      `<span class="${displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+      `<span class="${displayStatus==='Respondida'||displayStatus==='Apresentada'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayStatus)}</span>`;
 
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
