@@ -14470,6 +14470,26 @@ function assignedRoStatus(r,externalPdcaKnown){
     return controleStatus;
   }
 
+  // A marcação 2026 é a mesma fonte usada visualmente para "Tem PDCA / Sem PDCA".
+  const reviewCanonical=nucleoPdcaReviewCanonical2026(
+    nucleoPdcaReviewRoKey2026(r),
+    String(r?.origemBase||rawObj?.__origemBase||'')
+  );
+  const reviewState=nucleoPdcaReviewMap2026()[reviewCanonical];
+  const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
+  const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
+  if(reviewDecision==='yes'){
+    const sentPdca=getPdcaReturnForRo(r);
+    if(sentPdca){
+      const presented=Boolean(sentPdca.apresentadoEm||sentPdca.presented||sentPdca.presentedAt)||(
+        !sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function'&&getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
+      );
+      if(presented)return 'Apresentada';
+    }
+    return 'Respondida';
+  }
+  if(reviewDecision==='no')return 'Pendente';
+
   // REGRA DE CONSISTÊNCIA DA TELA:
   // se a mesma linha está marcada "Tem PDCA", ela não pode simultaneamente
   // aparecer como "Pendente". A marcação significa que já existe resposta.
