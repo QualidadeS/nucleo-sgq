@@ -83,6 +83,22 @@
   let historyLoadedAt=0;
   let historyPromise=null;
 
+  // Índice global de erros — atualizado toda vez que o histórico é carregado.
+  // Chave: roDigits(roNumber). Usado pelo render() síncrono da lista.
+  window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
+
+  function rebuildErrorIndex(history){
+    const idx = new Set();
+    (history||[]).forEach(h=>{
+      if(String(h?.status||'').toLowerCase()==='error' && h?.ro){
+        idx.add(roDigits(h.ro));
+      }
+    });
+    window.__nucleoEmailErrorIndex = idx;
+    // Força re-render da lista para aplicar o filtro com dados novos.
+    try{ if(typeof render==='function') render(); }catch(e){}
+  }
+
   async function loadHistory(force=false){
     if(!force && historyCache.length && Date.now()-historyLoadedAt<30000)return historyCache;
     if(historyPromise)return historyPromise;
@@ -104,6 +120,7 @@
       historyCache=local;
       historyLoadedAt=Date.now();
       historyPromise=null;
+      rebuildErrorIndex(local);
       return historyCache;
     })();
     return historyPromise;
