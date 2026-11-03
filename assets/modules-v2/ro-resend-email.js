@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v28 | filtro de erro por R.O. exata */
+/* NÚCLEO | Reenviar e-mail | v10 | ações fixas */
 (function(){
-  if(window.__nucleoRoResendEmailV28)return;
-  window.__nucleoRoResendEmailV28=true;
+  if(window.__nucleoRoResendEmailV10)return;
+  window.__nucleoRoResendEmailV10=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -15,41 +15,7 @@
     const m=String(v||'').match(/\d+/g);
     return m&&m.length?String(parseInt(m[m.length-1],10)):'';
   }
-  function roOrigin(v){
-    const n=String(v||'').trim().toUpperCase().replace(/_/g,'-').replace(/\s+/g,'');
-    if(/(?:^|-)IN(?:-|\d)|^RO-?IN/.test(n))return 'IN';
-    if(/(?:^|-)EX(?:-|\d)|^RO-?EX/.test(n))return 'EX';
-    return '';
-  }
-  function roExactKey(v,originHint){
-    const digits=roDigits(v);
-    if(!digits)return '';
-    let origin=roOrigin(v)||roOrigin(originHint);
-    if(!origin){
-      const hint=norm(originHint||'');
-      if(hint==='interna'||hint==='interno')origin='IN';
-      if(hint==='externa'||hint==='externo')origin='EX';
-    }
-    return origin?origin+'|'+digits:'';
-  }
-  function roRecordOrigin(ro){
-    return String(
-      ro?.origemBase||ro?.raw?.__origemBase||ro?.origem||ro?.tipoRO||ro?.tipo||''
-    ).trim();
-  }
-  function historyRoKey(h){
-    return roExactKey(
-      h?.ro,
-      h?.origin||h?.origem||h?.origemBase||h?.tipoRO||h?.tipo||''
-    );
-  }
-  function sameRoHistory(h,roNumber,ro){
-    const rowKey=roExactKey(roNumber,roRecordOrigin(ro));
-    const eventKey=historyRoKey(h);
-    // O filtro de erro só aceita vínculo inequívoco. Histórico sem IN/EX não
-    // pode contaminar uma R.O. da outra origem com o mesmo número.
-    return !!rowKey && !!eventKey && rowKey===eventKey;
-  }
+  function sameRo(a,b){return !!roDigits(a)&&roDigits(a)===roDigits(b)}
   function eventTime(x){
     const d=Date.parse(String(x?.sentAt||x?.at||x?.createdAt||''));
     return Number.isFinite(d)?d:0;
@@ -146,7 +112,7 @@
   function relevantHistory(history,roNumber,sector,ro){
     const all=(history||[]).filter(h=>
       String(h?.type||'ro').toLowerCase()==='ro' &&
-      sameRoHistory(h,roNumber,ro)
+      sameRo(h?.ro,roNumber)
     );
     if(!all.length)return [];
 
@@ -155,7 +121,17 @@
       const exact=all.filter(h=>norm(h?.sector||h?.setor||h?.responsibleSector||'')===wanted);
       if(exact.length)return exact;
 
-      // Histórico legado: tenta descobrir setor somente pelo cadastro do destinatário.
+      // Fallback 1: comparação fuzzy — ignora diferença entre "Operação" / "Operações" / "Operacoes"
+      const fuzzy=all.filter(h=>{
+        const hs=norm(h?.sector||h?.setor||h?.responsibleSector||'');
+        if(!hs)return false;
+        // Um contém o outro (cobre plural/singular e variações sem acento)
+        return hs.startsWith(wanted.slice(0,Math.max(4,wanted.length-2))) ||
+               wanted.startsWith(hs.slice(0,Math.max(4,hs.length-2)));
+      });
+      if(fuzzy.length)return fuzzy;
+
+      // Fallback 2: histórico legado — tenta descobrir setor somente pelo cadastro do destinatário.
       const inferred=all.filter(h=>{
         const raw=String(h?.email||h?.recipient||h?.destinatario||'').trim();
         const emails=raw.split(/[;,]/).map(x=>x.trim()).filter(Boolean);
@@ -173,6 +149,11 @@
     if(emails.length===1)return all.filter(h=>
       String(h?.email||h?.recipient||h?.destinatario||'').toLowerCase().includes(emails[0])
     );
+
+    // Fallback final: se a R.O. tem QUALQUER erro no histórico e não foi possível
+    // vincular por setor, retorna todos os eventos da R.O. para que o badge apareça.
+    const hasError=all.some(h=>String(h?.status||'').toLowerCase()==='error');
+    if(hasError)return all;
 
     return [];
   }
@@ -688,6 +669,15 @@
       try{assigned=typeof roListMode!=='undefined'&&roListMode==='assigned'}catch(e){}
       if(!assigned)return;
       const history=await loadHistory();
+
+      // Monta índice de R.O.s que têm QUALQUER erro no histórico para lookup rápido.
+      const roErrorIndex=new Set();
+      (history||[]).forEach(h=>{
+        if(String(h?.status||'').toLowerCase()==='error' && h?.ro){
+          roErrorIndex.add(roDigits(h.ro));
+        }
+      });
+
       document.querySelectorAll('#rows tr').forEach(tr=>{
         const roBtn=tr.querySelector('td:first-child .ro-link-btn');
         if(!roBtn)return;
@@ -697,7 +687,17 @@
         if(!ro)return;
         ensureResendButton(tr,ro,sector);
         const events=relevantHistory(history,ro,sector,roObj);
-        const emailStatus=statusFromEvents(events);
+        let emailStatus=statusFromEvents(events);
+
+        // Se o histórico por setor não identificou erro, mas esta R.O. tem erro
+        // registrado em qualquer envio, força o badge para que apareça no filtro.
+        if(emailStatus.code==='none' && roErrorIndex.has(roDigits(ro))){
+          const allRoEvents=(history||[]).filter(h=>
+            String(h?.type||'ro').toLowerCase()==='ro' && sameRo(h?.ro,ro)
+          );
+          emailStatus=statusFromEvents(allRoEvents);
+        }
+
         ensureStatusBadge(tr,emailStatus,events);
         applyAssignedEmailFilter(tr,emailStatus.code);
       });
