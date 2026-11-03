@@ -14570,7 +14570,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
-  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit]);
+  const assignedEmailFilter=document.getElementById('assignedEmailFilter')?.value||'all';
+  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit,assignedEmailFilter]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
   const renderTriageMap=roListMode==='assigned'?getSavedTriageMap():null;
@@ -14662,6 +14663,13 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         if(assignedSector!=='all'&&rowSector!==assignedSector)return false;
         if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
+        // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
+        if(assignedEmailFilter==='error'){
+          const idx=window.__nucleoEmailErrorIndex;
+          if(!idx||!idx.has(roDigits(String(r.numero||r.id||r.codigo||'')))){
+            return false;
+          }
+        }
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r,pdcaExternalExists(r));
