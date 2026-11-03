@@ -15585,6 +15585,13 @@ function showAssignedRos(){
   render();
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
+  // Carrega o histórico de e-mails em segundo plano.
+  // Quando terminar, rebuildErrorIndex chama render() novamente com o índice pronto.
+  try{
+    if(typeof window.__nucleoRoResendLoadHistory==='function'){
+      window.__nucleoRoResendLoadHistory(true).catch(()=>{});
+    }
+  }catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
   ensureUnitQualitySettings();
   ensureFixedEmailCopiesPanel();
