@@ -464,7 +464,7 @@ function createNotification(data){
 function renderEmailHistory(){
   const rows=document.getElementById('emailHistoryRows');if(!rows)return;
   const h=emailHistoryLoaded;
-  rows.innerHTML=h.length?h.slice(0,emailHistoryVisibleLimit).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
+  rows.innerHTML=h.length?h.slice(0,emailHistoryVisibleLimit).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status==='error'?'Erro no envio':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
   let controls=document.getElementById('emailHistoryPagination');
   if(!controls){controls=document.createElement('div');controls.id='emailHistoryPagination';controls.className='actions';rows.closest('table').parentElement.after(controls);}
   controls.innerHTML='<span class="small">Exibindo '+Math.min(h.length,emailHistoryVisibleLimit)+' de '+h.length+' registro(s) carregados.</span>'+(h.length>emailHistoryVisibleLimit?'<button class="btn secondary" type="button" onclick="showMoreEmailHistory()">Mostrar mais 5</button>':'');

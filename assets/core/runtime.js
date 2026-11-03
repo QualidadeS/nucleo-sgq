@@ -17320,6 +17320,15 @@ function currentUserCanRespondAssignedRo(ro,tri){
 
 let roListVisibleLimit=60;
 let roListFilterSignature='';
+
+function nucleoAssignedSectorVisualKey(value){
+  let n=normalizeAnswer(String(value||'').trim()).replace(/\s+/g,' ').trim();
+  if(!n)return '__sem_setor__';
+  n=n.split(' ').map(function(part){
+    return part.length>4&&part.endsWith('s')?part.slice(0,-1):part;
+  }).join(' ');
+  return n;
+}
 let assignedLifecycle='active';
 function setAssignedLifecycle(mode){
   assignedLifecycle=mode==='history'?'history':'active';
@@ -17943,7 +17952,7 @@ function render(){
     const bySector=new Map();
     records.forEach(t=>{
       const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
-      const visualKey=triageCompositeKey(base,sector||'__sem_setor__');
+      const visualKey=base+'::'+nucleoAssignedSectorVisualKey(sector);
       const prev=bySector.get(visualKey);
       const score=x=>{
         const composite=String(x?.roKey||'').includes('::')?10000000000000:0;
