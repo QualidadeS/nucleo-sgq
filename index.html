@@ -2915,6 +2915,21 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 }
 </style>
 
+
+<style id="nucleoAssignedMoveActionsOnlyV13Css">
+#roListView #rows td:nth-child(8){
+  text-align:center!important;
+  white-space:nowrap!important;
+}
+#roListView #rows td:nth-child(8) > .assigned-operational-icons{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -6221,4 +6236,5 @@ function renderSupplierIndicatorsWorkspace(){
 })();
 </script>
 
+<script src="assets/assigned-ro-move-actions-v13.js?v=20261103-move-actions-only-v13"></script>
 </body></html>
