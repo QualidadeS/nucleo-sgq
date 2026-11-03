@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v10 | ações fixas */
+/* NÚCLEO | Reenviar e-mail | v28 | filtro de erro por R.O. exata */
 (function(){
-  if(window.__nucleoRoResendEmailV10)return;
-  window.__nucleoRoResendEmailV10=true;
+  if(window.__nucleoRoResendEmailV28)return;
+  window.__nucleoRoResendEmailV28=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -11,39 +11,44 @@
     try{return typeof normalizeAnswer==='function'?normalizeAnswer(v):String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
     catch(e){return String(v||'').toLowerCase().trim()}
   }
-  function roIdentity(v){
-    const raw=String(v||'').trim().toUpperCase();
-    if(!raw)return '';
-
-    const compact=raw
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-      .replace(/\s+/g,'')
-      .replace(/_/g,'-');
-
-    const typeMatch=compact.match(/(?:^|-)RO-?(IN|EX)(?:-|$)/) || compact.match(/^RO(IN|EX)/);
-    const type=typeMatch?typeMatch[1]:'';
-
-    const nums=compact.match(/\d+/g);
-    if(!nums||!nums.length)return '';
-    const number=String(parseInt(nums[nums.length-1],10));
-    if(!number)return '';
-
-    return (type?type+'|':'')+number;
+  function roDigits(v){
+    const m=String(v||'').match(/\d+/g);
+    return m&&m.length?String(parseInt(m[m.length-1],10)):'';
   }
-  function sameRo(a,b){
-    const ka=roIdentity(a);
-    const kb=roIdentity(b);
-    if(!ka||!kb)return false;
-
-    // Se ambos informam a origem, IN e EX nunca podem se cruzar.
-    const aTyped=ka.includes('|');
-    const bTyped=kb.includes('|');
-    if(aTyped&&bTyped)return ka===kb;
-
-    // Compatibilidade com históricos antigos que tenham apenas o número.
-    const na=ka.split('|').pop();
-    const nb=kb.split('|').pop();
-    return na===nb;
+  function roOrigin(v){
+    const n=String(v||'').trim().toUpperCase().replace(/_/g,'-').replace(/\s+/g,'');
+    if(/(?:^|-)IN(?:-|\d)|^RO-?IN/.test(n))return 'IN';
+    if(/(?:^|-)EX(?:-|\d)|^RO-?EX/.test(n))return 'EX';
+    return '';
+  }
+  function roExactKey(v,originHint){
+    const digits=roDigits(v);
+    if(!digits)return '';
+    let origin=roOrigin(v)||roOrigin(originHint);
+    if(!origin){
+      const hint=norm(originHint||'');
+      if(hint==='interna'||hint==='interno')origin='IN';
+      if(hint==='externa'||hint==='externo')origin='EX';
+    }
+    return origin?origin+'|'+digits:'';
+  }
+  function roRecordOrigin(ro){
+    return String(
+      ro?.origemBase||ro?.raw?.__origemBase||ro?.origem||ro?.tipoRO||ro?.tipo||''
+    ).trim();
+  }
+  function historyRoKey(h){
+    return roExactKey(
+      h?.ro,
+      h?.origin||h?.origem||h?.origemBase||h?.tipoRO||h?.tipo||''
+    );
+  }
+  function sameRoHistory(h,roNumber,ro){
+    const rowKey=roExactKey(roNumber,roRecordOrigin(ro));
+    const eventKey=historyRoKey(h);
+    // O filtro de erro só aceita vínculo inequívoco. Histórico sem IN/EX não
+    // pode contaminar uma R.O. da outra origem com o mesmo número.
+    return !!rowKey && !!eventKey && rowKey===eventKey;
   }
   function eventTime(x){
     const d=Date.parse(String(x?.sentAt||x?.at||x?.createdAt||''));
@@ -141,7 +146,7 @@
   function relevantHistory(history,roNumber,sector,ro){
     const all=(history||[]).filter(h=>
       String(h?.type||'ro').toLowerCase()==='ro' &&
-      sameRo(h?.ro,roNumber)
+      sameRoHistory(h,roNumber,ro)
     );
     if(!all.length)return [];
 
