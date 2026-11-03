@@ -14666,7 +14666,20 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
         if(assignedEmailFilter==='error'){
           const idx=window.__nucleoEmailErrorIndex;
-          if(!idx||!idx.has(roDigits(String(r.numero||r.id||r.codigo||'')))){
+          const rawRo=String(r.numero||r.id||r.codigo||'').trim();
+          const originRaw=String(r.origemBase||r.raw?.__origemBase||r.origem||'').trim();
+          const rawUpper=rawRo.toUpperCase();
+          let origin='';
+          if(/(?:^|-)IN(?:-|$)/.test(rawUpper))origin='IN';
+          else if(/(?:^|-)EX(?:-|$)/.test(rawUpper))origin='EX';
+          else{
+            const on=normalizeAnswer(originRaw);
+            if(on==='in'||on.includes('interna'))origin='IN';
+            else if(on==='ex'||on.includes('externa'))origin='EX';
+          }
+          const digits=roDigits(rawRo);
+          const emailKey=origin&&digits ? origin+'|'+digits : '';
+          if(!idx||!emailKey||!idx.has(emailKey)){
             return false;
           }
         }
