@@ -14410,47 +14410,93 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 
 function assignedRoStatus(r){
   const rawObj=r?.raw||{};
-  const rawStatus=String(
+
+  const statusOperacional=String(
     r?.statusOperacional ||
     r?.statusPlanilha ||
     rawObj?.__statusOperacional ||
     rawObj?.['Status R.O.'] ||
     rawObj?.['Status da R.O.'] ||
     rawObj?.['Status'] ||
-    r?.status ||
     ''
   ).trim();
-  const sheet=normalizeAnswer(rawStatus);
-  const tri=getRoTriageRecord(r)||{};
 
-  // Estados oficiais/terminais da planilha sempre prevalecem.
-  if(sheet.includes('cancel')) return 'Cancelada';
-  if(sheet.includes('obsolet')) return 'Obsoleto';
-  if(sheet.includes('registro')||sheet==='falta de caixa'||sheet==='falta de caixas') return 'Registro';
+  const resultadoOperacional=String(
+    r?.resultadoEnvio ||
+    rawObj?.__resultadoOperacional ||
+    rawObj?.['Resultado'] ||
+    ''
+  ).trim();
 
-  // Situação oficial da resposta conforme a planilha.
-  if(sheet.includes('apresentad') || sheet.includes('retorno entregue ao reclamante')) return 'Apresentada';
-  if(sheet.includes('respondid')) return 'Respondida';
+  const statusVisual=String(r?.status||'').trim();
 
-  // Se a base central do Núcleo tem uma resposta real mais forte que a planilha,
-  // ela complementa o status oficial sem depender da marcação Tem/Não tem PDCA.
+  const sheet=normalizeAnswer(statusOperacional);
+  const result=normalizeAnswer(resultadoOperacional);
+  const visual=normalizeAnswer(statusVisual);
+
+  // 1. Estados oficiais/terminais da planilha.
+  if(sheet.includes('cancel') || visual.includes('cancel')) return 'Cancelada';
+  if(sheet.includes('obsolet') || visual.includes('obsolet')) return 'Obsoleto';
+  if(
+    sheet.includes('registro') ||
+    visual.includes('registro') ||
+    sheet==='falta de caixa' || sheet==='falta de caixas' ||
+    visual==='falta de caixa' || visual==='falta de caixas'
+  ) return 'Registro';
+
+  // 2. Apresentada: entrega/apresentação ao reclamante é a evidência mais forte.
+  const entregueAoReclamante =
+    r?.reclamanteRecebeuPdca===true ||
+    !!String(r?.pdcaEnviadoReclamanteEm||'').trim() ||
+    !!String(rawObj?.__pdcaReclamanteData||'').trim() ||
+    !!String(rawObj?.['PDCA ENVIADO PARA O RECLAMANTE (DATA)']||'').trim();
+
+  if(
+    entregueAoReclamante ||
+    sheet.includes('apresentad') ||
+    result.includes('apresentad') ||
+    visual.includes('apresentad') ||
+    visual.includes('retorno entregue ao reclamante')
+  ) return 'Apresentada';
+
+  // 3. Respondida: considera Status e Resultado da própria planilha.
+  if(
+    sheet.includes('respondid') ||
+    result.includes('respondid') ||
+    visual.includes('respondid')
+  ) return 'Respondida';
+
+  // 4. O Núcleo pode complementar quando existe um PDCA real recebido.
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
-    const presented = Boolean(sentPdca.apresentadoEm) ||
-      (!sentPdca.externalPdf && typeof getPdcaPresentationMap==='function' &&
-       getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+    const presented = Boolean(
+      sentPdca.apresentadoEm ||
+      sentPdca.presented ||
+      sentPdca.presentedAt
+    ) || (
+      !sentPdca.externalPdf &&
+      typeof getPdcaPresentationMap==='function' &&
+      getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
+    );
     return presented ? 'Apresentada' : 'Respondida';
   }
 
-  // Em R.O. atribuída, "Não enviada" é legado e equivale a pendência.
-  // "Enviado" sozinho representa o direcionamento, não uma resposta de PDCA.
-  if(sheet.includes('pendente') ||
-     sheet.includes('nao enviada') || sheet.includes('não enviada') ||
-     sheet==='enviado' || sheet==='enviada' ||
-     sheet.includes('aguardando resposta') ||
-     sheet.includes('aguardando')) return 'Pendente';
+  // 5. Situações ainda aguardando resposta.
+  if(
+    sheet.includes('pendente') ||
+    sheet.includes('nao enviada') ||
+    sheet.includes('não enviada') ||
+    sheet==='enviado' ||
+    sheet==='enviada' ||
+    sheet.includes('aguardando resposta') ||
+    sheet.includes('aguardando') ||
+    result.includes('pendente') ||
+    visual.includes('pendente') ||
+    visual.includes('aguardando resposta') ||
+    visual.includes('aguardando')
+  ) return 'Pendente';
 
-  // Marcar Tem PDCA / Não tem PDCA é informação da coluna PDCA e NÃO muda Status.
+  // "Tem PDCA / Não tem PDCA" pertence somente à coluna PDCA e não decide o Status.
   return 'Pendente';
 }
 
