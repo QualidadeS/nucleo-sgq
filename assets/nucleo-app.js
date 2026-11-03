@@ -1983,7 +1983,7 @@ let emailHistoryLoaded=[];
 function renderEmailHistory(){
   const rows=document.getElementById('emailHistoryRows');if(!rows)return;
   const h=emailHistoryLoaded;
-  rows.innerHTML=h.length?h.slice(0,emailHistoryVisibleLimit).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
+  rows.innerHTML=h.length?h.slice(0,emailHistoryVisibleLimit).map(x=>`<tr><td>${escapeHtml(formatDateTimeBR(x.at)||x.at||'')}</td><td>${escapeHtml(x.type||'')}</td><td>${escapeHtml(x.ro||'—')}</td><td>${escapeHtml(x.email||'')}</td><td class="${x.status==='sent'?'email-status-ok':'email-status-err'}">${escapeHtml(x.status==='sent'?'Enviado':x.status==='error'?'Erro no envio':x.status||'')}</td></tr>`).join(''):'<tr><td colspan="5">Nenhum e-mail registrado.</td></tr>';
   let controls=document.getElementById('emailHistoryPagination');
   if(!controls){controls=document.createElement('div');controls.id='emailHistoryPagination';controls.className='actions';rows.closest('table').parentElement.after(controls);}
   controls.innerHTML='<span class="small">Exibindo '+Math.min(h.length,emailHistoryVisibleLimit)+' de '+h.length+' registro(s) carregados.</span>'+(h.length>emailHistoryVisibleLimit?'<button class="btn secondary" type="button" onclick="showMoreEmailHistory()">Mostrar mais 5</button>':'');
@@ -10254,12 +10254,12 @@ function sameSector(sector){
   return sameCanonicalSector(sector,currentSector());
 }
 
-function getRoTriageRecord(ro){
+function getRoTriageRecord(ro,preloadedMap=null){
   try{
     if(ro?.__triageRecord)return ro.__triageRecord;
     const base=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
     if(!base)return null;
-    const map=getSavedTriageMap();
+    const map=preloadedMap instanceof Map?preloadedMap:getSavedTriageMap();
     return resolvedTriageForRo(ro,map);
   }catch(e){return null}
 }
@@ -14550,6 +14550,15 @@ function assignedRoDeadline(r){
 
 let roListVisibleLimit=60;
 let roListFilterSignature='';
+
+function nucleoAssignedSectorVisualKey(value){
+  let n=normalizeAnswer(String(value||'').trim()).replace(/\s+/g,' ').trim();
+  if(!n)return '__sem_setor__';
+  n=n.split(' ').map(function(part){
+    return part.length>4&&part.endsWith('s')?part.slice(0,-1):part;
+  }).join(' ');
+  return n;
+}
 function showMoreRos(){roListVisibleLimit+=60;render()}
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
@@ -14564,9 +14573,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
+  const renderTriageMap=roListMode==='assigned'?getSavedTriageMap():null;
   const assignedTriageByRo=new Map();
   if(roListMode==='assigned'){
-    getSavedTriageMap().forEach(t=>{
+    renderTriageMap.forEach(t=>{
       const number=String(t?.roNumber||String(t?.roKey||'').split('::')[0]||'').trim();
       if(!number)return;
       const entries=assignedTriageByRo.get(number)||[];
@@ -14575,10 +14585,27 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     });
   }
 
-  const assignedSource = roListMode==='assigned' ? ros.flatMap(r=>{
+  const assignedBaseRos = roListMode==='assigned' ? (()=>{
+    const grouped=new Map();
+    ros.forEach(r=>{
+      const k=nucleoPdcaReviewGroupKey2026(r)||[
+        String(r.numero||r.id||r.codigo||''),
+        String(r.origemBase||''),
+        String(r.unidade||'')
+      ].join('|');
+      const arr=grouped.get(k)||[];
+      arr.push(r);
+      grouped.set(k,arr);
+    });
+    return [...grouped.values()]
+      .map(items=>nucleoPdcaPreferredRo2026(items,renderTriageMap))
+      .filter(Boolean);
+  })() : ros;
+
+  const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
-    const confirmed=resolvedTriageForRo(r,getSavedTriageMap());
+    const confirmed=resolvedTriageForRo(r,renderTriageMap);
     if(confirmed?.decision&&confirmed.decision!=='directed')records=[confirmed];
     // Recuperação segura: se SGQ_TRIAGENS estiver vazio/desatualizado, mas a
     // própria R.O. importada ainda trouxer setor causa, ela continua atribuída.
@@ -14598,7 +14625,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const bySector=new Map();
     records.forEach(t=>{
       const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
-      const visualKey=triageCompositeKey(base,sector||'__sem_setor__');
+      const visualKey=base+'::'+nucleoAssignedSectorVisualKey(sector);
       const prev=bySector.get(visualKey);
       const score=x=>{
         const composite=String(x?.roKey||'').includes('::')?10000000000000:0;
@@ -14612,7 +14639,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
-      const tri=getRoTriageRecord(r);
+      const tri=getRoTriageRecord(r,renderTriageMap);
       // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
       // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
       // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
@@ -14628,7 +14655,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
-        const tri=getRoTriageRecord(r);
+        const tri=getRoTriageRecord(r,renderTriageMap);
         const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
         const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
         const rowUnit=String(r.unidade||'').trim();
@@ -14651,7 +14678,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const contest=status==='Em contestação';
     const externalPdca=pdcaExternalExists(r);
     const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
-    const tri=getRoTriageRecord(r);
+    const tri=getRoTriageRecord(r,renderTriageMap);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
     const displayStatus=assignedRoStatus(r,externalPdca);
