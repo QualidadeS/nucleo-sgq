@@ -11265,6 +11265,7 @@ function normalizeImportedRo(raw,index){
     // Não confundir com `status`, que é o rótulo transformado usado na interface.
     statusOperacional:statusPlanilha,
     statusControle:String(raw?.__statusControle||'').trim(),
+    statusControleEncontrado:raw?.__statusControleEncontrado===true,
     descricao,
     pdca,
     pdfUrl: '',
@@ -11585,7 +11586,7 @@ function compactRoForStorage(r){
   [
     '__origemBase','__ehSac','__numeroPlanilha','__numeroApp','__unidade','__descricaoProblema',
     '__setorResponsavel','__pessoaResponsavel','__pdcaReclamanteData',
-    '__acaoPreventiva','__prazoConclusaoAcao','__statusOperacional','__statusControle',
+    '__acaoPreventiva','__prazoConclusaoAcao','__statusOperacional','__statusControle','__statusControleEncontrado',
     '__dataEnvioOperacional','__resultadoOperacional'
   ].forEach(k=>{
     if(raw[k]!==undefined)keepRaw[k]=raw[k];
@@ -11628,7 +11629,8 @@ function saveImportedRosByOrigin(internas,externas){
     pessoaResponsavel:r?.pessoaResponsavel||'',
     status:r?.status||'',
     statusOperacional:r?.statusOperacional||r?.raw?.__statusOperacional||'',
-    statusControle:r?.statusControle||r?.raw?.__statusControle||''
+    statusControle:r?.statusControle||r?.raw?.__statusControle||'',
+    statusControleEncontrado:r?.statusControleEncontrado===true||r?.raw?.__statusControleEncontrado===true
   });
 
   // Salva apenas se couber; a persistência real já está no IndexedDB.
@@ -14413,12 +14415,16 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 function assignedRoStatus(r){
   const rawObj=r?.raw||{};
 
-  // FONTE OFICIAL quando existir: Controle!G
   const statusControle=String(
     r?.statusControle ||
     rawObj?.__statusControle ||
     ''
   ).trim();
+
+  const controleEncontrado=(
+    r?.statusControleEncontrado===true ||
+    rawObj?.__statusControleEncontrado===true
+  );
 
   const statusOperacional=String(
     r?.statusOperacional ||
@@ -14453,19 +14459,18 @@ function assignedRoStatus(r){
     return '';
   }
 
-  // 1) Se a R.O. existe na Controle, Controle!G manda.
-  if(statusControle){
+  // 1) Controle manda SOMENTE quando a R.O.+origem realmente foi encontrada na aba Controle.
+  if(controleEncontrado){
     return interpretarStatus(statusControle) || 'Pendente';
   }
 
-  // 2) Sem linha na Controle: mantém apenas estados terminais inequívocos
-  //    que já venham da própria R.O.
+  // 2) Sem linha na Controle: preserva apenas estados terminais inequívocos da própria R.O.
   const operacional=interpretarStatus(statusOperacional);
   if(['Cancelada','Obsoleto','Registro'].includes(operacional)){
     return operacional;
   }
 
-  // 3) Sem Controle: se existe PDCA real no Núcleo, considera respondida.
+  // 3) Sem Controle: PDCA real recebido/apresentado no Núcleo.
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
     const presented = Boolean(
@@ -14480,8 +14485,7 @@ function assignedRoStatus(r){
     return presented ? 'Apresentada' : 'Respondida';
   }
 
-  // 4) Sem Controle: usa exatamente a marcação manual Tem/Não tem PDCA.
-  //    Tem PDCA = já respondeu; Não tem PDCA = ainda pendente.
+  // 4) Sem Controle: usa a mesma marcação visual da coluna PDCA.
   if(pdcaExternalExists(r)===true){
     return 'Respondida';
   }
