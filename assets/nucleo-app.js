@@ -14413,7 +14413,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 function assignedRoStatus(r){
   const rawObj=r?.raw||{};
 
-  // FONTE OFICIAL: aba Controle (A = R.O.; C = origem; G = status).
+  // FONTE OFICIAL quando existir: Controle!G
   const statusControle=String(
     r?.statusControle ||
     rawObj?.__statusControle ||
@@ -14430,42 +14430,60 @@ function assignedRoStatus(r){
     ''
   ).trim();
 
-  // Controle prevalece. O operacional serve apenas como fallback de segurança.
-  const rawStatus=statusControle || statusOperacional || String(r?.status||'').trim();
-  const sheet=normalizeAnswer(rawStatus);
+  function interpretarStatus(v){
+    const s=normalizeAnswer(String(v||'').trim());
+    if(!s)return '';
 
-  if(sheet.includes('cancel')) return 'Cancelada';
-  if(sheet.includes('obsolet')) return 'Obsoleto';
-  if(sheet.includes('registro')||sheet==='falta de caixa'||sheet==='falta de caixas') return 'Registro';
+    if(s.includes('cancel')) return 'Cancelada';
+    if(s.includes('obsolet')) return 'Obsoleto';
+    if(s.includes('registro')||s==='falta de caixa'||s==='falta de caixas') return 'Registro';
+    if(s.includes('apresentad') || s.includes('retorno entregue ao reclamante')) return 'Apresentada';
+    if(s.includes('respondid')) return 'Respondida';
 
-  if(sheet.includes('apresentad') || sheet.includes('retorno entregue ao reclamante')) return 'Apresentada';
-  if(sheet.includes('respondid')) return 'Respondida';
+    if(
+      s.includes('pendente') ||
+      s.includes('nao enviada') ||
+      s.includes('não enviada') ||
+      s==='enviado' ||
+      s==='enviada' ||
+      s.includes('aguardando resposta') ||
+      s.includes('aguardando')
+    ) return 'Pendente';
 
-  if(
-    sheet.includes('pendente') ||
-    sheet.includes('nao enviada') ||
-    sheet.includes('não enviada') ||
-    sheet==='enviado' ||
-    sheet==='enviada' ||
-    sheet.includes('aguardando resposta') ||
-    sheet.includes('aguardando')
-  ) return 'Pendente';
+    return '';
+  }
 
-  // Se Controle ainda estiver sem situação, um PDCA real do Núcleo pode complementar.
-  if(!statusControle){
-    const sentPdca=getPdcaReturnForRo(r);
-    if(sentPdca){
-      const presented = Boolean(
-        sentPdca.apresentadoEm ||
-        sentPdca.presented ||
-        sentPdca.presentedAt
-      ) || (
-        !sentPdca.externalPdf &&
-        typeof getPdcaPresentationMap==='function' &&
-        getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
-      );
-      return presented ? 'Apresentada' : 'Respondida';
-    }
+  // 1) Se a R.O. existe na Controle, Controle!G manda.
+  if(statusControle){
+    return interpretarStatus(statusControle) || 'Pendente';
+  }
+
+  // 2) Sem linha na Controle: mantém apenas estados terminais inequívocos
+  //    que já venham da própria R.O.
+  const operacional=interpretarStatus(statusOperacional);
+  if(['Cancelada','Obsoleto','Registro'].includes(operacional)){
+    return operacional;
+  }
+
+  // 3) Sem Controle: se existe PDCA real no Núcleo, considera respondida.
+  const sentPdca=getPdcaReturnForRo(r);
+  if(sentPdca){
+    const presented = Boolean(
+      sentPdca.apresentadoEm ||
+      sentPdca.presented ||
+      sentPdca.presentedAt
+    ) || (
+      !sentPdca.externalPdf &&
+      typeof getPdcaPresentationMap==='function' &&
+      getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
+    );
+    return presented ? 'Apresentada' : 'Respondida';
+  }
+
+  // 4) Sem Controle: usa exatamente a marcação manual Tem/Não tem PDCA.
+  //    Tem PDCA = já respondeu; Não tem PDCA = ainda pendente.
+  if(pdcaExternalExists(r)===true){
+    return 'Respondida';
   }
 
   return 'Pendente';
