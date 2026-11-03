@@ -2899,6 +2899,28 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 }
 </style>
 
+
+<style id="nucleoAssignedActionsLoopFixV8Css">
+#roListView #rows td:nth-child(8){
+  display:table-cell!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+}
+#roListView #rows td:nth-child(8)>.assigned-actions-layout-only{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+  width:auto!important;
+  max-width:100%!important;
+}
+#roListView #rows td:nth-child(8) [data-ro-resend-email]{
+  flex:0 0 auto!important;
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -6002,7 +6024,7 @@ function renderSupplierIndicatorsWorkspace(){
 </script>
 
 <script src="assets/modules-v2/ro-extension.js?v=20261028-ro-extension-v3-email-async"></script>
-<script src="assets/modules-v2/ro-resend-email.js?v=20261029-ro-resend-email-v8-errors-only"></script>
+<script src="assets/modules-v2/ro-resend-email.js?v=20261103-ro-resend-email-loop-guard-v11"></script>
 <script src="assets/modules-v2/email-quota-panel.js?v=20261029-email-quota-v1"></script>
 
 <script id="nucleoMaintenanceMutualExclusionV3">
@@ -6364,4 +6386,5 @@ function renderSupplierIndicatorsWorkspace(){
 })();
 </script>
 
+<script src="assets/assigned-ro-actions-fix-v8.js?v=20261103-assigned-actions-loop-fix-v8"></script>
 </body></html>
