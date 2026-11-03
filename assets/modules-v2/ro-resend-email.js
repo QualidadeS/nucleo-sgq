@@ -746,6 +746,9 @@
     }
   }
 
+  // Expõe loadHistory globalmente para que showAssignedRos possa disparar o carregamento.
+  window.__nucleoRoResendLoadHistory = loadHistory;
+
   const obs=new MutationObserver(()=>{
     clearTimeout(window.__nucleoEmailMarkerTimer);
     window.__nucleoEmailMarkerTimer=setTimeout(injectButtonsAndMarkers,80);
