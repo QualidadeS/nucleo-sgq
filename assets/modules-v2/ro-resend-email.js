@@ -15,7 +15,31 @@
     const m=String(v||'').match(/\d+/g);
     return m&&m.length?String(parseInt(m[m.length-1],10)):'';
   }
-  function sameRo(a,b){return !!roDigits(a)&&roDigits(a)===roDigits(b)}
+  function roOriginCode(value,fallback){
+    const raw=String(value||'').trim().toUpperCase();
+    if(/(?:^|-)IN(?:-|$)/.test(raw))return 'IN';
+    if(/(?:^|-)EX(?:-|$)/.test(raw))return 'EX';
+    const fb=norm(fallback||'');
+    if(fb==='in'||fb.indexOf('interna')>=0)return 'IN';
+    if(fb==='ex'||fb.indexOf('externa')>=0)return 'EX';
+    return '';
+  }
+  function roIdentityKey(value,fallbackOrigin){
+    const digits=roDigits(value);
+    const origin=roOriginCode(value,fallbackOrigin);
+    return digits&&origin ? origin+'|'+digits : '';
+  }
+  function historyRoKey(h){
+    return roIdentityKey(
+      h?.ro||h?.roNumber||h?.numeroRo||h?.numero||'',
+      h?.origin||h?.origem||h?.origemBase||h?.roOrigin||h?.tipoRo||''
+    );
+  }
+  function sameRo(a,b,aOrigin,bOrigin){
+    const ka=roIdentityKey(a,aOrigin);
+    const kb=roIdentityKey(b,bOrigin);
+    return !!ka && ka===kb;
+  }
   function eventTime(x){
     const d=Date.parse(String(x?.sentAt||x?.at||x?.createdAt||''));
     return Number.isFinite(d)?d:0;
@@ -84,15 +108,16 @@
   let historyPromise=null;
 
   // Índice global de erros — atualizado toda vez que o histórico é carregado.
-  // Chave: roDigits(roNumber). Usado pelo render() síncrono da lista.
+  // Chave inclui ORIGEM + número (ex.: EX|489), para nunca misturar RO-IN e RO-EX.
   window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
 
   function rebuildErrorIndex(history){
     const idx = new Set();
     (history||[]).forEach(h=>{
-      if(String(h?.status||'').toLowerCase()==='error' && h?.ro){
-        idx.add(roDigits(h.ro));
-      }
+      if(String(h?.status||'').toLowerCase()!=='error')return;
+      const key=historyRoKey(h);
+      // Histórico sem origem identificável não entra no filtro automático.
+      if(key)idx.add(key);
     });
     window.__nucleoEmailErrorIndex = idx;
     // Força re-render da lista para aplicar o filtro com dados novos.
@@ -127,9 +152,10 @@
   }
 
   function relevantHistory(history,roNumber,sector,ro){
+    const roOrigin=String(ro?.origemBase||ro?.raw?.__origemBase||ro?.origem||'').trim();
     const all=(history||[]).filter(h=>
       String(h?.type||'ro').toLowerCase()==='ro' &&
-      sameRo(h?.ro,roNumber)
+      historyRoKey(h)===roIdentityKey(roNumber,roOrigin)
     );
     if(!all.length)return [];
 
@@ -687,12 +713,12 @@
       if(!assigned)return;
       const history=await loadHistory();
 
-      // Monta índice de R.O.s que têm QUALQUER erro no histórico para lookup rápido.
+      // Índice exato: origem + número. Nunca cruza RO-IN com RO-EX do mesmo número.
       const roErrorIndex=new Set();
       (history||[]).forEach(h=>{
-        if(String(h?.status||'').toLowerCase()==='error' && h?.ro){
-          roErrorIndex.add(roDigits(h.ro));
-        }
+        if(String(h?.status||'').toLowerCase()!=='error')return;
+        const key=historyRoKey(h);
+        if(key)roErrorIndex.add(key);
       });
 
       document.querySelectorAll('#rows tr').forEach(tr=>{
@@ -708,9 +734,13 @@
 
         // Se o histórico por setor não identificou erro, mas esta R.O. tem erro
         // registrado em qualquer envio, força o badge para que apareça no filtro.
-        if(emailStatus.code==='none' && roErrorIndex.has(roDigits(ro))){
+        const roKey=roIdentityKey(
+          ro,
+          roObj?.origemBase||roObj?.raw?.__origemBase||roObj?.origem||''
+        );
+        if(emailStatus.code==='none' && roKey && roErrorIndex.has(roKey)){
           const allRoEvents=(history||[]).filter(h=>
-            String(h?.type||'ro').toLowerCase()==='ro' && sameRo(h?.ro,ro)
+            String(h?.type||'ro').toLowerCase()==='ro' && historyRoKey(h)===roKey
           );
           emailStatus=statusFromEvents(allRoEvents);
         }
