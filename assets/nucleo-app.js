@@ -14619,7 +14619,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       .filter(Boolean);
   })() : ros;
 
-  const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
+  let assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
     const confirmed=resolvedTriageForRo(r,renderTriageMap);
@@ -14653,6 +14653,24 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     });
     return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
   }) : ros;
+
+  // Quando o filtro "Erro no envio" estiver ativo, o histórico de e-mails é a
+  // fonte de verdade para saber quais R.O.s precisam aparecer. Um erro de envio
+  // comprova que a R.O. foi encaminhada, mesmo se SGQ_TRIAGENS estiver incompleto,
+  // legado ou sem o vínculo de setor correspondente.
+  if(roListMode==='assigned' && assignedEmailFilter==='error'){
+    const idx=window.__nucleoEmailErrorIndex;
+    if(idx && idx.size){
+      const existingKeys=new Set(assignedSource.map(nucleoRoEmailHistoryKey2026).filter(Boolean));
+      assignedBaseRos.forEach(r=>{
+        const key=nucleoRoEmailHistoryKey2026(r);
+        if(!key || !idx.has(key) || existingKeys.has(key))return;
+        assignedSource.push({...r,__emailHistoryAssigned:true});
+        existingKeys.add(key);
+      });
+    }
+  }
+
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
@@ -14665,7 +14683,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
       const assignedBySheet=validSheetSector;
       const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
-      if(!assignedByTriage && !assignedBySheet)return false;
+      const assignedByEmailError=assignedEmailFilter==='error' && r.__emailHistoryAssigned===true;
+      if(!assignedByTriage && !assignedBySheet && !assignedByEmailError)return false;
       // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
