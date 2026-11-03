@@ -2921,6 +2921,25 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 }
 </style>
 
+
+<style id="nucleoAssignedPdcaColumnFixV9Css">
+#roListView td.assigned-pdca-cell{
+  text-align:center!important;
+  white-space:nowrap!important;
+}
+#roListView td.assigned-pdca-cell > .assigned-pdca-control{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  flex-wrap:nowrap!important;
+}
+#roListView td.assigned-pdca-cell > .assigned-pdca-control .assigned-pdca-option,
+#roListView td.assigned-pdca-cell > .assigned-pdca-control .btn{
+  white-space:nowrap!important;
+}
+</style>
+
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">
@@ -6387,4 +6406,5 @@ function renderSupplierIndicatorsWorkspace(){
 </script>
 
 <script src="assets/assigned-ro-actions-fix-v8.js?v=20261103-assigned-actions-loop-fix-v8"></script>
+<script src="assets/assigned-ro-pdca-column-fix-v9.js?v=20261103-pdca-column-fix-v9"></script>
 </body></html>
