@@ -14412,7 +14412,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
   }
 }
 
-function assignedRoStatus(r){
+function assignedRoStatus(r,externalPdcaKnown){
   const rawObj=r?.raw||{};
 
   const statusControle=String(
@@ -14485,8 +14485,14 @@ function assignedRoStatus(r){
     return presented ? 'Apresentada' : 'Respondida';
   }
 
-  // 4) Sem Controle: usa a mesma marcação visual da coluna PDCA.
-  if(pdcaExternalExists(r)===true){
+  // 4) Sem Controle: usa EXATAMENTE a mesma marcação visual da coluna PDCA.
+  // Se o render já calculou externalPdca, usa aquele mesmo valor para impedir
+  // qualquer divergência entre o botão e o Status.
+  const externalPdca = (externalPdcaKnown===true || externalPdcaKnown===false)
+    ? externalPdcaKnown
+    : pdcaExternalExists(r);
+
+  if(externalPdca===true){
     return 'Respondida';
   }
 
@@ -14591,7 +14597,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
       }
       const text=nucleoRoSearchMatches(r,q);
-      const displayStatus=assignedRoStatus(r);
+      const displayStatus=assignedRoStatus(r,pdcaExternalExists(r));
       const statusKey={'Pendente':'precisa_resposta','Respondida':'ja_respondeu','Apresentada':'ja_respondeu','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'precisa_resposta';
       const filt=f==='todas'||f===statusKey;
       return text&&filt;
@@ -14608,7 +14614,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const tri=getRoTriageRecord(r);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
-    const displayStatus=assignedRoStatus(r);
+    const displayStatus=assignedRoStatus(r,externalPdca);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus);
 
     const statusControl = `<span class="${displayStatus==='Respondida'||displayStatus==='Apresentada'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
