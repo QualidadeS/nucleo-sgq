@@ -14409,22 +14409,48 @@ async function setExternalPdca(numero,hasExternal,sector=''){
 }
 
 function assignedRoStatus(r){
-  const raw=String(r?.status||'').trim().toLowerCase();
+  const rawObj=r?.raw||{};
+  const rawStatus=String(
+    r?.statusOperacional ||
+    r?.statusPlanilha ||
+    rawObj?.__statusOperacional ||
+    rawObj?.['Status R.O.'] ||
+    rawObj?.['Status da R.O.'] ||
+    rawObj?.['Status'] ||
+    r?.status ||
+    ''
+  ).trim();
+  const sheet=normalizeAnswer(rawStatus);
   const tri=getRoTriageRecord(r)||{};
-  if(raw.includes('cancel')) return 'Cancelada';
-  if(raw.includes('obsolet')) return 'Obsoleto';
-  if(tri.decision==='record'||raw==='falta de caixa'||raw==='falta de caixas'||raw.includes('registro')) return 'Registro';
-  if(tri.pdcaExternal===true&&!tri.pdcaFileId) return 'PDCA externo';
 
-  // Fonte de verdade para "PDCA respondido": precisa existir um PDCA REAL
-  // salvo/enviado na coleção pdca_sent para esta R.O. Não usa mais r.status/r.pdca
-  // das planilhas antigas, pois esses campos estavam promovendo registros sem resposta.
+  // Estados oficiais/terminais da planilha sempre prevalecem.
+  if(sheet.includes('cancel')) return 'Cancelada';
+  if(sheet.includes('obsolet')) return 'Obsoleto';
+  if(sheet.includes('registro')||sheet==='falta de caixa'||sheet==='falta de caixas') return 'Registro';
+
+  // Situação oficial da resposta conforme a planilha.
+  if(sheet.includes('apresentad') || sheet.includes('retorno entregue ao reclamante')) return 'Apresentada';
+  if(sheet.includes('respondid')) return 'Respondida';
+
+  // Se a base central do Núcleo tem uma resposta real mais forte que a planilha,
+  // ela complementa o status oficial sem depender da marcação Tem/Não tem PDCA.
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
     const presented = Boolean(sentPdca.apresentadoEm) ||
-      (!sentPdca.externalPdf&&typeof getPdcaPresentationMap==='function' && getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
-    return presented ? 'PDCA apresentado' : 'PDCA respondido';
+      (!sentPdca.externalPdf && typeof getPdcaPresentationMap==='function' &&
+       getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||'')));
+    return presented ? 'Apresentada' : 'Respondida';
   }
+
+  // Em R.O. atribuída, "Não enviada" é legado e equivale a pendência.
+  // "Enviado" sozinho representa o direcionamento, não uma resposta de PDCA.
+  if(sheet.includes('pendente') ||
+     sheet.includes('nao enviada') || sheet.includes('não enviada') ||
+     sheet==='enviado' || sheet==='enviada' ||
+     sheet.includes('aguardando resposta') ||
+     sheet.includes('aguardando')) return 'Pendente';
+
+  // Marcar Tem PDCA / Não tem PDCA é informação da coluna PDCA e NÃO muda Status.
   return 'Pendente';
 }
 
@@ -14527,7 +14553,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r);
-      const statusKey={'Pendente':'pendente','PDCA externo':'pdca_externo','PDCA respondido':'pdca_respondido','PDCA apresentado':'pdca_apresentado','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'pendente';
+      const statusKey={'Pendente':'precisa_resposta','Respondida':'ja_respondeu','Apresentada':'ja_respondeu','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'precisa_resposta';
       const filt=f==='todas'||f===statusKey;
       return text&&filt;
     });
@@ -14546,7 +14572,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const displayStatus=assignedRoStatus(r);
     const displayDecisionLabel=nucleoAssignedDecisionLabel(r,tri,displayStatus);
 
-    const statusControl = `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+    const statusControl = `<span class="${displayStatus==='Respondida'||displayStatus==='Apresentada'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
 
     let pdcaControl='—';
     if(admin && !noPdca){
