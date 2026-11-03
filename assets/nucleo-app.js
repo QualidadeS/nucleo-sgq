@@ -14436,6 +14436,10 @@ function assignedRoStatus(r,externalPdcaKnown){
     ''
   ).trim();
 
+  const externalPdca = (externalPdcaKnown===true || externalPdcaKnown===false)
+    ? externalPdcaKnown
+    : pdcaExternalExists(r);
+
   function interpretarStatus(v){
     const s=normalizeAnswer(String(v||'').trim());
     if(!s)return '';
@@ -14459,18 +14463,45 @@ function assignedRoStatus(r,externalPdcaKnown){
     return '';
   }
 
-  // 1) Controle manda SOMENTE quando a R.O.+origem realmente foi encontrada na aba Controle.
-  if(controleEncontrado){
-    return interpretarStatus(statusControle) || 'Pendente';
+  const controleStatus = controleEncontrado ? interpretarStatus(statusControle) : '';
+
+  // Estados finais/fortes da Controle continuam prevalecendo.
+  if(['Apresentada','Respondida','Cancelada','Registro','Obsoleto'].includes(controleStatus)){
+    return controleStatus;
   }
 
-  // 2) Sem linha na Controle: preserva apenas estados terminais inequívocos da própria R.O.
+  // REGRA DE CONSISTÊNCIA DA TELA:
+  // se a mesma linha está marcada "Tem PDCA", ela não pode simultaneamente
+  // aparecer como "Pendente". A marcação significa que já existe resposta.
+  if(externalPdca===true){
+    const sentPdca=getPdcaReturnForRo(r);
+    if(sentPdca){
+      const presented = Boolean(
+        sentPdca.apresentadoEm ||
+        sentPdca.presented ||
+        sentPdca.presentedAt
+      ) || (
+        !sentPdca.externalPdf &&
+        typeof getPdcaPresentationMap==='function' &&
+        getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
+      );
+      if(presented) return 'Apresentada';
+    }
+    return 'Respondida';
+  }
+
+  // Se não há PDCA e a Controle realmente existe, respeita o Pendente dela.
+  if(controleStatus==='Pendente'){
+    return 'Pendente';
+  }
+
+  // Sem Controle válida: preserva somente estados inequívocos da própria R.O.
   const operacional=interpretarStatus(statusOperacional);
   if(['Cancelada','Obsoleto','Registro'].includes(operacional)){
     return operacional;
   }
 
-  // 3) Sem Controle: PDCA real recebido/apresentado no Núcleo.
+  // PDCA real recebido pelo Núcleo, mesmo sem marcação externa.
   const sentPdca=getPdcaReturnForRo(r);
   if(sentPdca){
     const presented = Boolean(
@@ -14483,17 +14514,6 @@ function assignedRoStatus(r,externalPdcaKnown){
       getPdcaPresentationMap().has(String(sentPdca.id||sentPdca.pdcaId||''))
     );
     return presented ? 'Apresentada' : 'Respondida';
-  }
-
-  // 4) Sem Controle: usa EXATAMENTE a mesma marcação visual da coluna PDCA.
-  // Se o render já calculou externalPdca, usa aquele mesmo valor para impedir
-  // qualquer divergência entre o botão e o Status.
-  const externalPdca = (externalPdcaKnown===true || externalPdcaKnown===false)
-    ? externalPdcaKnown
-    : pdcaExternalExists(r);
-
-  if(externalPdca===true){
-    return 'Respondida';
   }
 
   return 'Pendente';
