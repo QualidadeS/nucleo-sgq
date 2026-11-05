@@ -6322,6 +6322,23 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
     };
     let src=String(cell.source||meta.source||cell.systemSource||'');
     if(!src)src=placeholderSource[persistedText]||'';
+
+    // V40: campos padrão da R.O. são resolvidos pelo rótulo visível quando ele
+    // identifica inequivocamente um campo do formulário. Isso impede que uma
+    // `source` antiga salva no modelo desloque todos os valores uma linha.
+    const visibleLabelForSource=String(cell.labelText||cell.systemLabelText||meta.label||'').trim();
+    const knownRoFieldLabels=new Set([
+      'R.O.','RO','Data','Unidade','Cliente','Código do item','Codigo do item',
+      'Número do pedido','Numero do pedido','Nota fiscal de venda','Ordem de produção','Ordem de producao',
+      'Tipo de ocorrência','Tipo de ocorrencia','Descrição','Descricao',
+      'Setor identificado','Setor onde foi identificado','Setor causa/responsável','Setor causa / responsável',
+      'Quantidade de peças com desvio','Peso do material descartado/reaproveitado',
+      'Liberado pelo setor de qualidade?','Liberado pelo setor da qualidade?','Quem liberou',
+      'Ação preventiva','Acao preventiva','Prazo conclusão ação','Prazo conclusao acao','Status'
+    ].map(nucleoRoModelNormKey));
+    if(visibleLabelForSource && knownRoFieldLabels.has(nucleoRoModelNormKey(visibleLabelForSource))){
+      src=visibleLabelForSource;
+    }
     const rawBw=Number(cell.borderWidth),bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5)),bc=safeColor(cell.borderColor,'#999999');
     const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
     const side=(name)=>{const explicit=meta.mask?meta.mask[sideIndex[name]]==='1':cell['border'+name]!==false;return explicit?`${bw}pt solid ${safeColor(cell['border'+name+'Color'],bc)}`:'0';};
@@ -6334,7 +6351,9 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
     }else content=nucleoRoModelEsc(cell.text||'').replace(/\n/g,'<br>');
     const visibleLabel=String(cell.labelText||cell.systemLabelText||meta.label||'');
     if(visibleLabel){content=`<div class="cell-stack"><span class="cell-label" style="font-size:${Math.max(5,Number(cell.labelFontSize)||7)}pt;font-weight:${cell.labelBold===false?'400':'700'}">${nucleoRoModelEsc(visibleLabel)}</span><span>${content||''}</span></div>`;}
-    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="height:${Math.max(3,Number(cell.height)||9)}mm;background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
+    const cellHeight=Math.max(3,Number(cell.height)||9);
+    const heightCss=cell.type==='image'?`height:${cellHeight}mm;`:`height:auto;`;
+    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="${heightCss}background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
    }).join(''))+'</tr>';}).join('');
 }
 function nucleoRoEvidenceUrls(ro){
