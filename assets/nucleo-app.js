@@ -5136,17 +5136,9 @@ async function openRoPdf(id){
     if(hasUniversal){
       try{
         updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
-        const evidence=await portalJsonp({
-          acao:'portal_ro_evidence_data',
-          ro:ro.numero||ro.id||ro.codigo,
-          origin:ro.origem||ro.origin||'',
-          evidence:nucleoRoEvidenceUrls(ro).join('\n')
-        },90000);
-        if(evidence?.sucesso&&Array.isArray(evidence.urls)){
-          ro.__nucleoEvidenceDataUrls=evidence.urls.filter(Boolean);
-        }
+        await nucleoLoadRoEvidenceDataUrls_(ro);
       }catch(e){
-        console.warn('Não foi possível incorporar as evidências pela API; mantendo a visualização disponível.',e);
+        console.warn('Não foi possível incorporar as evidências pela API.',e);
       }finally{
         hideNucleoLoading(true);
       }
