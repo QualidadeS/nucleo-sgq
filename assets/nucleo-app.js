@@ -8027,7 +8027,7 @@ async function saveTriageRecord(){
     let totalSent=0;
     try{
       updateNucleoLoading('Enviando os e-mails por setor…','Processando');
-      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:'Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'})))},90000);
+      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:(record.assignmentReason||'Não informado')})))},90000);
       if(!Array.isArray(result?.results))throw new Error(result?.erro||'Atualize a implantação do Apps Script para a revisão 55.');
       totalSent=result.results.filter(r=>r.sucesso).length;
       result.results.filter(r=>!r.sucesso).forEach(r=>emailErrors.push(r.sector+': '+r.erro));
@@ -14559,22 +14559,6 @@ function nucleoAssignedSectorVisualKey(value){
   }).join(' ');
   return n;
 }
-
-function nucleoRoEmailHistoryKey2026(r){
-  const raw=String(r?.numero||r?.id||r?.codigo||'').toUpperCase();
-  const m=raw.match(/\d+/g);
-  const digits=m&&m.length?String(parseInt(m[m.length-1],10)):'';
-  let origin='';
-  if(/RO\s*-?\s*EX/.test(raw))origin='EX';
-  else if(/RO\s*-?\s*IN/.test(raw))origin='IN';
-  else{
-    const o=String(r?.origemBase||r?.raw?.__origemBase||'').toUpperCase();
-    if(o.includes('EXTER'))origin='EX';
-    else if(o.includes('INTER'))origin='IN';
-  }
-  return digits&&origin?origin+'|'+digits:'';
-}
-
 function showMoreRos(){roListVisibleLimit+=60;render()}
 function badgeClass(status){if(status==="Em contestação")return"badge warn";if(status==="Cancelada")return"badge danger";if(status==="Somente para registro")return"badge off";if(status==="PDCA enviado")return"badge ok";return"badge"}function render(){
   const searchEl=document.getElementById('search');
@@ -14619,7 +14603,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       .filter(Boolean);
   })() : ros;
 
-  let assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
+  const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
     const confirmed=resolvedTriageForRo(r,renderTriageMap);
@@ -14653,24 +14637,6 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     });
     return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
   }) : ros;
-
-  // Quando o filtro "Erro no envio" estiver ativo, o histórico de e-mails é a
-  // fonte de verdade para saber quais R.O.s precisam aparecer. Um erro de envio
-  // comprova que a R.O. foi encaminhada, mesmo se SGQ_TRIAGENS estiver incompleto,
-  // legado ou sem o vínculo de setor correspondente.
-  if(roListMode==='assigned' && assignedEmailFilter==='error'){
-    const idx=window.__nucleoEmailErrorIndex;
-    if(idx && idx.size){
-      const existingKeys=new Set(assignedSource.map(nucleoRoEmailHistoryKey2026).filter(Boolean));
-      assignedBaseRos.forEach(r=>{
-        const key=nucleoRoEmailHistoryKey2026(r);
-        if(!key || !idx.has(key) || existingKeys.has(key))return;
-        assignedSource.push({...r,__emailHistoryAssigned:true});
-        existingKeys.add(key);
-      });
-    }
-  }
-
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
@@ -14683,8 +14649,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
       const assignedBySheet=validSheetSector;
       const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
-      const assignedByEmailError=assignedEmailFilter==='error' && r.__emailHistoryAssigned===true;
-      if(!assignedByTriage && !assignedBySheet && !assignedByEmailError)return false;
+      if(!assignedByTriage && !assignedBySheet)return false;
       // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
@@ -14701,8 +14666,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
         if(assignedEmailFilter==='error'){
           const idx=window.__nucleoEmailErrorIndex;
-          const emailKey=nucleoRoEmailHistoryKey2026(r);
-          if(!idx||!emailKey||!idx.has(emailKey)){
+          if(!idx||!idx.has(roDigits(String(r.numero||r.id||r.codigo||'')))){
             return false;
           }
         }
