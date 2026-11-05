@@ -812,11 +812,6 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
     const parts=[];
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
-    // Redundância intencional: algumas chamadas estão chegando ao Web App sem
-    // preservar "acao". nucleoAction é exclusivo do Núcleo e o backend o prioriza.
-    if(actionName && !requestParams.nucleoAction){
-      requestParams.nucleoAction=actionName;
-    }
     const sessionToken=String(getSession()?.authToken||'').trim();
     if(sessionToken && nucleoActionNeedsCentralConfirmation(actionName) && !nucleoCentralDataConfirmed()){
       cleanup();
@@ -5107,59 +5102,43 @@ async function openRoPdf(id){
   const wanted=String(id??'').trim();
   const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===wanted);
 
-  if(!ro){alert('Não encontrei os dados desta R.O. para gerar o PDF.');return;}
+  if(!ro){
+    alert('Não encontrei os dados desta R.O. para gerar o PDF.');
+    return;
+  }
 
   try{
-    const unit=explicitRecordUnit(ro);
-    let model=nucleoSystemFormat('ro',unit),assets={};
-
-    // O modelo precisa ser relido ANTES de decidir qual gerador usar. A versão
-    // anterior só consultava a base quando o cache local já tinha universalLayout;
-    // por isso um cache antigo fazia a R.O. continuar abrindo no PDF legado.
-    await showNucleoLoading('Carregando o modelo atual da R.O.…','Conferindo a estrutura salva na base central.');
-    try{
-      const fresh=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'ro'},60000);
-      if(fresh?.sucesso&&fresh.formats?.ro){
-        model=fresh.formats.ro;
-        assets=fresh;
-        // Atualiza o cache para as próximas telas, sem depender de recarregar a página.
-        try{
-          const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');
-          const own=configs.find(x=>x.id===unit)||{id:unit,unit};
-          own.documentFormats={...(own.documentFormats||{}),ro:model};
-          localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));
-        }catch(_){ }
-      }
-    }catch(e){
-      console.warn('Não foi possível reler o modelo atual da R.O.; usando a cópia local.',e);
-    }finally{
-      hideNucleoLoading(true);
-    }
-
-    const u=model?.universalLayout;
-    const hasUniversal=!!(u&&Number(u.version)>=2&&(Array.isArray(u.headerGrid)||Array.isArray(u.bodyGrid)||Array.isArray(u.footerGrid)));
-    if(hasUniversal){
-      try{
-        updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
-        await nucleoLoadRoEvidenceDataUrls_(ro);
-      }catch(e){
-        console.warn('Não foi possível incorporar as evidências pela API.',e);
-      }finally{
-        hideNucleoLoading(true);
-      }
-      nucleoShowRoModelPreview(ro,model,assets);
-      return;
-    }
-
     let blob;
-    if(model?.design){
-      await showNucleoLoading('Gerando PDF com o modelo da unidade…','Aplicando o modelo salvo pela base central.');
+    if(nucleoSystemFormat('ro',explicitRecordUnit(ro))?.design){
+      await showNucleoLoading('Gerando PDF com o modelo da unidade…','O logo, cabeçalho e rodapé serão aplicados pela base central.');
       try{const result=await portalJsonp({acao:'portal_ro_model_pdf',ro:ro.numero||ro.id||ro.codigo,origin:ro.origem||ro.origin||''},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'});}finally{hideNucleoLoading(true);}
     }else blob=createRoPdfBlob(ro);
 
-    if(!(blob instanceof Blob)||blob.size===0)throw new Error('O arquivo PDF foi gerado vazio.');
-    showPdfBlob(blob,(ro.numero||ro.id||ro.codigo||'RO')+'.pdf');
-  }catch(err){alert('Erro ao gerar o PDF: '+(err?.message||String(err)));}
+    if(!(blob instanceof Blob) || blob.size===0){
+      throw new Error('O arquivo PDF foi gerado vazio.');
+    }
+
+    const url=URL.createObjectURL(blob);
+    const nome=(ro.numero||ro.id||ro.codigo||'RO')+'.pdf';
+
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=nome;
+    a.target='_self';
+    a.style.position='fixed';
+    a.style.left='-9999px';
+    document.body.appendChild(a);
+
+    a.click();
+
+    setTimeout(()=>{
+      try{a.remove();}catch(e){}
+      try{URL.revokeObjectURL(url);}catch(e){}
+    },10000);
+
+  }catch(err){
+    alert('Erro ao gerar o PDF: '+(err?.message||String(err)));
+  }
 }
 
 function openCurrentRoPdf(){
@@ -8048,7 +8027,7 @@ async function saveTriageRecord(){
     let totalSent=0;
     try{
       updateNucleoLoading('Enviando os e-mails por setor…','Processando');
-      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:(record.assignmentReason||'Não informado')})))},90000);
+      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:'Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'})))},90000);
       if(!Array.isArray(result?.results))throw new Error(result?.erro||'Atualize a implantação do Apps Script para a revisão 55.');
       totalSent=result.results.filter(r=>r.sucesso).length;
       result.results.filter(r=>!r.sucesso).forEach(r=>emailErrors.push(r.sector+': '+r.erro));
@@ -11872,6 +11851,66 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
+
+function nucleoRoPageJsonpV63_(params={},timeoutMs=90000){
+  return new Promise((resolve,reject)=>{
+    const base=portalApiBase();
+    if(!base){
+      reject(new Error('URL do Apps Script não configurada.'));
+      return;
+    }
+
+    const cb='nucleoRoPageV63_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let done=false;
+    let timer=null;
+
+    function cleanup(){
+      if(timer)clearTimeout(timer);
+      try{delete window[cb]}catch(_){window[cb]=undefined}
+      try{script.remove()}catch(_){}
+    }
+    function finish(err,data){
+      if(done)return;
+      done=true;
+      cleanup();
+      err?reject(err):resolve(data);
+    }
+
+    window[cb]=data=>finish(null,data);
+
+    const request={
+      mode:'nucleo_ro_page_v63',
+      nucleoAction:'portal_ro_page',
+      acao:'portal_ro_page',
+      ...(params||{})
+    };
+
+    const token=String(getSession()?.authToken||'').trim();
+    if(token&&!request.token)request.token=token;
+
+    const parts=[];
+    Object.entries(request).forEach(([k,v])=>{
+      if(v!==undefined&&v!==null&&String(v)!==''){
+        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+      }
+    });
+    parts.push('callback='+encodeURIComponent(cb));
+    parts.push('_='+Date.now());
+
+    script.async=true;
+    script.src=base+'?'+parts.join('&');
+    script.onerror=()=>finish(new Error(
+      'A rota dedicada de R.O.s não carregou. API: '+base
+    ));
+    timer=setTimeout(()=>finish(new Error(
+      'A rota dedicada de R.O.s não respondeu dentro do tempo limite.'
+    )),timeoutMs);
+
+    document.head.appendChild(script);
+  });
+}
+
 async function loadOfficialRosFullFallback(settings,onProgress,reason){
   const s=settings||getSavedIntegrationSettings();
   const period=roSyncPeriodParams(s);
@@ -11900,7 +11939,7 @@ async function loadOfficialRosPaged(settings,onProgress){
     let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
+        page=await nucleoRoPageJsonpV63_({...period,offset,limite:pageSize},90000);
         break;
       }catch(e){
         lastError=e;
@@ -11913,20 +11952,24 @@ async function loadOfficialRosPaged(settings,onProgress){
     // Se nem a primeira página respondeu, usa a rota completa que continua
     // disponível no mesmo doGet. Isso mantém compatibilidade com implantações
     // que ainda não responderam corretamente ao portal_ro_page.
-    if(!page && offset===0)return loadOfficialRosFullFallback(s,onProgress,lastError);
-    if(!page)throw new Error('A página '+(Math.floor(offset/pageSize)+1)+' falhou após 2 tentativas: '+(lastError?.message||lastError||'sem resposta'));
+    if(!page)throw new Error(
+      'A página '+(Math.floor(offset/pageSize)+1)+' da rota dedicada falhou após 2 tentativas: '+
+      (lastError?.message||lastError||'sem resposta')
+    );
     if(page?.sucesso===false){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,page.erro||'portal_ro_page recusado');
-      throw new Error(page.erro||'A planilha recusou a leitura.');
+      throw new Error(page.erro||'A planilha recusou a leitura pela rota dedicada.');
+    }
+    if(page?.__route!=='nucleo_ro_page_v63'){
+      let raw='';
+      try{raw=JSON.stringify(page)}catch(_){raw=String(page)}
+      throw new Error('A API respondeu pela rota errada. Resposta: '+raw);
     }
     if(!page?.paginado||!Array.isArray(page.dados)){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'resposta paginada incompatível');
-      throw new Error('A leitura por páginas deixou de responder no meio da sincronização.');
+      throw new Error('A rota dedicada devolveu uma página incompatível.');
     }
     const expected=Number(page.quantidade);
     if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'primeira página inválida');
-      throw new Error('A planilha devolveu uma página inválida.');
+      throw new Error('A rota dedicada devolveu uma página inválida.');
     }
     if(total===null){total=expected;internas=Number(page.quantidadeInterna);externas=Number(page.quantidadeExterna);meta=page}
     if(total!==expected||internas!==Number(page.quantidadeInterna)||externas!==Number(page.quantidadeExterna))
