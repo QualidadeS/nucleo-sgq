@@ -319,6 +319,21 @@ async function openRoPdf(id){
     const u=model?.universalLayout;
     const hasUniversal=!!(u&&Number(u.version)>=2&&(Array.isArray(u.headerGrid)||Array.isArray(u.bodyGrid)||Array.isArray(u.footerGrid)));
     if(hasUniversal){
+      try{
+        updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
+        const evidence=await portalJsonp({
+          acao:'portal_ro_evidence_data',
+          ro:ro.numero||ro.id||ro.codigo,
+          origin:ro.origem||ro.origin||''
+        },90000);
+        if(evidence?.sucesso&&Array.isArray(evidence.urls)){
+          ro.__nucleoEvidenceDataUrls=evidence.urls.filter(Boolean);
+        }
+      }catch(e){
+        console.warn('Não foi possível incorporar as evidências pela API; mantendo a visualização disponível.',e);
+      }finally{
+        hideNucleoLoading(true);
+      }
       nucleoShowRoModelPreview(ro,model,assets);
       return;
     }
