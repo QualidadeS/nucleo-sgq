@@ -11851,66 +11851,6 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
-
-function nucleoRoPageJsonpV63_(params={},timeoutMs=90000){
-  return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
-    if(!base){
-      reject(new Error('URL do Apps Script não configurada.'));
-      return;
-    }
-
-    const cb='nucleoRoPageV63_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const script=document.createElement('script');
-    let done=false;
-    let timer=null;
-
-    function cleanup(){
-      if(timer)clearTimeout(timer);
-      try{delete window[cb]}catch(_){window[cb]=undefined}
-      try{script.remove()}catch(_){}
-    }
-    function finish(err,data){
-      if(done)return;
-      done=true;
-      cleanup();
-      err?reject(err):resolve(data);
-    }
-
-    window[cb]=data=>finish(null,data);
-
-    const request={
-      mode:'nucleo_ro_page_v63',
-      nucleoAction:'portal_ro_page',
-      acao:'portal_ro_page',
-      ...(params||{})
-    };
-
-    const token=String(getSession()?.authToken||'').trim();
-    if(token&&!request.token)request.token=token;
-
-    const parts=[];
-    Object.entries(request).forEach(([k,v])=>{
-      if(v!==undefined&&v!==null&&String(v)!==''){
-        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
-      }
-    });
-    parts.push('callback='+encodeURIComponent(cb));
-    parts.push('_='+Date.now());
-
-    script.async=true;
-    script.src=base+'?'+parts.join('&');
-    script.onerror=()=>finish(new Error(
-      'A rota dedicada de R.O.s não carregou. API: '+base
-    ));
-    timer=setTimeout(()=>finish(new Error(
-      'A rota dedicada de R.O.s não respondeu dentro do tempo limite.'
-    )),timeoutMs);
-
-    document.head.appendChild(script);
-  });
-}
-
 async function loadOfficialRosFullFallback(settings,onProgress,reason){
   const s=settings||getSavedIntegrationSettings();
   const period=roSyncPeriodParams(s);
@@ -11939,7 +11879,7 @@ async function loadOfficialRosPaged(settings,onProgress){
     let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        page=await nucleoRoPageJsonpV63_({...period,offset,limite:pageSize},90000);
+        page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
         break;
       }catch(e){
         lastError=e;
@@ -11952,24 +11892,20 @@ async function loadOfficialRosPaged(settings,onProgress){
     // Se nem a primeira página respondeu, usa a rota completa que continua
     // disponível no mesmo doGet. Isso mantém compatibilidade com implantações
     // que ainda não responderam corretamente ao portal_ro_page.
-    if(!page)throw new Error(
-      'A página '+(Math.floor(offset/pageSize)+1)+' da rota dedicada falhou após 2 tentativas: '+
-      (lastError?.message||lastError||'sem resposta')
-    );
+    if(!page && offset===0)return loadOfficialRosFullFallback(s,onProgress,lastError);
+    if(!page)throw new Error('A página '+(Math.floor(offset/pageSize)+1)+' falhou após 2 tentativas: '+(lastError?.message||lastError||'sem resposta'));
     if(page?.sucesso===false){
-      throw new Error(page.erro||'A planilha recusou a leitura pela rota dedicada.');
-    }
-    if(page?.__route!=='nucleo_ro_page_v63'){
-      let raw='';
-      try{raw=JSON.stringify(page)}catch(_){raw=String(page)}
-      throw new Error('A API respondeu pela rota errada. Resposta: '+raw);
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,page.erro||'portal_ro_page recusado');
+      throw new Error(page.erro||'A planilha recusou a leitura.');
     }
     if(!page?.paginado||!Array.isArray(page.dados)){
-      throw new Error('A rota dedicada devolveu uma página incompatível.');
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'resposta paginada incompatível');
+      throw new Error('A leitura por páginas deixou de responder no meio da sincronização.');
     }
     const expected=Number(page.quantidade);
     if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset){
-      throw new Error('A rota dedicada devolveu uma página inválida.');
+      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'primeira página inválida');
+      throw new Error('A planilha devolveu uma página inválida.');
     }
     if(total===null){total=expected;internas=Number(page.quantidadeInterna);externas=Number(page.quantidadeExterna);meta=page}
     if(total!==expected||internas!==Number(page.quantidadeInterna)||externas!==Number(page.quantidadeExterna))
