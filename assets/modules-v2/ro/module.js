@@ -224,6 +224,51 @@ function openExternalRoPdf(url){
   modal.classList.add('open');
 }
 
+
+function nucleoRoEvidenceFileId_(value){
+  const u=String(value||'').trim();
+  if(!u)return '';
+  if(/^[A-Za-z0-9_-]{20,}$/.test(u))return u;
+  const m=u.match(/\/d\/([A-Za-z0-9_-]{20,})/i)
+    ||u.match(/[?&]id=([A-Za-z0-9_-]{20,})/i)
+    ||u.match(/thumbnail\?[^#]*\bid=([A-Za-z0-9_-]{20,})/i);
+  return m?.[1]||'';
+}
+
+async function nucleoLoadRoEvidenceDataUrls_(ro){
+  const original=nucleoRoEvidenceUrls(ro).filter(x=>!/^data:image\//i.test(String(x||'')));
+  const existing=Array.isArray(ro?.__nucleoEvidenceDataUrls)
+    ? ro.__nucleoEvidenceDataUrls.filter(x=>/^data:image\//i.test(String(x||'')))
+    : [];
+  if(existing.length && existing.length>=original.length)return existing;
+
+  const ids=[...new Set(original.map(nucleoRoEvidenceFileId_).filter(Boolean))];
+  if(!ids.length)return existing;
+
+  const loaded=[];
+  for(const fileId of ids){
+    try{
+      const result=await portalJsonp({
+        acao:'portal_ro_evidence_item',
+        ro:ro.numero||ro.id||ro.codigo,
+        origin:ro.origem||ro.origin||'',
+        fileId:fileId
+      },90000);
+      if(result?.sucesso&&/^data:image\//i.test(String(result.dataUrl||''))){
+        loaded.push(result.dataUrl);
+      }
+    }catch(err){
+      console.warn('Falha ao incorporar evidência '+fileId,err);
+    }
+  }
+
+  if(loaded.length){
+    ro.__nucleoEvidenceDataUrls=loaded;
+    return loaded;
+  }
+  return existing;
+}
+
 function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
   const layout=model?.universalLayout||{},design=model?.design||{},orientation=design.orientation==='landscape'?'landscape':'portrait',margin=Math.max(5,Math.min(35,Number(model?.marginMm)||10));
   const images={...(assets.standardImagePreviews||{}),...(assets.gridImagePreviews||{})};
@@ -337,17 +382,9 @@ async function openRoPdf(id){
     if(hasUniversal){
       try{
         updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
-        const evidence=await portalJsonp({
-          acao:'portal_ro_evidence_data',
-          ro:ro.numero||ro.id||ro.codigo,
-          origin:ro.origem||ro.origin||'',
-          evidence:nucleoRoEvidenceUrls(ro).join('\n')
-        },90000);
-        if(evidence?.sucesso&&Array.isArray(evidence.urls)){
-          ro.__nucleoEvidenceDataUrls=evidence.urls.filter(Boolean);
-        }
+        await nucleoLoadRoEvidenceDataUrls_(ro);
       }catch(e){
-        console.warn('Não foi possível incorporar as evidências pela API; mantendo a visualização disponível.',e);
+        console.warn('Não foi possível incorporar as evidências pela API.',e);
       }finally{
         hideNucleoLoading(true);
       }
