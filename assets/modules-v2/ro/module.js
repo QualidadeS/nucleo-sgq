@@ -238,57 +238,86 @@ function nucleoRoEvidenceFileId_(value){
 async function nucleoLoadRoEvidenceDataUrls_(ro){
   const original=nucleoRoEvidenceUrls(ro).filter(x=>!/^data:image\//i.test(String(x||'')));
   ro.__nucleoEvidenceDiagnostics=ro.__nucleoEvidenceDiagnostics||{};
+
   const existing=Array.isArray(ro?.__nucleoEvidenceDataUrls)
     ? ro.__nucleoEvidenceDataUrls.filter(x=>/^data:image\//i.test(String(x||'')))
     : [];
+
   if(existing.length && existing.length>=original.length)return existing;
 
   const ids=[...new Set(original.map(nucleoRoEvidenceFileId_).filter(Boolean))];
   if(!ids.length)return existing;
 
   const loaded=[];
+
   for(const fileId of ids){
     try{
-      const result=await portalJsonp({
-        acao:'portal_ro_evidence_item',
+      const common={
+        acao:'portal_ro_evidence_chunk',
         ro:ro.numero||ro.id||ro.codigo,
         origin:ro.__origemBase||ro.origem||ro.origin||'',
         fileId:fileId
-      },90000);
-      if(result?.sucesso&&/^data:image\//i.test(String(result.dataUrl||''))){
-        loaded.push(result.dataUrl);
-        ro.__nucleoEvidenceDiagnostics[fileId]={
-          sucesso:true,
-          etapa:result.etapa||'concluido',
-          detalhe:result.detalhe||'Imagem baixada e incorporada pelo Apps Script.',
-          mime:result.mime||'',
-          bytes:Number(result.bytes||0)
-        };
-      }else{
+      };
+
+      const first=await portalJsonp({...common,part:0},90000);
+
+      if(!first?.sucesso||!first.chunk){
         ro.__nucleoEvidenceDiagnostics[fileId]={
           sucesso:false,
-          etapa:result?.etapa||'resposta_backend',
-          detalhe:result?.erro||result?.detalhe||'O backend não devolveu a imagem em base64.',
-          http:result?.http||''
+          etapa:first?.etapa||'primeiro_chunk',
+          detalhe:first?.erro||'O backend não devolveu o primeiro bloco da imagem.',
+          http:first?.http||''
         };
+        continue;
       }
+
+      const totalParts=Math.max(1,Number(first.totalParts)||1);
+      const chunks=new Array(totalParts);
+      chunks[0]=String(first.chunk||'');
+
+      for(let part=1;part<totalParts;part++){
+        const result=await portalJsonp({...common,part},90000);
+        if(!result?.sucesso||typeof result.chunk!=='string'){
+          throw new Error(
+            (result?.etapa?('Etapa '+result.etapa+': '):'')+
+            (result?.erro||('falha ao carregar o bloco '+(part+1)+' de '+totalParts))
+          );
+        }
+        chunks[part]=result.chunk;
+      }
+
+      const base64=chunks.join('');
+      if(!base64){
+        throw new Error('A imagem foi recebida em blocos, mas o base64 ficou vazio.');
+      }
+
+      const mime=String(first.mime||'image/jpeg');
+      const dataUrl='data:'+mime+';base64,'+base64;
+      loaded.push(dataUrl);
+
+      ro.__nucleoEvidenceDiagnostics[fileId]={
+        sucesso:true,
+        etapa:'chunks_concluidos',
+        detalhe:'Imagem recebida em '+totalParts+' bloco(s) pelo Apps Script.',
+        mime:mime,
+        bytes:Number(first.bytes||0)
+      };
     }catch(err){
       console.warn('Falha ao incorporar evidência '+fileId,err);
       ro.__nucleoEvidenceDiagnostics[fileId]={
         sucesso:false,
-        etapa:'chamada_backend',
-        detalhe:String(err?.message||err||'Falha desconhecida ao consultar o Apps Script.')
+        etapa:'chunks',
+        detalhe:String(err?.message||err||'Falha ao remontar a imagem.')
       };
     }
   }
 
   if(loaded.length){
     ro.__nucleoEvidenceDataUrls=loaded;
-    return loaded;
   }
-  return existing;
-}
 
+  return loaded.length?loaded:existing;
+}
 
 function nucleoRoEvidenceDiagnosticText_(ro,url){
   const fileId=nucleoRoEvidenceFileId_(url);
