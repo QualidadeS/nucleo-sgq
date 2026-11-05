@@ -299,12 +299,13 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
     const pageNo=groupIndex+2;
     const cards=group.map(url=>{
       evidenceNumber++;
-      const imageUrl=nucleoRoEvidenceImageUrl(url);
+      const isEmbedded=/^data:image\//i.test(String(url||''));
       return `<div class="evidence-card">
         <div class="evidence-title">EVIDÊNCIA ${evidenceNumber}</div>
         <div class="evidence-frame">
-          <img src="${nucleoRoModelEsc(imageUrl)}" alt="Evidência ${evidenceNumber}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
-          <div class="evidence-fallback" style="display:none">Não foi possível carregar a imagem nesta visualização.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>
+          ${isEmbedded
+            ? `<canvas class="evidence-canvas" data-evidence-index="${evidenceNumber-1}" aria-label="Evidência ${evidenceNumber}"></canvas>`
+            : `<div class="evidence-fallback" style="display:block">Não foi possível incorporar esta imagem.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>`}
         </div>
       </div>`;
     }).join('');
@@ -315,10 +316,47 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
   @page{size:A4 ${orientation};margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;padding:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:${nucleoRoModelEsc(design.textColor||'#222222')}}
   .page{width:${orientation==='landscape'?'297mm':'210mm'};height:${orientation==='landscape'?'210mm':'297mm'};margin:0 auto 8mm;background:#fff;padding:${margin}mm;font-size:${Math.max(7,Math.min(18,Number(model?.fontSize)||9))}pt;display:flex;flex-direction:column;overflow:hidden;page-break-after:always}.page:last-child{page-break-after:auto}
   .grid{width:100%;border-collapse:collapse;table-layout:fixed}.grid col{width:1%}.page-main{flex:1 1 auto;min-height:0;overflow:hidden;display:block}.cell-stack{display:flex;flex-direction:column;gap:.35mm;min-width:0}.cell-label{line-height:1.05}.before,.after{white-space:pre-wrap;margin:2mm 0}.footer-wrap{margin-top:2mm;padding-top:0;flex:0 0 auto;page-break-inside:avoid;break-inside:avoid}
-  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-frame img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}
+  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-canvas{display:block;width:100%;height:100%;max-width:100%;max-height:100%}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}
   @media screen{body{padding:8mm}.page{box-shadow:0 2px 12px #0003}}@media print{body{background:#fff;padding:0}.page{box-shadow:none;margin:0}}
   </style></head><body>${pages}<script>
   (function(){
+    var evidenceData=${JSON.stringify(evidenceUrls)};
+    function decodeDataUrl(dataUrl){
+      var m=String(dataUrl||'').match(/^data:([^;]+);base64,(.+)$/);
+      if(!m)return null;
+      var bin=atob(m[2]),bytes=new Uint8Array(bin.length);
+      for(var i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      return new Blob([bytes],{type:m[1]||'image/jpeg'});
+    }
+    async function drawEvidenceCanvases(){
+      var canvases=document.querySelectorAll('canvas.evidence-canvas');
+      for(var i=0;i<canvases.length;i++){
+        var canvas=canvases[i];
+        try{
+          var idx=Number(canvas.getAttribute('data-evidence-index'));
+          var blob=decodeDataUrl(evidenceData[idx]);
+          if(!blob)throw new Error('Imagem não incorporada');
+          var bitmap=await createImageBitmap(blob);
+          var box=canvas.parentElement.getBoundingClientRect();
+          var dpr=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+          canvas.width=Math.max(1,Math.floor(box.width*dpr));
+          canvas.height=Math.max(1,Math.floor(box.height*dpr));
+          var ctx=canvas.getContext('2d');
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          var scale=Math.min(canvas.width/bitmap.width,canvas.height/bitmap.height);
+          var w=bitmap.width*scale,h=bitmap.height*scale;
+          ctx.drawImage(bitmap,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+          if(bitmap.close)bitmap.close();
+        }catch(err){
+          canvas.style.display='none';
+          var fallback=document.createElement('div');
+          fallback.className='evidence-fallback';
+          fallback.style.display='block';
+          fallback.textContent='Não foi possível renderizar a imagem incorporada.';
+          canvas.parentElement.appendChild(fallback);
+        }
+      }
+    }
     function fitFirstPage(){
       var page=document.querySelector('.page'); if(!page)return;
       var main=page.querySelector('.page-main'); if(!main)return;
@@ -329,9 +367,9 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
       main.style.zoom=String(scale);
       main.style.width=(100/scale)+'%';
     }
-    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(fitFirstPage,30)});
-    else setTimeout(fitFirstPage,30);
-    window.addEventListener('beforeprint',fitFirstPage);
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){fitFirstPage();drawEvidenceCanvases();},30)});
+    else setTimeout(function(){fitFirstPage();drawEvidenceCanvases();},30);
+    window.addEventListener('beforeprint',function(){fitFirstPage();drawEvidenceCanvases();});
   })();
   <\/script></body></html>`;
 }
