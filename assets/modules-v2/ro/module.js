@@ -235,6 +235,64 @@ function nucleoRoEvidenceFileId_(value){
   return m?.[1]||'';
 }
 
+
+function nucleoEvidenceChunkJsonpV57_(params,timeoutMs=90000){
+  return new Promise((resolve,reject)=>{
+    const base=portalApiBase();
+    if(!base){
+      reject(new Error('URL do Apps Script não configurada.'));
+      return;
+    }
+
+    const cb='nucleoEvidenceV57_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let done=false;
+
+    function cleanup(){
+      try{clearTimeout(timer)}catch(_){}
+      try{delete window[cb]}catch(_){window[cb]=undefined}
+      try{script.remove()}catch(_){}
+    }
+    function finish(err,data){
+      if(done)return;
+      done=true;
+      cleanup();
+      if(err)reject(err);else resolve(data);
+    }
+
+    window[cb]=data=>finish(null,data);
+
+    const request={
+      mode:'nucleo_evidence_chunk_v57',
+      nucleoAction:'portal_ro_evidence_chunk',
+      acao:'portal_ro_evidence_chunk',
+      ...(params||{})
+    };
+
+    const token=String(getSession()?.authToken||'').trim();
+    if(token&&!request.token)request.token=token;
+
+    const parts=[];
+    Object.entries(request).forEach(([k,v])=>{
+      if(v!==undefined&&v!==null){
+        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+      }
+    });
+    parts.push('callback='+encodeURIComponent(cb));
+    parts.push('_='+Date.now());
+
+    script.async=true;
+    script.src=base+'?'+parts.join('&');
+    script.onerror=()=>finish(new Error('Falha ao carregar a rota dedicada de evidência.'));
+    const timer=setTimeout(
+      ()=>finish(new Error('A rota dedicada da evidência não respondeu dentro do limite.')),
+      timeoutMs
+    );
+
+    document.head.appendChild(script);
+  });
+}
+
 async function nucleoLoadRoEvidenceDataUrls_(ro){
   const original=nucleoRoEvidenceUrls(ro).filter(x=>!/^data:image\//i.test(String(x||'')));
   ro.__nucleoEvidenceDiagnostics=ro.__nucleoEvidenceDiagnostics||{};
@@ -259,7 +317,7 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
         fileId:fileId
       };
 
-      const first=await portalJsonp({...common,part:0},90000);
+      const first=await nucleoEvidenceChunkJsonpV57_({...common,part:0},90000);
 
       if(!first?.sucesso||!first.chunk){
         let raw='';
@@ -267,7 +325,9 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
         ro.__nucleoEvidenceDiagnostics[fileId]={
           sucesso:false,
           etapa:first?.etapa||'primeiro_chunk',
-          detalhe:'V54 | O backend não devolveu o primeiro bloco da imagem. '+
+          detalhe:'V57 | Rota dedicada não devolveu chunk. '+
+                  'API: '+portalApiBase()+'. '+
+                  (first?.__route?('Rota backend: '+first.__route+'. '):'')+
                   (first?.erro?('Erro backend: '+first.erro+'. '):'')+
                   'Resposta recebida: '+raw,
           http:first?.http||''
@@ -280,7 +340,7 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
       chunks[0]=String(first.chunk||'');
 
       for(let part=1;part<totalParts;part++){
-        const result=await portalJsonp({...common,part},90000);
+        const result=await nucleoEvidenceChunkJsonpV57_({...common,part},90000);
         if(!result?.sucesso||typeof result.chunk!=='string'){
           throw new Error(
             (result?.etapa?('Etapa '+result.etapa+': '):'')+
