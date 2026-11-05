@@ -6320,7 +6320,7 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
       '[PÁGINA]':'#PAGE',
       '[PAGINA]':'#PAGE'
     };
-    let src=String(cell.systemSource||meta.source||cell.source||'');
+    let src=String(cell.source||meta.source||cell.systemSource||'');
     if(!src)src=placeholderSource[persistedText]||'';
     const rawBw=Number(cell.borderWidth),bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5)),bc=safeColor(cell.borderColor,'#999999');
     const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
