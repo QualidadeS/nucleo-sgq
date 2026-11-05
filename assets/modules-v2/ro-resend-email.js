@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v10 | ações fixas */
+/* NÚCLEO | Reenviar e-mail | v11 | ações fixas */
 (function(){
-  if(window.__nucleoRoResendEmailV10)return;
-  window.__nucleoRoResendEmailV10=true;
+  if(window.__nucleoRoResendEmailV11)return;
+  window.__nucleoRoResendEmailV11=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -108,18 +108,75 @@
   let historyLoadedAt=0;
   let historyPromise=null;
 
-  // Índice global de erros do histórico.
+  // Índice global de ERROS AINDA NÃO REENVIADOS.
   // Chave: origem + número (ex.: EX|490 / IN|490).
+  // Um erro deixa de ser pendente somente quando existe um envio 'sent' POSTERIOR
+  // para a mesma R.O. e o mesmo destino (ou, quando disponível, o mesmo setor).
   window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
+  window.__nucleoEmailUnresolvedErrors = window.__nucleoEmailUnresolvedErrors || new Map();
+
+  function recipientSignature(h){
+    const raw=String(h?.email||h?.recipient||h?.destinatario||'').trim().toLowerCase();
+    if(!raw)return '';
+    return [...new Set(raw.split(/[;,]/).map(x=>x.trim()).filter(Boolean))].sort().join(';');
+  }
+
+  function sectorSignature(h){
+    return norm(h?.sector||h?.setor||h?.responsibleSector||'');
+  }
+
+  function sameSectorLoose(a,b){
+    a=norm(a); b=norm(b);
+    if(!a||!b)return false;
+    if(a===b)return true;
+    const stem=x=>x.replace(/(?:oes|aes|eis|ais|is|ns|s)$/,'').slice(0,8);
+    const sa=stem(a), sb=stem(b);
+    return sa.length>=4 && sb.length>=4 && sa===sb;
+  }
+
+  function sentResolvesError(sent,failed){
+    if(String(sent?.status||'').toLowerCase()!=='sent')return false;
+    if(roHistoryKey(sent?.ro,sent)!==roHistoryKey(failed?.ro,failed))return false;
+    if(eventTime(sent)<=eventTime(failed))return false;
+
+    const failedRecipient=recipientSignature(failed);
+    const sentRecipient=recipientSignature(sent);
+    if(failedRecipient && sentRecipient)return failedRecipient===sentRecipient;
+
+    const failedSector=sectorSignature(failed);
+    const sentSector=sectorSignature(sent);
+    if(failedSector && sentSector)return sameSectorLoose(failedSector,sentSector);
+
+    // Sem destino/setor suficiente, não presumimos que um 'sent' diferente resolveu
+    // a falha. É melhor manter o erro visível do que escondê-lo incorretamente.
+    return false;
+  }
+
+  function unresolvedErrorEvents(history){
+    const rows=(history||[]).filter(h=>String(h?.type||'ro').toLowerCase()==='ro');
+    const sent=rows.filter(h=>String(h?.status||'').toLowerCase()==='sent');
+    return rows.filter(failed=>{
+      if(String(failed?.status||'').toLowerCase()!=='error')return false;
+      const key=roHistoryKey(failed?.ro,failed);
+      if(!key)return false;
+      return !sent.some(ok=>sentResolvesError(ok,failed));
+    });
+  }
 
   function rebuildErrorIndex(history){
+    const unresolved=unresolvedErrorEvents(history);
     const idx=new Set();
-    (history||[]).forEach(h=>{
-      if(String(h?.status||'').toLowerCase()!=='error')return;
+    const map=new Map();
+    unresolved.forEach(h=>{
       const key=roHistoryKey(h?.ro,h);
-      if(key)idx.add(key);
+      if(!key)return;
+      idx.add(key);
+      const arr=map.get(key)||[];
+      arr.push(h);
+      map.set(key,arr);
     });
     window.__nucleoEmailErrorIndex=idx;
+    window.__nucleoEmailUnresolvedErrors=map;
     try{ if(typeof render==='function') render(); }catch(e){}
   }
 
@@ -692,7 +749,10 @@
     sel.innerHTML='<option value="all">Todos os envios</option><option value="error">Erro no envio</option>';
     sel.value='all';
     sel.addEventListener('change',()=>{
-      updateAssignedEmailMarkers();
+      // O filtro precisa reconstruir a lista completa. Apenas esconder as linhas
+      // já renderizadas fazia os erros fora das primeiras 60 R.O.s desaparecerem.
+      try{ if(typeof render==='function') render(); }catch(e){}
+      setTimeout(()=>{ try{ updateAssignedEmailMarkers(); }catch(e){} },0);
     });
     base.insertAdjacentElement('afterend',sel);
     return sel;
@@ -713,14 +773,9 @@
       if(!assigned)return;
       const history=await loadHistory();
 
-      // Índice de erros por origem + número da R.O.
-      const roErrorIndex=new Set();
-      (history||[]).forEach(h=>{
-        if(String(h?.status||'').toLowerCase()==='error'){
-          const key=roHistoryKey(h?.ro,h);
-          if(key)roErrorIndex.add(key);
-        }
-      });
+      // Índice somente dos erros que AINDA não tiveram reenvio confirmado.
+      const unresolved=unresolvedErrorEvents(history);
+      const roErrorIndex=new Set(unresolved.map(h=>roHistoryKey(h?.ro,h)).filter(Boolean));
 
       document.querySelectorAll('#rows tr').forEach(tr=>{
         const roBtn=tr.querySelector('td:first-child .ro-link-btn');
@@ -731,23 +786,15 @@
         if(!ro)return;
         ensureResendButton(tr,ro,sector);
         const events=relevantHistory(history,ro,sector,roObj);
-        let emailStatus=statusFromEvents(events);
-
-        // Se o histórico por setor não identificou erro, mas esta R.O. tem erro
-        // registrado em qualquer envio, força o badge para que apareça no filtro.
         const rowKey=roHistoryKey(ro,roObj);
-        if(emailStatus.code==='none' && rowKey && roErrorIndex.has(rowKey)){
-          const allRoEvents=(history||[]).filter(h=>
-            String(h?.type||'ro').toLowerCase()==='ro' && roHistoryKey(h?.ro,h)===rowKey
-          );
-          // O filtro "Erro no envio" representa a existência de falha registrada.
-          // Se houver erro para esta R.O./origem, não perde o registro por falta de setor no histórico.
-          if(allRoEvents.some(h=>String(h?.status||'').toLowerCase()==='error')){
-            emailStatus={code:'error',label:'Erro',title:'Existe erro de envio registrado no histórico desta R.O.'};
-          }
-        }
+        const unresolvedForRo=rowKey
+          ? unresolved.filter(h=>roHistoryKey(h?.ro,h)===rowKey)
+          : [];
+        const emailStatus=unresolvedForRo.length
+          ? {code:'error',label:'Erro',title:'Existe erro de envio ainda sem reenvio confirmado para esta R.O.'}
+          : statusFromEvents(events);
 
-        ensureStatusBadge(tr,emailStatus,events);
+        ensureStatusBadge(tr,emailStatus,unresolvedForRo.length?unresolvedForRo:events);
         applyAssignedEmailFilter(tr,emailStatus.code);
       });
     }catch(e){
