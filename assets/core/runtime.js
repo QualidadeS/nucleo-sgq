@@ -6338,6 +6338,10 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
    }).join(''))+'</tr>';}).join('');
 }
 function nucleoRoEvidenceUrls(ro){
+  const embedded=Array.isArray(ro?.__nucleoEvidenceDataUrls)
+    ? ro.__nucleoEvidenceDataUrls.map(x=>String(x||'').trim()).filter(Boolean)
+    : [];
+  if(embedded.length)return [...new Set(embedded)];
   const raw=ro?.raw||{};
   const evidence=String(ro?.evidencia||firstValue(raw,[
     'Insira imagens e/ou vídeos relacionado a ocorrência relatada.',
