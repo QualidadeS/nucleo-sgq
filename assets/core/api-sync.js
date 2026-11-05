@@ -592,82 +592,6 @@ function applyPortalBackendSnapshot(snapshot){
   return true;
 }
 
-
-function nucleoBridgeV66_(bridgeAction,params={},timeoutMs=180000){
-  return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
-    if(!base){
-      reject(new Error('URL do Apps Script não configurada.'));
-      return;
-    }
-
-    const requestId='nucleoBridgeV66_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const iframe=document.createElement('iframe');
-    iframe.style.display='none';
-
-    let done=false;
-    let timer=null;
-
-    function cleanup(){
-      if(timer)clearTimeout(timer);
-      window.removeEventListener('message',onMessage);
-      try{iframe.remove()}catch(_){}
-    }
-    function finish(err,data){
-      if(done)return;
-      done=true;
-      cleanup();
-      err?reject(err):resolve(data);
-    }
-    function decodeBase64Utf8(b64){
-      const bin=atob(String(b64||''));
-      const bytes=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
-      return new TextDecoder('utf-8').decode(bytes);
-    }
-    function onMessage(ev){
-      const data=ev?.data;
-      if(!data||data.marker!=='NUCLEO_BRIDGE_V66'||data.requestId!==requestId)return;
-      try{
-        const json=decodeBase64Utf8(data.payloadB64);
-        const parsed=JSON.parse(json);
-        if(parsed?.sucesso===false && nucleoSessionError(parsed)){
-          try{nucleoEndExpiredSession()}catch(_){}
-        }
-        finish(null,parsed);
-      }catch(err){
-        finish(new Error('A resposta da API chegou, mas não pôde ser lida: '+(err?.message||err)));
-      }
-    }
-
-    window.addEventListener('message',onMessage);
-
-    const request={
-      mode:'nucleo_bridge_v66',
-      bridgeAction,
-      requestId,
-      ...(params||{})
-    };
-    const token=String(getSession()?.authToken||'').trim();
-    if(token&&!request.token)request.token=token;
-
-    const parts=[];
-    Object.entries(request).forEach(([k,v])=>{
-      if(v!==undefined&&v!==null){
-        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
-      }
-    });
-
-    iframe.src=base+'?'+parts.join('&');
-    iframe.onload=()=>{};
-    iframe.onerror=()=>finish(new Error('Não foi possível abrir a ponte segura do Apps Script.'));
-    timer=setTimeout(()=>finish(new Error('A ponte segura do Apps Script não respondeu dentro do tempo limite.')),timeoutMs);
-
-    document.body.appendChild(iframe);
-  });
-}
-window.nucleoBridgeV66=nucleoBridgeV66_;
-
 async function syncPortalBackend(showMessage=false,options={}){
   // Se outra sincronização central já estiver em andamento, compartilha o
   // resultado dela. Não existe mais o falso erro depois de 30 segundos.
@@ -706,7 +630,7 @@ async function syncPortalBackend(showMessage=false,options={}){
 
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        res=await nucleoBridgeV66_('portal_load',{},180000);
+        res=await portalJsonp({acao:'portal_load'},180000);
         if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
         if(res)break;
       }catch(loadErr){
