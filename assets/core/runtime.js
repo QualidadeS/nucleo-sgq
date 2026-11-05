@@ -6238,94 +6238,6 @@ function closeRoReport(){
 function nucleoRoModelNormKey(v){
   return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
 }
-function nucleoRoPdfKnownSectors_(){
-  const out=[];
-  try{if(typeof getConfiguredSectorsForTriage==='function')out.push(...(getConfiguredSectorsForTriage()||[]));}catch(_){ }
-  try{if(typeof getConfiguredSectors==='function'){out.push(...(getConfiguredSectors('matriz')||[]));out.push(...(getConfiguredSectors('filial')||[]));}}catch(_){ }
-  return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
-}
-function nucleoRoPdfIsSector_(v){
-  const n=nucleoRoModelNormKey(v);if(!n)return false;
-  return nucleoRoPdfKnownSectors_().some(s=>nucleoRoModelNormKey(s)===n);
-}
-function nucleoRoPdfLooksNumeric_(v){
-  const s=String(v??'').trim();
-  if(!s)return false;
-  return /^-?\d+(?:[\.,]\d+)?(?:\s*(?:kg|g|un|unid|pc|pcs|peças|pecas))?$/i.test(s);
-}
-function nucleoRoPdfFirstNonEmpty_(arr){
-  for(const v of arr){if(v!==undefined&&v!==null&&String(v).trim()!=='')return v;}
-  return '';
-}
-function nucleoRoPdfSemanticValues_(ro){
-  const raw=ro?.raw||{};
-  const val=(names)=>firstValue(raw,names)||'';
-  const tri=(()=>{try{return typeof getRoTriageRecord==='function'?getRoTriageRecord(ro,typeof getSavedTriageMap==='function'?getSavedTriageMap():undefined):null;}catch(_){return null;}})();
-
-  // V42: os campos oficiais do PDF usam primeiro os marcadores posicionais
-  // enviados pela API. Eles vêm diretamente das colunas reais da planilha e
-  // não sofrem com cabeçalhos antigos/deslocados do Google Forms.
-  const tipo=String(raw.__tipoOcorrencia ?? ro?.tipoRO ?? ro?.assunto ?? val(['Tipo de Ocorrência','Tipo de ocorrência','Classificação']) ?? '').trim();
-  const descricao=String(raw.__descricaoProblema ?? ro?.descricao ?? val(['Descreva sobre o problema encontrado:','Descreva sobre o problema encontrado','Descrição','Descricao']) ?? '').trim();
-  const setorIdentificado=String(raw.__setorIdentificado ?? ro?.setorIdentificado ?? val(['Setor (onde foi identificado o desvio de qualidade):','Setor (onde foi identificado o desvio de qualidade)','Setor onde foi identificado o desvio de qualidade','Setor onde foi identificado','Setor identificado']) ?? '').trim();
-  const quantidade=String(raw.__quantidadeDesvio ?? ro?.quantidade ?? val(['Quantidade de peças com desvio:','Quantidade de peças com desvio','Quantidade','Qtd','Qtd.']) ?? '').trim();
-  const peso=String(raw.__pesoMaterial ?? val(['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado','Peso do material descartado/reaproveitado']) ?? '').trim();
-  const liberado=String(raw.__liberadoQualidade ?? val(['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']) ?? '').trim();
-  const quemLiberou=String(raw.__quemLiberou ?? val(['Registre o nome de quem liberou:','Registre o nome de quem liberou','Quem liberou']) ?? '').trim();
-
-  let resultado=String(ro?.resultadoEnvio||raw?.__resultadoOperacional||val(['Resultado'])||'').trim();
-  if(/nenhum\s+email\s+encontrado/i.test(resultado))resultado='';
-
-  const destinatario=String(nucleoRoPdfFirstNonEmpty_([
-    tri?.responsibleUserName,
-    tri?.responsibleUserEmail,
-    tri?.destinatario,
-    tri?.recipient,
-    raw?.__pessoaResponsavel,
-    ro?.pessoaResponsavel
-  ])||'').trim();
-  const setorCausa=String(nucleoRoPdfFirstNonEmpty_([
-    tri?.responsibleSector,
-    tri?.setorDirecionado,
-    raw?.__setorResponsavel,
-    ro?.setorResponsavelPlanilha,
-    ro?.setor
-  ])||'').trim();
-
-  return {
-    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
-    'RO':ro?.numero||ro?.id||ro?.codigo||'',
-    'Data':ro?.data||ro?.dataSolicitacao||'',
-    'Unidade':ro?.unidade||'',
-    'Cliente':raw.__cliente||val(['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
-    'Tipo de ocorrência':tipo,
-    'Tipo de ocorrencia':tipo,
-    'Identificação do desvio':raw.__identificacaoDesvio||val(['Identifique o desvio de qualidade:  Problemas oriundos ou que deveriam ser pegos em:  F -  Fabricação PA - Processos Administrativos E - Expedição C - Clicheria DT - Desenvolvimento Técnico FT - Fábrica de Tintas G - Geral EP - Estoque MP'])||'',
-    'Descrição':descricao,
-    'Descricao':descricao,
-    'Setor identificado':setorIdentificado,
-    'Setor onde foi identificado':setorIdentificado,
-    'Quantidade de peças com desvio':quantidade,
-    'Peso do material descartado/reaproveitado':peso,
-    'Liberado pelo setor de qualidade?':liberado,
-    'Quem liberou':quemLiberou,
-    'Resultado':resultado,
-    'Destinatário da triagem':destinatario,
-    'Destinatario da triagem':destinatario,
-    'Setor causa/responsável':setorCausa,
-    'Setor causa / responsável':setorCausa,
-    'Setor':setorCausa,
-    'Status':ro?.status||'',
-    'Matrícula':val(['Matrícula','Matricula']),
-    'Responsável pelo registro':raw?.['Nome e Sobrenome (responsável pelo registro deste formulário):']||val(['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
-    'Número do pedido':val(['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
-    'Código do item':val(['Código do item:','Código do item','Codigo do item:','Codigo do item']),
-    'Ordem de produção':val(['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
-    'Nota fiscal de venda':val(['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda','Nota Fiscal']),
-    'Ação preventiva':raw?.__acaoPreventiva||val(['Ação preventiva','Acao preventiva']),
-    'Prazo conclusão ação':raw?.__prazoConclusaoAcao||val(['Prazo conclusão ação','Prazo conclusao acao'])
-  };
-}
 function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   const raw=ro?.raw||{},src=String(source||'');
   if(src==='#TITLE')return model?.title||'RELATO DE OCORRÊNCIA';
@@ -6336,27 +6248,48 @@ function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   if(src==='#PAGE')return totalPages>1?(pageNo+' / '+totalPages):String(pageNo);
   if(src==='#FOOTER')return model?.footer||'';
   if(src==='#GENERATED')return new Date().toLocaleString('pt-BR');
-  if(src==='#EVIDENCE'||src==='#HISTORY')return '';
+  if(src==='#EVIDENCE')return '';
+  if(src==='#HISTORY')return '';
 
-  const wanted=nucleoRoModelNormKey(src);
-  const semantic=nucleoRoPdfSemanticValues_(ro);
-  for(const [k,v] of Object.entries(semantic)){
-    if(nucleoRoModelNormKey(k)===wanted)return v??'';
-  }
-
-  // Somente campos não padronizados recorrem diretamente ao raw. Isso evita
-  // cabeçalhos históricos deslocados contaminarem os campos oficiais do PDF.
   if(Object.prototype.hasOwnProperty.call(raw,src) && String(raw[src]??'').trim()!=='')return raw[src];
+  const wanted=nucleoRoModelNormKey(src);
   for(const [k,v] of Object.entries(raw))if(nucleoRoModelNormKey(k)===wanted && String(v??'').trim()!=='')return v;
 
+  const values={
+    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
+    'RO':ro?.numero||ro?.id||ro?.codigo||'',
+    'Data':ro?.data||ro?.dataSolicitacao||'',
+    'Unidade':ro?.unidade||'',
+    'Cliente':firstValue(raw,['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
+    'Tipo de ocorrência':ro?.tipoRO||ro?.assunto||'',
+    'Setor identificado':ro?.setorIdentificado||'',
+    'Setor onde foi identificado':ro?.setorIdentificado||'',
+    'Setor causa/responsável':ro?.setor||'',
+    'Setor causa / responsável':ro?.setor||'',
+    'Setor':ro?.setor||'',
+    'Status':ro?.status||'',
+    'Descrição':ro?.descricao||'',
+    'Matrícula':firstValue(raw,['Matrícula','Matricula']),
+    'Responsável pelo registro':firstValue(raw,['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
+    'Número do pedido':firstValue(raw,['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
+    'Código do item':firstValue(raw,['Código do item:','Código do item','Codigo do item:','Codigo do item']),
+    'Ordem de produção':firstValue(raw,['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
+    'Nota fiscal de venda':firstValue(raw,['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda']),
+    'Quantidade de peças com desvio':firstValue(raw,['Quantidade de peças com desvio:','Quantidade de peças com desvio']),
+    'Peso do material descartado/reaproveitado':firstValue(raw,['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado']),
+    'Liberado pelo setor de qualidade?':firstValue(raw,['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']),
+    'Quem liberou':firstValue(raw,['Registre o nome de quem liberou:','Registre o nome de quem liberou']),
+    'Ação preventiva':firstValue(raw,['Ação preventiva','Acao preventiva']),
+    'Prazo conclusão ação':firstValue(raw,['Prazo conclusão ação','Prazo conclusao acao'])
+  };
+  for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===wanted)return v??'';
   const f=(model?.fields||[]).find(x=>nucleoRoModelNormKey(x?.source)===wanted||nucleoRoModelNormKey(x?.label)===wanted);
   if(f){
     const fw=nucleoRoModelNormKey(f.source||f.label||'');
-    for(const [k,v] of Object.entries(semantic))if(nucleoRoModelNormKey(k)===fw)return v??'';
+    for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===fw)return v??'';
   }
   return '';
 }
-
 function nucleoRoModelEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function nucleoRoCellPersistMeta(cell){
   const raw=String(cell?.id||''),mark='~nmeta~',i=raw.indexOf(mark);
@@ -6367,49 +6300,11 @@ function nucleoRoCellPersistMeta(cell){
   return {source:dec(parts[0]),mask:/^[01]{4}$/.test(parts[1]||'')?parts[1]:'',fill:hasFill?parts[2]:'',label:dec(parts.slice(hasFill?3:2).join('~'))};
 }
 function nucleoRoModelRowUnits(row){const cells=row?.cells||[];if(!cells.length)return[];const total=cells.reduce((s,c)=>s+Math.max(.01,Number(c.width)||50),0)||100;let used=0;return cells.map((c,i)=>{if(i===cells.length-1)return Math.max(1,100-used);const rem=cells.length-i-1;let u=Math.max(1,Math.round((Math.max(.01,Number(c.width)||50)/total)*100));u=Math.min(u,Math.max(1,100-used-rem));used+=u;return u;});}
-
-function nucleoRoPdfCanonicalRowLabel_(v){
-  const n=nucleoRoModelNormKey(v);
-  const map={
-    'r o':'R.O.','ro':'RO','data':'Data','unidade':'Unidade','cliente':'Cliente',
-    'codigo do item':'Código do item','numero do pedido':'Número do pedido',
-    'nota fiscal de venda':'Nota fiscal de venda','ordem de producao':'Ordem de produção',
-    'tipo de ocorrencia':'Tipo de ocorrência','descricao':'Descrição',
-    'setor onde foi identificado':'Setor onde foi identificado',
-    'setor identificado':'Setor onde foi identificado',
-    'quantidade de pecas com desvio':'Quantidade de peças com desvio',
-    'peso do material descartado reaproveitado':'Peso do material descartado/reaproveitado',
-    'liberado pelo setor de qualidade':'Liberado pelo setor de qualidade?',
-    'liberado pelo setor da qualidade':'Liberado pelo setor de qualidade?',
-    'quem liberou':'Quem liberou','resultado':'Resultado',
-    'destinatario da triagem':'Destinatário da triagem',
-    'setor causa responsavel':'Setor causa / responsável',
-    'responsavel pelo registro':'Responsável pelo registro',
-    'matricula':'Matrícula'
-  };
-  return map[n]||'';
-}
-function nucleoRoPdfRowField_(row){
-  const cells=Array.isArray(row?.cells)?row.cells:[];
-  for(const c of cells){
-    const meta=nucleoRoCellPersistMeta(c);
-    const candidates=[
-      c?.labelText,c?.systemLabelText,meta?.label,
-      c?.text
-    ];
-    for(const candidate of candidates){
-      const canonical=nucleoRoPdfCanonicalRowLabel_(candidate);
-      if(canonical)return canonical;
-    }
-  }
-  return '';
-}
-
 function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
   const safeColor=(v,d)=>/^#[0-9a-f]{6}$/i.test(String(v||''))?v:d;
   const safeFill=(v,d='#ffffff')=>String(v||'').toLowerCase()==='transparent'?'transparent':safeColor(v,d);
   const rows=Array.isArray(grid)?grid:[];
-  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);const rowField=nucleoRoPdfRowField_(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
+  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
     const meta=nucleoRoCellPersistMeta(cell);
     // V62: alguns backends preservam o texto do placeholder, mas removem a origem
     // especial da célula. Nesse caso, recupere a origem pelo próprio placeholder
@@ -6425,37 +6320,8 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
       '[PÁGINA]':'#PAGE',
       '[PAGINA]':'#PAGE'
     };
-    let src=String(cell.source||meta.source||cell.systemSource||'');
+    let src=String(cell.systemSource||meta.source||cell.source||'');
     if(!src)src=placeholderSource[persistedText]||'';
-
-    // V43: em linhas padrão "rótulo | valor", o rótulo da própria linha é a
-    // fonte oficial do valor. Isso ignora source/systemSource antigas salvas no modelo.
-    if(rowField){
-      const thisCellCanonical=nucleoRoPdfCanonicalRowLabel_(
-        String(cell.labelText||cell.systemLabelText||meta.label||cell.text||'')
-      );
-      const isLabelCell=thisCellCanonical===rowField;
-      if(!isLabelCell && cell.type!=='image'){
-        src=rowField;
-      }
-    }
-
-    // V40: campos padrão da R.O. são resolvidos pelo rótulo visível quando ele
-    // identifica inequivocamente um campo do formulário. Isso impede que uma
-    // `source` antiga salva no modelo desloque todos os valores uma linha.
-    const visibleLabelForSource=String(cell.labelText||cell.systemLabelText||meta.label||'').trim();
-    const knownRoFieldLabels=new Set([
-      'R.O.','RO','Data','Unidade','Cliente','Código do item','Codigo do item',
-      'Número do pedido','Numero do pedido','Nota fiscal de venda','Ordem de produção','Ordem de producao',
-      'Tipo de ocorrência','Tipo de ocorrencia','Descrição','Descricao',
-      'Setor identificado','Setor onde foi identificado','Setor causa/responsável','Setor causa / responsável',
-      'Quantidade de peças com desvio','Peso do material descartado/reaproveitado',
-      'Liberado pelo setor de qualidade?','Liberado pelo setor da qualidade?','Quem liberou',
-      'Ação preventiva','Acao preventiva','Prazo conclusão ação','Prazo conclusao acao','Status'
-    ].map(nucleoRoModelNormKey));
-    if(visibleLabelForSource && knownRoFieldLabels.has(nucleoRoModelNormKey(visibleLabelForSource))){
-      src=visibleLabelForSource;
-    }
     const rawBw=Number(cell.borderWidth),bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5)),bc=safeColor(cell.borderColor,'#999999');
     const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
     const side=(name)=>{const explicit=meta.mask?meta.mask[sideIndex[name]]==='1':cell['border'+name]!==false;return explicit?`${bw}pt solid ${safeColor(cell['border'+name+'Color'],bc)}`:'0';};
@@ -6468,16 +6334,10 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
     }else content=nucleoRoModelEsc(cell.text||'').replace(/\n/g,'<br>');
     const visibleLabel=String(cell.labelText||cell.systemLabelText||meta.label||'');
     if(visibleLabel){content=`<div class="cell-stack"><span class="cell-label" style="font-size:${Math.max(5,Number(cell.labelFontSize)||7)}pt;font-weight:${cell.labelBold===false?'400':'700'}">${nucleoRoModelEsc(visibleLabel)}</span><span>${content||''}</span></div>`;}
-    const cellHeight=Math.max(3,Number(cell.height)||9);
-    const heightCss=cell.type==='image'?`height:${cellHeight}mm;`:`height:auto;`;
-    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="${heightCss}background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
+    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="height:${Math.max(3,Number(cell.height)||9)}mm;background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
    }).join(''))+'</tr>';}).join('');
 }
 function nucleoRoEvidenceUrls(ro){
-  const embedded=Array.isArray(ro?.__nucleoEvidenceDataUrls)
-    ? ro.__nucleoEvidenceDataUrls.map(x=>String(x||'').trim()).filter(Boolean)
-    : [];
-  if(embedded.length)return [...new Set(embedded)];
   const raw=ro?.raw||{};
   const evidence=String(ro?.evidencia||firstValue(raw,[
     'Insira imagens e/ou vídeos relacionado a ocorrência relatada.',
@@ -14346,6 +14206,66 @@ async function bootstrapRoData(){
 }
 
 let nucleoRoCentralRefreshPromise=null;
+
+function nucleoRoPageJsonpV63_(params={},timeoutMs=90000){
+  return new Promise((resolve,reject)=>{
+    const base=portalApiBase();
+    if(!base){
+      reject(new Error('URL do Apps Script não configurada.'));
+      return;
+    }
+
+    const cb='nucleoRoPageV63_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let done=false;
+    let timer=null;
+
+    function cleanup(){
+      if(timer)clearTimeout(timer);
+      try{delete window[cb]}catch(_){window[cb]=undefined}
+      try{script.remove()}catch(_){}
+    }
+    function finish(err,data){
+      if(done)return;
+      done=true;
+      cleanup();
+      err?reject(err):resolve(data);
+    }
+
+    window[cb]=data=>finish(null,data);
+
+    const request={
+      mode:'nucleo_ro_page_v63',
+      nucleoAction:'portal_ro_page',
+      acao:'portal_ro_page',
+      ...(params||{})
+    };
+
+    const token=String(getSession()?.authToken||'').trim();
+    if(token&&!request.token)request.token=token;
+
+    const parts=[];
+    Object.entries(request).forEach(([k,v])=>{
+      if(v!==undefined&&v!==null&&String(v)!==''){
+        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+      }
+    });
+    parts.push('callback='+encodeURIComponent(cb));
+    parts.push('_='+Date.now());
+
+    script.async=true;
+    script.src=base+'?'+parts.join('&');
+    script.onerror=()=>finish(new Error(
+      'A rota dedicada de R.O.s não carregou. API: '+base
+    ));
+    timer=setTimeout(()=>finish(new Error(
+      'A rota dedicada de R.O.s não respondeu dentro do tempo limite.'
+    )),timeoutMs);
+
+    document.head.appendChild(script);
+  });
+}
+
 async function loadOfficialRosFullFallback(settings,onProgress,reason){
   const s=settings||getSavedIntegrationSettings();
   const period=roSyncPeriodParams(s);
@@ -14374,7 +14294,7 @@ async function loadOfficialRosPaged(settings,onProgress){
     let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
+        page=await nucleoRoPageJsonpV63_({...period,offset,limite:pageSize},90000);
         break;
       }catch(e){
         lastError=e;
@@ -14387,20 +14307,24 @@ async function loadOfficialRosPaged(settings,onProgress){
     // Se nem a primeira página respondeu, usa a rota completa que continua
     // disponível no mesmo doGet. Isso mantém compatibilidade com implantações
     // que ainda não responderam corretamente ao portal_ro_page.
-    if(!page && offset===0)return loadOfficialRosFullFallback(s,onProgress,lastError);
-    if(!page)throw new Error('A página '+(Math.floor(offset/pageSize)+1)+' falhou após 2 tentativas: '+(lastError?.message||lastError||'sem resposta'));
+    if(!page)throw new Error(
+      'A página '+(Math.floor(offset/pageSize)+1)+' da rota dedicada falhou após 2 tentativas: '+
+      (lastError?.message||lastError||'sem resposta')
+    );
     if(page?.sucesso===false){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,page.erro||'portal_ro_page recusado');
-      throw new Error(page.erro||'A planilha recusou a leitura.');
+      throw new Error(page.erro||'A planilha recusou a leitura pela rota dedicada.');
+    }
+    if(page?.__route!=='nucleo_ro_page_v63'){
+      let raw='';
+      try{raw=JSON.stringify(page)}catch(_){raw=String(page)}
+      throw new Error('A API respondeu pela rota errada. Resposta: '+raw);
     }
     if(!page?.paginado||!Array.isArray(page.dados)){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'resposta paginada incompatível');
-      throw new Error('A leitura por páginas deixou de responder no meio da sincronização.');
+      throw new Error('A rota dedicada devolveu uma página incompatível.');
     }
     const expected=Number(page.quantidade);
     if(!Number.isSafeInteger(expected)||expected<0||Number(page.offset)!==offset){
-      if(offset===0)return loadOfficialRosFullFallback(s,onProgress,'primeira página inválida');
-      throw new Error('A planilha devolveu uma página inválida.');
+      throw new Error('A rota dedicada devolveu uma página inválida.');
     }
     if(total===null){total=expected;internas=Number(page.quantidadeInterna);externas=Number(page.quantidadeExterna);meta=page}
     if(total!==expected||internas!==Number(page.quantidadeInterna)||externas!==Number(page.quantidadeExterna))
