@@ -812,6 +812,11 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
     const parts=[];
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
+    // Redundância intencional: algumas chamadas estão chegando ao Web App sem
+    // preservar "acao". nucleoAction é exclusivo do Núcleo e o backend o prioriza.
+    if(actionName && !requestParams.nucleoAction){
+      requestParams.nucleoAction=actionName;
+    }
     const sessionToken=String(getSession()?.authToken||'').trim();
     if(sessionToken && nucleoActionNeedsCentralConfirmation(actionName) && !nucleoCentralDataConfirmed()){
       cleanup();
