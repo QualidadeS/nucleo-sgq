@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v11 | ações fixas */
+/* NÚCLEO | Reenviar e-mail | v34 | fila real de erros sem reenvio */
 (function(){
-  if(window.__nucleoRoResendEmailV11)return;
-  window.__nucleoRoResendEmailV11=true;
+  if(window.__nucleoRoResendEmailV34)return;
+  window.__nucleoRoResendEmailV34=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -15,42 +15,82 @@
     const m=String(v||'').match(/\d+/g);
     return m&&m.length?String(parseInt(m[m.length-1],10)):'';
   }
-  function roOrigin(v,obj){
-    const raw=String(v||obj?.ro||obj?.roNumber||obj?.numeroRo||'').toUpperCase();
-    if(/RO\s*-?\s*EX/.test(raw))return 'EX';
-    if(/RO\s*-?\s*IN/.test(raw))return 'IN';
-    const extra=String(obj?.origin||obj?.origem||obj?.origemBase||obj?.typeOrigin||'').toUpperCase();
-    if(extra.includes('EXTER'))return 'EX';
-    if(extra.includes('INTER'))return 'IN';
+  function canonicalRo(v){
+    const raw=String(v||'').trim().toUpperCase().replace(/\s+/g,'');
+    const digits=roDigits(raw);
+    if(!digits)return '';
+    const n=String(parseInt(digits,10)).padStart(5,'0');
+    if(/RO-?EX-?/.test(raw)||/EXTERNA?/.test(raw))return 'RO-EX-'+n;
+    if(/RO-?IN-?/.test(raw)||/INTERNA?/.test(raw))return 'RO-IN-'+n;
     return '';
   }
-  function roHistoryKey(v,obj){
-    const digits=roDigits(v||obj?.ro||obj?.roNumber||obj?.numeroRo||'');
-    const origin=roOrigin(v,obj);
-    return digits&&origin?origin+'|'+digits:'';
+  function recordCanonicalRo(r){
+    const direct=canonicalRo(r?.numero||r?.id||r?.codigo||'');
+    if(direct)return direct;
+    const digits=roDigits(r?.numero||r?.id||r?.codigo||'');
+    if(!digits)return '';
+    const origin=norm(r?.origemBase||r?.raw?.__origemBase||r?.origem||'');
+    if(origin.includes('extern'))return 'RO-EX-'+String(parseInt(digits,10)).padStart(5,'0');
+    if(origin.includes('intern'))return 'RO-IN-'+String(parseInt(digits,10)).padStart(5,'0');
+    return '';
   }
-  function sameRo(a,b,aObj,bObj){
-    const ka=roHistoryKey(a,aObj), kb=roHistoryKey(b,bObj);
-    if(ka&&kb)return ka===kb;
-    return false;
+  function sameRo(a,b){
+    const ca=canonicalRo(a), cb=canonicalRo(b);
+    return !!ca&&!!cb&&ca===cb;
   }
   function eventTime(x){
     const raw=String(x?.sentAt||x?.at||x?.createdAt||'').trim();
-    let d=Date.parse(raw);
-    if(Number.isFinite(d))return d;
-    const m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if(!raw)return 0;
+    let m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if(m){
-      d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
-      if(Number.isFinite(d))return d;
+      const d=new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0));
+      return Number.isFinite(d.getTime())?d.getTime():0;
     }
-    return 0;
+    const d=Date.parse(raw);
+    return Number.isFinite(d)?d:0;
   }
   function findRo(roNumber){
-    const key=String(roNumber||'').trim();
-    return (typeof getAllRoRecords==='function'?getAllRoRecords():[]).find(r=>
-      String(r?.numero||r?.id||r?.codigo||'').trim()===key
-    )||null;
+    const key=canonicalRo(roNumber);
+    const all=typeof getAllRoRecords==='function'?getAllRoRecords():[];
+    if(key)return all.find(r=>recordCanonicalRo(r)===key)||null;
+    const digits=roDigits(roNumber);
+    const candidates=all.filter(r=>roDigits(r?.numero||r?.id||r?.codigo||'')===digits);
+    return candidates.length===1?candidates[0]:null;
   }
+  function recipientList(h){
+    return String(h?.email||h?.recipient||h?.destinatario||'')
+      .split(/[;,]/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+  }
+  function pendingEmailFailures(history){
+    const events=(history||[])
+      .filter(h=>String(h?.type||'ro').toLowerCase()==='ro')
+      .map((h,i)=>({h,i,ro:canonicalRo(h?.ro),time:eventTime(h),status:String(h?.status||'').toLowerCase(),recipients:recipientList(h)}))
+      .filter(x=>x.ro&&(x.status==='error'||x.status==='sent'));
+
+    const sentByKey=new Map();
+    events.filter(x=>x.status==='sent').forEach(x=>{
+      const recips=x.recipients.length?x.recipients:['__sem_destino__'];
+      recips.forEach(email=>{
+        const k=x.ro+'|'+email;
+        const prev=sentByKey.get(k)||0;
+        if(x.time>prev)sentByKey.set(k,x.time);
+      });
+    });
+
+    const pending=new Map();
+    events.filter(x=>x.status==='error').forEach(x=>{
+      const recips=x.recipients.length?x.recipients:['__sem_destino__'];
+      recips.forEach(email=>{
+        const k=x.ro+'|'+email;
+        const latestSent=sentByKey.get(k)||0;
+        if(latestSent>x.time)return;
+        const prev=pending.get(k);
+        if(!prev||x.time>=prev.time)pending.set(k,{...x,email:eventEmail(email),event:x.h});
+      });
+    });
+    return [...pending.values()].sort((a,b)=>b.time-a.time);
+  }
+  function eventEmail(v){return v==='__sem_destino__'?'':String(v||'')}
   function originalReason(tri){
     return String(
       tri?.assignmentReason||tri?.extensionReason||tri?.reason||tri?.motivo||
@@ -108,76 +148,19 @@
   let historyLoadedAt=0;
   let historyPromise=null;
 
-  // Índice global de ERROS AINDA NÃO REENVIADOS.
-  // Chave: origem + número (ex.: EX|490 / IN|490).
-  // Um erro deixa de ser pendente somente quando existe um envio 'sent' POSTERIOR
-  // para a mesma R.O. e o mesmo destino (ou, quando disponível, o mesmo setor).
+  // Índice global de erros — atualizado toda vez que o histórico é carregado.
+  // Chave: roDigits(roNumber). Usado pelo render() síncrono da lista.
   window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
-  window.__nucleoEmailUnresolvedErrors = window.__nucleoEmailUnresolvedErrors || new Map();
-
-  function recipientSignature(h){
-    const raw=String(h?.email||h?.recipient||h?.destinatario||'').trim().toLowerCase();
-    if(!raw)return '';
-    return [...new Set(raw.split(/[;,]/).map(x=>x.trim()).filter(Boolean))].sort().join(';');
-  }
-
-  function sectorSignature(h){
-    return norm(h?.sector||h?.setor||h?.responsibleSector||'');
-  }
-
-  function sameSectorLoose(a,b){
-    a=norm(a); b=norm(b);
-    if(!a||!b)return false;
-    if(a===b)return true;
-    const stem=x=>x.replace(/(?:oes|aes|eis|ais|is|ns|s)$/,'').slice(0,8);
-    const sa=stem(a), sb=stem(b);
-    return sa.length>=4 && sb.length>=4 && sa===sb;
-  }
-
-  function sentResolvesError(sent,failed){
-    if(String(sent?.status||'').toLowerCase()!=='sent')return false;
-    if(roHistoryKey(sent?.ro,sent)!==roHistoryKey(failed?.ro,failed))return false;
-    if(eventTime(sent)<=eventTime(failed))return false;
-
-    const failedRecipient=recipientSignature(failed);
-    const sentRecipient=recipientSignature(sent);
-    if(failedRecipient && sentRecipient)return failedRecipient===sentRecipient;
-
-    const failedSector=sectorSignature(failed);
-    const sentSector=sectorSignature(sent);
-    if(failedSector && sentSector)return sameSectorLoose(failedSector,sentSector);
-
-    // Sem destino/setor suficiente, não presumimos que um 'sent' diferente resolveu
-    // a falha. É melhor manter o erro visível do que escondê-lo incorretamente.
-    return false;
-  }
-
-  function unresolvedErrorEvents(history){
-    const rows=(history||[]).filter(h=>String(h?.type||'ro').toLowerCase()==='ro');
-    const sent=rows.filter(h=>String(h?.status||'').toLowerCase()==='sent');
-    return rows.filter(failed=>{
-      if(String(failed?.status||'').toLowerCase()!=='error')return false;
-      const key=roHistoryKey(failed?.ro,failed);
-      if(!key)return false;
-      return !sent.some(ok=>sentResolvesError(ok,failed));
-    });
-  }
 
   function rebuildErrorIndex(history){
-    const unresolved=unresolvedErrorEvents(history);
-    const idx=new Set();
-    const map=new Map();
-    unresolved.forEach(h=>{
-      const key=roHistoryKey(h?.ro,h);
-      if(!key)return;
-      idx.add(key);
-      const arr=map.get(key)||[];
-      arr.push(h);
-      map.set(key,arr);
-    });
+    const idx=new Set(pendingEmailFailures(history).map(x=>x.ro));
     window.__nucleoEmailErrorIndex=idx;
-    window.__nucleoEmailUnresolvedErrors=map;
-    try{ if(typeof render==='function') render(); }catch(e){}
+    window.__nucleoPendingEmailFailures=pendingEmailFailures(history);
+    try{
+      const mode=document.getElementById('assignedEmailFilter')?.value||'all';
+      if(mode==='error')renderPendingErrorView(history);
+      else if(typeof render==='function')render();
+    }catch(e){}
   }
 
   async function loadHistory(force=false){
@@ -208,11 +191,9 @@
   }
 
   function relevantHistory(history,roNumber,sector,ro){
-    const targetKey=roHistoryKey(roNumber,ro);
-    if(!targetKey)return [];
     const all=(history||[]).filter(h=>
       String(h?.type||'ro').toLowerCase()==='ro' &&
-      roHistoryKey(h?.ro,h)===targetKey
+      sameRo(h?.ro,roNumber)
     );
     if(!all.length)return [];
 
@@ -390,7 +371,7 @@
     ctx=null;
   };
 
-  window.nucleoOpenRoResendEmail=async function(roNumber,sector){
+  window.nucleoOpenRoResendEmail=async function(roNumber,sector,recipientOverride){
     if(typeof isAdmin==='function'&&!isAdmin()){
       alert('Somente o SGQ/Qualidade pode reenviar este e-mail.');
       return;
@@ -400,7 +381,7 @@
 
     const resolved=await resolveAssignment(roNumber,sector,ro);
     const responsibleSector=String(resolved?.sector||sector||'').trim();
-    const email=String(resolved?.email||'').trim();
+    const email=String(recipientOverride||resolved?.email||'').trim();
     const person=String(resolved?.person||'').trim();
     const reason=String(resolved?.reason||'').trim();
     const deadline=String(resolved?.deadline||'').trim();
@@ -748,14 +729,96 @@
     sel.setAttribute('aria-label','Status do envio de e-mail');
     sel.innerHTML='<option value="all">Todos os envios</option><option value="error">Erro no envio</option>';
     sel.value='all';
-    sel.addEventListener('change',()=>{
-      // O filtro precisa reconstruir a lista completa. Apenas esconder as linhas
-      // já renderizadas fazia os erros fora das primeiras 60 R.O.s desaparecerem.
-      try{ if(typeof render==='function') render(); }catch(e){}
-      setTimeout(()=>{ try{ updateAssignedEmailMarkers(); }catch(e){} },0);
+    sel.addEventListener('change',async()=>{
+      if(sel.value==='error'){
+        const history=await loadHistory(true);
+        renderPendingErrorView(history);
+      }else{
+        try{if(typeof render==='function')render()}catch(e){}
+        setTimeout(updateAssignedEmailMarkers,0);
+      }
     });
     base.insertAdjacentElement('afterend',sel);
     return sel;
+  }
+
+  function failureSector(failure,ro){
+    const ev=failure?.event||{};
+    const explicit=String(ev?.sector||ev?.setor||ev?.responsibleSector||'').trim();
+    if(explicit)return explicit;
+    const u=userFromEmail(failure?.email||'');
+    const inferred=sectorFromUser(u,ro);
+    if(inferred)return inferred;
+    try{
+      const rows=getTriageRecordsForRoNumber(String(ro?.numero||failure?.ro||''),getSavedTriageMap())||[];
+      if(rows.length===1)return String(rows[0]?.responsibleSector||rows[0]?.setorDirecionado||'').trim();
+    }catch(e){}
+    return '';
+  }
+
+  function failureMatchesUi(failure,ro,sector){
+    const q=String(document.getElementById('search')?.value||'').trim().toLowerCase();
+    const sectorFilter=document.getElementById('assignedSectorFilter')?.value||'all';
+    const originFilter=document.getElementById('assignedOriginFilter')?.value||'all';
+    const unitFilter=document.getElementById('assignedUnitFilter')?.value||'all';
+    const origin=failure.ro.includes('-EX-')?'Externa':'Interna';
+    const unit=String(ro?.unidade||'').trim();
+    const client=String(ro?.cliente||'').trim();
+    if(q&&!([failure.ro,client,failure.email,sector].join(' ').toLowerCase().includes(q)))return false;
+    if(sectorFilter!=='all'&&String(sector||'')!==sectorFilter)return false;
+    if(originFilter!=='all'&&origin!==originFilter)return false;
+    if(unitFilter!=='all'){
+      try{if(typeof sameCanonicalUnit==='function'&&!sameCanonicalUnit(unit,unitFilter))return false;}
+      catch(e){if(unit!==unitFilter)return false;}
+    }
+    return true;
+  }
+
+  function renderPendingErrorView(history){
+    let assigned=false;
+    try{assigned=typeof roListMode!=='undefined'&&roListMode==='assigned'}catch(e){}
+    if(!assigned)return;
+    const sel=ensureAssignedEmailFilter();
+    if(!sel||sel.value!=='error')return;
+    const rowsEl=document.getElementById('rows');
+    if(!rowsEl)return;
+
+    const failures=pendingEmailFailures(history||historyCache);
+    const view=failures.map(f=>{
+      const ro=findRo(f.ro);
+      const sector=failureSector(f,ro);
+      return {f,ro,sector};
+    }).filter(x=>failureMatchesUi(x.f,x.ro,x.sector));
+
+    rowsEl.innerHTML=view.map(({f,ro,sector})=>{
+      const origin=f.ro.includes('-EX-')?'Externa':'Interna';
+      const unit=String(ro?.unidade||'—');
+      let status='—',deadline='—',pdca='—';
+      try{
+        if(ro&&typeof assignedRoStatus==='function')status=assignedRoStatus(ro,getSavedTriageMap())||'—';
+        if(ro&&typeof assignedRoDeadline==='function')deadline=assignedRoDeadline(ro,getSavedTriageMap())||'—';
+        if(ro&&typeof pdcaSituationLabel==='function')pdca=pdcaSituationLabel(ro,getSavedTriageMap())||'—';
+      }catch(e){}
+      const when=String(f.event?.sentAt||f.event?.at||f.event?.createdAt||'').trim();
+      const err=String(f.event?.erro||f.event?.error||f.event?.message||f.event?.mensagem||'Erro no envio').trim();
+      const title=['Destino: '+(f.email||'não registrado'),when?'Data: '+when:'','Motivo: '+err].filter(Boolean).join('\n');
+      const roEsc=esc(f.ro), sectorEsc=esc(sector), emailEsc=esc(f.email||'');
+      const viewBtn=ro?`<button class="ro-eye-btn" type="button" onclick="openRoReport('${roEsc}')" title="Visualizar R.O.">👁</button>`:'';
+      const resendBtn=ro?`<button class="ro-eye-btn" type="button" onclick="nucleoOpenRoResendEmail('${roEsc}','${sectorEsc}','${emailEsc}')" title="Reenviar para ${emailEsc||'destinatário'}">✉</button>`:'';
+      return `<tr data-ro-email-status="error">
+        <td><button type="button" class="ro-link-btn" onclick="${ro?`openRO('${roEsc}')`:'void(0)'}"><b>${roEsc}</b></button></td>
+        <td>${esc(unit)}</td>
+        <td>${esc(sector||'Não identificado')} <button type="button" data-ro-email-status="1" title="${esc(title)}" style="display:inline-flex;align-items:center;gap:4px;margin-left:7px;padding:3px 7px;border-radius:999px;font-size:10px;font-weight:800;vertical-align:middle;white-space:nowrap;cursor:pointer;background:#fff0f0;color:#b42318;border:1px solid #fecdca" onclick="alert(this.title)">✉ Erro</button></td>
+        <td><span class="status-badge">${esc(origin)}</span></td>
+        <td>${esc(deadline)}</td>
+        <td><span class="badge">${esc(status)}</span></td>
+        <td>${esc(pdca)}</td>
+        <td class="ro-eye-cell"><div class="ro-row-actions" style="display:flex;align-items:center;justify-content:center;gap:8px">${viewBtn}${resendBtn}</div></td>
+      </tr>`;
+    }).join('')||'<tr><td colspan="8">Nenhum erro de envio sem reenvio confirmado.</td></tr>';
+
+    const more=document.getElementById('roListMore');
+    if(more)more.innerHTML=`${view.length} erro(s) de envio ainda sem reenvio confirmado`;
   }
 
   function applyAssignedEmailFilter(tr,statusCode){
@@ -772,10 +835,11 @@
       try{assigned=typeof roListMode!=='undefined'&&roListMode==='assigned'}catch(e){}
       if(!assigned)return;
       const history=await loadHistory();
-
-      // Índice somente dos erros que AINDA não tiveram reenvio confirmado.
-      const unresolved=unresolvedErrorEvents(history);
-      const roErrorIndex=new Set(unresolved.map(h=>roHistoryKey(h?.ro,h)).filter(Boolean));
+      const sel=ensureAssignedEmailFilter();
+      if((sel?.value||'all')==='error'){
+        renderPendingErrorView(history);
+        return;
+      }
 
       document.querySelectorAll('#rows tr').forEach(tr=>{
         const roBtn=tr.querySelector('td:first-child .ro-link-btn');
@@ -786,15 +850,8 @@
         if(!ro)return;
         ensureResendButton(tr,ro,sector);
         const events=relevantHistory(history,ro,sector,roObj);
-        const rowKey=roHistoryKey(ro,roObj);
-        const unresolvedForRo=rowKey
-          ? unresolved.filter(h=>roHistoryKey(h?.ro,h)===rowKey)
-          : [];
-        const emailStatus=unresolvedForRo.length
-          ? {code:'error',label:'Erro',title:'Existe erro de envio ainda sem reenvio confirmado para esta R.O.'}
-          : statusFromEvents(events);
-
-        ensureStatusBadge(tr,emailStatus,unresolvedForRo.length?unresolvedForRo:events);
+        const emailStatus=statusFromEvents(events);
+        ensureStatusBadge(tr,emailStatus,events);
         applyAssignedEmailFilter(tr,emailStatus.code);
       });
     }catch(e){
