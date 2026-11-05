@@ -68,24 +68,79 @@
     };
   };
 
+
+  function directJsonp(url, params={}, timeoutMs=25000){
+    return new Promise((resolve,reject)=>{
+      const base=validApiUrl(url);
+      if(!base){reject(new Error('URL inválida.'));return;}
+
+      const cb='nucleoApiTestV59_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+      const script=document.createElement('script');
+      let done=false;
+      let timer=null;
+
+      function cleanup(){
+        if(timer)clearTimeout(timer);
+        try{delete window[cb];}catch(_){window[cb]=undefined;}
+        try{script.remove();}catch(_){}
+      }
+      function finish(err,data){
+        if(done)return;
+        done=true;
+        cleanup();
+        err?reject(err):resolve(data);
+      }
+
+      window[cb]=(data)=>finish(null,data);
+
+      const parts=[];
+      Object.entries(params||{}).forEach(([k,v])=>{
+        if(v!==undefined&&v!==null&&String(v)!==''){
+          parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+        }
+      });
+      parts.push('callback='+encodeURIComponent(cb));
+      parts.push('_='+Date.now());
+
+      script.async=true;
+      script.src=base+'?'+parts.join('&');
+      script.onerror=()=>finish(new Error('A URL /exec abriu, mas não devolveu JSONP utilizável ao Núcleo.'));
+      timer=setTimeout(()=>finish(new Error('A API não respondeu dentro do tempo limite.')),timeoutMs);
+      document.head.appendChild(script);
+    });
+  }
+
+  async function probeApi(candidate){
+    const url=validApiUrl(candidate);
+    if(!url)throw new Error('Informe uma URL válida do Web App / API terminando em /exec.');
+
+    // 1) Tenta a rota curta moderna.
+    try{
+      const data=await directJsonp(url,{acao:'portal_public_config',nucleoAction:'portal_public_config'},20000);
+      if(data?.sucesso){
+        return {url,result:data,probe:'portal_public_config'};
+      }
+    }catch(_){}
+
+    // 2) Fallback compatível: testa o próprio /exec sem ação.
+    // Backends antigos do Núcleo respondem com portal_load nesse caso.
+    const root=await directJsonp(url,{},30000);
+    if(root?.sucesso && (
+      root?.config ||
+      Array.isArray(root?.dados) ||
+      Number.isFinite(Number(root?.quantidade))
+    )){
+      return {url,result:root,probe:'root'};
+    }
+
+    throw new Error('O Apps Script respondeu, mas a resposta não foi reconhecida como uma API do Núcleo.');
+  }
+
   window.nucleoEnsureApiConfigured=async function(candidateUrl){
-    const current=validApiUrl(candidateUrl || window.portalApiBase());
-    if(!current){
-      throw new Error('Informe uma URL válida do Web App do Apps Script.');
-    }
-
-    const result=await window.portalJsonp({acao:'portal_public_config'},20000,current);
-    if(!result?.sucesso||!result?.config){
-      throw new Error('A API informada não confirmou uma conexão válida com o Núcleo.');
-    }
-
-    const ambiente=String(result.ambiente||result.config?.ambiente||'').trim().toUpperCase();
-    if(ambiente&&ambiente!=='PRODUCAO'){
-      throw new Error('A API informada não é o backend de PRODUÇÃO do Núcleo.');
-    }
-
+    const current=validApiUrl(candidateUrl || document.getElementById('apiUrl')?.value || window.portalApiBase());
+    const checked=await probeApi(current);
     try{window.nucleoConfirmedApiUrl=current;}catch(_){}
-    return {url:current,result};
+    return checked;
   };
 
   window.saveIntegrationSettings=function(silent=false,forcedApiUrl){
@@ -179,6 +234,51 @@
         st.textContent='Não foi possível confirmar a API informada.';
       }
       alert('Não foi possível confirmar a API: '+(e?.message||e));
+      return false;
+    }
+  };
+
+
+  window.testConnection=async function(){
+    if(typeof window.requireIntegrationUnlock==='function'&&!window.requireIntegrationUnlock())return;
+    if(typeof window.isAdmin==='function'&&!window.isAdmin()){
+      alert('Configuração indisponível.');
+      return;
+    }
+
+    const input=document.getElementById('apiUrl');
+    const result=document.getElementById('testResult');
+    const candidate=validApiUrl(input?.value||'');
+
+    if(result){
+      result.className='statusline';
+      result.classList.remove('hidden');
+    }
+
+    if(!candidate){
+      if(result)result.textContent='Informe uma URL /exec válida do Apps Script.';
+      return;
+    }
+
+    if(result)result.textContent='Testando exatamente a URL digitada...';
+
+    try{
+      const checked=await probeApi(candidate);
+      if(result){
+        result.className='statusline okline';
+        result.classList.remove('hidden');
+        result.textContent=
+          checked.probe==='portal_public_config'
+            ? 'API conectada e confirmada pelo teste curto.'
+            : 'API conectada. O /exec respondeu corretamente ao Núcleo.';
+      }
+      return true;
+    }catch(err){
+      if(result){
+        result.className='statusline';
+        result.classList.remove('hidden');
+        result.textContent='Falha ao testar esta URL: '+(err?.message||err);
+      }
       return false;
     }
   };
