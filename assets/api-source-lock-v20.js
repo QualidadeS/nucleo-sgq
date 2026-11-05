@@ -74,7 +74,7 @@
       const base=validApiUrl(url);
       if(!base){reject(new Error('URL inválida.'));return;}
 
-      const cb='nucleoApiTestV60_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+      const cb='nucleoApiTestV61_'+Date.now()+'_'+Math.floor(Math.random()*100000);
       const script=document.createElement('script');
       let done=false;
       let timer=null;
@@ -104,7 +104,7 @@
 
       script.async=true;
       script.src=base+'?'+parts.join('&');
-      script.onerror=()=>finish(new Error('A URL /exec abriu, mas não devolveu JSONP utilizável ao Núcleo.'));
+      script.onerror=()=>finish(new Error('A URL /exec não devolveu o ping JSONP esperado pelo Núcleo.'));
       timer=setTimeout(()=>finish(new Error('A API não respondeu dentro do tempo limite.')),timeoutMs);
       document.head.appendChild(script);
     });
@@ -114,26 +114,29 @@
     const url=validApiUrl(candidate);
     if(!url)throw new Error('Informe uma URL válida do Web App / API terminando em /exec.');
 
-    // 1) Tenta a rota curta moderna.
-    try{
-      const data=await directJsonp(url,{acao:'portal_public_config',nucleoAction:'portal_public_config'},20000);
-      if(data?.sucesso){
-        return {url,result:data,probe:'portal_public_config'};
-      }
-    }catch(_){}
+    const data=await directJsonp(
+      url,
+      {
+        mode:'nucleo_ping_v61',
+        nucleoAction:'nucleo_ping_v61',
+        acao:'nucleo_ping_v61'
+      },
+      20000
+    );
 
-    // 2) Fallback compatível: testa o próprio /exec sem ação.
-    // Backends antigos do Núcleo respondem com portal_load nesse caso.
-    const root=await directJsonp(url,{},30000);
-    if(root?.sucesso && (
-      root?.config ||
-      Array.isArray(root?.dados) ||
-      Number.isFinite(Number(root?.quantidade))
-    )){
-      return {url,result:root,probe:'root'};
+    if(
+      data?.sucesso===true &&
+      data?.nucleo===true &&
+      data?.route==='nucleo_ping_v61'
+    ){
+      return {url,result:data,probe:'nucleo_ping_v61'};
     }
 
-    throw new Error('O Apps Script respondeu, mas a resposta não foi reconhecida como uma API do Núcleo.');
+    let raw='';
+    try{raw=JSON.stringify(data);}catch(_){raw=String(data);}
+    throw new Error(
+      'A URL respondeu, mas não executou o backend V61 do Núcleo. Resposta: '+raw
+    );
   }
 
   window.nucleoEnsureApiConfigured=async function(candidateUrl){
@@ -228,10 +231,7 @@
     try{
       const checked=await probeApi(candidate);
       if(st){
-        st.textContent=
-          checked.probe==='portal_public_config'
-            ? 'Integração salva e API confirmada.'
-            : 'Integração salva. O /exec respondeu ao Núcleo.';
+        st.textContent='Integração salva e API V61 confirmada.';
       }
       alert('Integração salva. A nova API já está ativa.');
       return true;
@@ -278,10 +278,7 @@
       if(result){
         result.className='statusline okline';
         result.classList.remove('hidden');
-        result.textContent=
-          checked.probe==='portal_public_config'
-            ? 'API conectada e confirmada pelo teste curto.'
-            : 'API conectada. O /exec respondeu corretamente ao Núcleo.';
+        result.textContent='API conectada. Backend V61 confirmado.';
       }
       return true;
     }catch(err){
