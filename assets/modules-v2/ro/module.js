@@ -262,10 +262,14 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
       const first=await portalJsonp({...common,part:0},90000);
 
       if(!first?.sucesso||!first.chunk){
+        let raw='';
+        try{ raw=JSON.stringify(first); }catch(_){ raw=String(first); }
         ro.__nucleoEvidenceDiagnostics[fileId]={
           sucesso:false,
           etapa:first?.etapa||'primeiro_chunk',
-          detalhe:first?.erro||'O backend não devolveu o primeiro bloco da imagem.',
+          detalhe:'V54 | O backend não devolveu o primeiro bloco da imagem. '+
+                  (first?.erro?('Erro backend: '+first.erro+'. '):'')+
+                  'Resposta recebida: '+raw,
           http:first?.http||''
         };
         continue;
