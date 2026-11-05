@@ -5139,7 +5139,8 @@ async function openRoPdf(id){
         const evidence=await portalJsonp({
           acao:'portal_ro_evidence_data',
           ro:ro.numero||ro.id||ro.codigo,
-          origin:ro.origem||ro.origin||''
+          origin:ro.origem||ro.origin||'',
+          evidence:nucleoRoEvidenceUrls(ro).join('\n')
         },90000);
         if(evidence?.sucesso&&Array.isArray(evidence.urls)){
           ro.__nucleoEvidenceDataUrls=evidence.urls.filter(Boolean);
