@@ -83,6 +83,7 @@
       return false;
     }
 
+    const previousApi=validApiUrl(window.portalApiBase());
     const payload={
       apiUrl,apiKey,autoSync,roSyncPeriod,roSyncDateFrom,roSyncDateTo,
       savedAt:new Date().toISOString()
@@ -97,6 +98,17 @@
 
     try{window.nucleoConfirmedApiUrl=apiUrl;}catch(_){}
     if(input)input.value=apiUrl;
+
+    if(previousApi && previousApi!==apiUrl){
+      try{localStorage.removeItem('ro-pdca-session-v63')}catch(_){}
+      try{sessionStorage.removeItem('ro-pdca-session-v63')}catch(_){}
+      try{localStorage.removeItem('nucleo-central-data-state-v1')}catch(_){}
+      try{sessionStorage.removeItem('nucleo-central-data-state-v1')}catch(_){}
+      if(!silent){
+        alert('Integração salva. Como a API foi trocada, entre novamente no Núcleo para criar uma sessão válida nesta API.');
+      }
+      return payload;
+    }
 
     if(!silent)alert('Integração salva. A nova API está ativa.');
     return payload;
