@@ -14374,7 +14374,7 @@ async function loadOfficialRosPaged(settings,onProgress){
     let page=null,lastError=null;
     for(let attempt=1;attempt<=2;attempt++){
       try{
-        page=await portalJsonp({acao:'portal_ro_page',...period,offset,limite:pageSize},60000);
+        page=await window.nucleoBridgeV66('portal_ro_page',{...period,offset,limite:pageSize},90000);
         break;
       }catch(e){
         lastError=e;
