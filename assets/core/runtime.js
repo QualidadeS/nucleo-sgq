@@ -6238,6 +6238,93 @@ function closeRoReport(){
 function nucleoRoModelNormKey(v){
   return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
 }
+function nucleoRoPdfKnownSectors_(){
+  const out=[];
+  try{if(typeof getConfiguredSectorsForTriage==='function')out.push(...(getConfiguredSectorsForTriage()||[]));}catch(_){ }
+  try{if(typeof getConfiguredSectors==='function'){out.push(...(getConfiguredSectors('matriz')||[]));out.push(...(getConfiguredSectors('filial')||[]));}}catch(_){ }
+  return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
+}
+function nucleoRoPdfIsSector_(v){
+  const n=nucleoRoModelNormKey(v);if(!n)return false;
+  return nucleoRoPdfKnownSectors_().some(s=>nucleoRoModelNormKey(s)===n);
+}
+function nucleoRoPdfLooksNumeric_(v){
+  const s=String(v??'').trim();
+  if(!s)return false;
+  return /^-?\d+(?:[\.,]\d+)?(?:\s*(?:kg|g|un|unid|pc|pcs|peças|pecas))?$/i.test(s);
+}
+function nucleoRoPdfFirstNonEmpty_(arr){
+  for(const v of arr){if(v!==undefined&&v!==null&&String(v).trim()!=='')return v;}
+  return '';
+}
+function nucleoRoPdfSemanticValues_(ro){
+  const raw=ro?.raw||{};
+  const val=(names)=>firstValue(raw,names)||'';
+  const tri=(()=>{try{return typeof getRoTriageRecord==='function'?getRoTriageRecord(ro,typeof getSavedTriageMap==='function'?getSavedTriageMap():undefined):null;}catch(_){return null;}})();
+
+  // V42: os campos oficiais do PDF usam primeiro os marcadores posicionais
+  // enviados pela API. Eles vêm diretamente das colunas reais da planilha e
+  // não sofrem com cabeçalhos antigos/deslocados do Google Forms.
+  const tipo=String(raw.__tipoOcorrencia ?? ro?.tipoRO ?? ro?.assunto ?? val(['Tipo de Ocorrência','Tipo de ocorrência','Classificação']) ?? '').trim();
+  const descricao=String(raw.__descricaoProblema ?? ro?.descricao ?? val(['Descreva sobre o problema encontrado:','Descreva sobre o problema encontrado','Descrição','Descricao']) ?? '').trim();
+  const setorIdentificado=String(raw.__setorIdentificado ?? ro?.setorIdentificado ?? val(['Setor (onde foi identificado o desvio de qualidade):','Setor (onde foi identificado o desvio de qualidade)','Setor onde foi identificado o desvio de qualidade','Setor onde foi identificado','Setor identificado']) ?? '').trim();
+  const quantidade=String(raw.__quantidadeDesvio ?? ro?.quantidade ?? val(['Quantidade de peças com desvio:','Quantidade de peças com desvio','Quantidade','Qtd','Qtd.']) ?? '').trim();
+  const peso=String(raw.__pesoMaterial ?? val(['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado','Peso do material descartado/reaproveitado']) ?? '').trim();
+  const liberado=String(raw.__liberadoQualidade ?? val(['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']) ?? '').trim();
+  const quemLiberou=String(raw.__quemLiberou ?? val(['Registre o nome de quem liberou:','Registre o nome de quem liberou','Quem liberou']) ?? '').trim();
+
+  let resultado=String(ro?.resultadoEnvio||raw?.__resultadoOperacional||val(['Resultado'])||'').trim();
+  if(/nenhum\s+email\s+encontrado/i.test(resultado))resultado='';
+
+  const destinatario=String(nucleoRoPdfFirstNonEmpty_([
+    tri?.responsibleUserName,
+    tri?.responsibleUserEmail,
+    tri?.destinatario,
+    tri?.recipient,
+    raw?.__pessoaResponsavel,
+    ro?.pessoaResponsavel
+  ])||'').trim();
+  const setorCausa=String(nucleoRoPdfFirstNonEmpty_([
+    tri?.responsibleSector,
+    tri?.setorDirecionado,
+    raw?.__setorResponsavel,
+    ro?.setorResponsavelPlanilha,
+    ro?.setor
+  ])||'').trim();
+
+  return {
+    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
+    'RO':ro?.numero||ro?.id||ro?.codigo||'',
+    'Data':ro?.data||ro?.dataSolicitacao||'',
+    'Unidade':ro?.unidade||'',
+    'Cliente':raw.__cliente||val(['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
+    'Tipo de ocorrência':tipo,
+    'Tipo de ocorrencia':tipo,
+    'Descrição':descricao,
+    'Descricao':descricao,
+    'Setor identificado':setorIdentificado,
+    'Setor onde foi identificado':setorIdentificado,
+    'Quantidade de peças com desvio':quantidade,
+    'Peso do material descartado/reaproveitado':peso,
+    'Liberado pelo setor de qualidade?':liberado,
+    'Quem liberou':quemLiberou,
+    'Resultado':resultado,
+    'Destinatário da triagem':destinatario,
+    'Destinatario da triagem':destinatario,
+    'Setor causa/responsável':setorCausa,
+    'Setor causa / responsável':setorCausa,
+    'Setor':setorCausa,
+    'Status':ro?.status||'',
+    'Matrícula':val(['Matrícula','Matricula']),
+    'Responsável pelo registro':raw?.['Nome e Sobrenome (responsável pelo registro deste formulário):']||val(['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
+    'Número do pedido':val(['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
+    'Código do item':val(['Código do item:','Código do item','Codigo do item:','Codigo do item']),
+    'Ordem de produção':val(['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
+    'Nota fiscal de venda':val(['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda','Nota Fiscal']),
+    'Ação preventiva':raw?.__acaoPreventiva||val(['Ação preventiva','Acao preventiva']),
+    'Prazo conclusão ação':raw?.__prazoConclusaoAcao||val(['Prazo conclusão ação','Prazo conclusao acao'])
+  };
+}
 function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   const raw=ro?.raw||{},src=String(source||'');
   if(src==='#TITLE')return model?.title||'RELATO DE OCORRÊNCIA';
@@ -6248,48 +6335,27 @@ function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   if(src==='#PAGE')return totalPages>1?(pageNo+' / '+totalPages):String(pageNo);
   if(src==='#FOOTER')return model?.footer||'';
   if(src==='#GENERATED')return new Date().toLocaleString('pt-BR');
-  if(src==='#EVIDENCE')return '';
-  if(src==='#HISTORY')return '';
+  if(src==='#EVIDENCE'||src==='#HISTORY')return '';
 
-  if(Object.prototype.hasOwnProperty.call(raw,src) && String(raw[src]??'').trim()!=='')return raw[src];
   const wanted=nucleoRoModelNormKey(src);
+  const semantic=nucleoRoPdfSemanticValues_(ro);
+  for(const [k,v] of Object.entries(semantic)){
+    if(nucleoRoModelNormKey(k)===wanted)return v??'';
+  }
+
+  // Somente campos não padronizados recorrem diretamente ao raw. Isso evita
+  // cabeçalhos históricos deslocados contaminarem os campos oficiais do PDF.
+  if(Object.prototype.hasOwnProperty.call(raw,src) && String(raw[src]??'').trim()!=='')return raw[src];
   for(const [k,v] of Object.entries(raw))if(nucleoRoModelNormKey(k)===wanted && String(v??'').trim()!=='')return v;
 
-  const values={
-    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
-    'RO':ro?.numero||ro?.id||ro?.codigo||'',
-    'Data':ro?.data||ro?.dataSolicitacao||'',
-    'Unidade':ro?.unidade||'',
-    'Cliente':firstValue(raw,['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
-    'Tipo de ocorrência':ro?.tipoRO||ro?.assunto||'',
-    'Setor identificado':ro?.setorIdentificado||'',
-    'Setor onde foi identificado':ro?.setorIdentificado||'',
-    'Setor causa/responsável':ro?.setor||'',
-    'Setor causa / responsável':ro?.setor||'',
-    'Setor':ro?.setor||'',
-    'Status':ro?.status||'',
-    'Descrição':ro?.descricao||'',
-    'Matrícula':firstValue(raw,['Matrícula','Matricula']),
-    'Responsável pelo registro':firstValue(raw,['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
-    'Número do pedido':firstValue(raw,['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
-    'Código do item':firstValue(raw,['Código do item:','Código do item','Codigo do item:','Codigo do item']),
-    'Ordem de produção':firstValue(raw,['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
-    'Nota fiscal de venda':firstValue(raw,['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda']),
-    'Quantidade de peças com desvio':firstValue(raw,['Quantidade de peças com desvio:','Quantidade de peças com desvio']),
-    'Peso do material descartado/reaproveitado':firstValue(raw,['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado']),
-    'Liberado pelo setor de qualidade?':firstValue(raw,['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']),
-    'Quem liberou':firstValue(raw,['Registre o nome de quem liberou:','Registre o nome de quem liberou']),
-    'Ação preventiva':firstValue(raw,['Ação preventiva','Acao preventiva']),
-    'Prazo conclusão ação':firstValue(raw,['Prazo conclusão ação','Prazo conclusao acao'])
-  };
-  for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===wanted)return v??'';
   const f=(model?.fields||[]).find(x=>nucleoRoModelNormKey(x?.source)===wanted||nucleoRoModelNormKey(x?.label)===wanted);
   if(f){
     const fw=nucleoRoModelNormKey(f.source||f.label||'');
-    for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===fw)return v??'';
+    for(const [k,v] of Object.entries(semantic))if(nucleoRoModelNormKey(k)===fw)return v??'';
   }
   return '';
 }
+
 function nucleoRoModelEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function nucleoRoCellPersistMeta(cell){
   const raw=String(cell?.id||''),mark='~nmeta~',i=raw.indexOf(mark);
