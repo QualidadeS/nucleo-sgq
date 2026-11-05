@@ -592,107 +592,6 @@ function applyPortalBackendSnapshot(snapshot){
   return true;
 }
 
-
-function nucleoLoadChunkJsonpV62_(params={},timeoutMs=180000){
-  return new Promise((resolve,reject)=>{
-    const base=portalApiBase();
-    if(!base){
-      reject(new Error('URL do Apps Script não configurada.'));
-      return;
-    }
-
-    const cb='nucleoLoadV62_'+Date.now()+'_'+Math.floor(Math.random()*100000);
-    const script=document.createElement('script');
-    let done=false;
-    let timer=null;
-
-    function cleanup(){
-      if(timer)clearTimeout(timer);
-      try{delete window[cb]}catch(_){window[cb]=undefined}
-      try{script.remove()}catch(_){}
-    }
-    function finish(err,data){
-      if(done)return;
-      done=true;
-      cleanup();
-      err?reject(err):resolve(data);
-    }
-
-    window[cb]=data=>finish(null,data);
-
-    const request={
-      mode:'nucleo_load_chunk_v62',
-      ...params
-    };
-
-    const token=String(getSession()?.authToken||'').trim();
-    if(token&&!request.token)request.token=token;
-
-    const parts=[];
-    Object.entries(request).forEach(([k,v])=>{
-      if(v!==undefined&&v!==null&&String(v)!==''){
-        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
-      }
-    });
-    parts.push('callback='+encodeURIComponent(cb));
-    parts.push('_='+Date.now());
-
-    script.async=true;
-    script.src=base+'?'+parts.join('&');
-    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar um bloco da base central.'));
-    timer=setTimeout(()=>finish(new Error('O bloco da base central não respondeu dentro do tempo limite.')),timeoutMs);
-    document.head.appendChild(script);
-  });
-}
-
-async function nucleoLoadSnapshotChunkedV62_(){
-  const first=await nucleoLoadChunkJsonpV62_({part:0},180000);
-
-  if(!first?.sucesso||first?.route!=='nucleo_load_chunk_v62'||typeof first.chunk!=='string'){
-    let raw='';
-    try{raw=JSON.stringify(first)}catch(_){raw=String(first)}
-    throw new Error(
-      (first?.erro||'A rota de sincronização em blocos não respondeu corretamente.')+
-      ' Resposta: '+raw
-    );
-  }
-
-  const totalParts=Math.max(1,Number(first.totalParts)||1);
-  const chunks=new Array(totalParts);
-  chunks[0]=first.chunk;
-  const syncId=String(first.syncId||'');
-
-  updateBackendStatus(null,'Sincronizando base central: bloco 1 de '+totalParts+'...');
-
-  for(let part=1;part<totalParts;part++){
-    const result=await nucleoLoadChunkJsonpV62_({syncId,part},180000);
-    if(!result?.sucesso||result?.route!=='nucleo_load_chunk_v62'||typeof result.chunk!=='string'){
-      throw new Error(
-        result?.erro||
-        ('Falha ao carregar o bloco '+(part+1)+' de '+totalParts+'.')
-      );
-    }
-    chunks[part]=result.chunk;
-    updateBackendStatus(null,'Sincronizando base central: bloco '+(part+1)+' de '+totalParts+'...');
-  }
-
-  const json=chunks.join('');
-  if(!json)throw new Error('A base central foi recebida sem conteúdo.');
-
-  let snapshot;
-  try{
-    snapshot=JSON.parse(json);
-  }catch(err){
-    throw new Error('A base central foi recebida, mas o JSON remontado ficou inválido.');
-  }
-
-  if(!snapshot?.sucesso){
-    throw new Error(snapshot?.erro||'A base central não confirmou a sincronização.');
-  }
-
-  return snapshot;
-}
-
 async function syncPortalBackend(showMessage=false,options={}){
   // Se outra sincronização central já estiver em andamento, compartilha o
   // resultado dela. Não existe mais o falso erro depois de 30 segundos.
@@ -723,9 +622,31 @@ async function syncPortalBackend(showMessage=false,options={}){
   updateBackendStatus(null,'Sincronizando...');
   if(foreground)await showNucleoLoading(options.loadingMessage||'Carregando dados da base central...','Carregando NÚCLEO');
   try{
-    // A base central pode ser grande demais para uma única resposta JSONP.
-    // Recebe o snapshot em blocos pequenos e remonta localmente.
-    const res=await nucleoLoadSnapshotChunkedV62_();
+    // A base central hoje reúne R.O.s, PDCAs, usuários, auditoria, histórico de
+    // e-mails, equipamentos etc. Em produção esta resposta pode ultrapassar 60 s.
+    // Não transformar um timeout curto em "dados locais — atualização falhou".
+    let res=null;
+    let lastCentralError=null;
+
+    for(let attempt=1;attempt<=2;attempt++){
+      try{
+        res=await portalJsonp({acao:'portal_load'},180000);
+        if(res?.sucesso===false)throw new Error(res.erro||'Falha ao carregar base central.');
+        if(res)break;
+      }catch(loadErr){
+        lastCentralError=loadErr;
+        if(attempt<2){
+          updateBackendStatus(null,'Base central demorou para responder. Confirmando novamente...');
+          nucleoSetCentralSyncState(
+            'syncing',
+            'As R.O.s já foram atualizadas. Confirmando os demais dados da base central...'
+          );
+          await new Promise(resolve=>setTimeout(resolve,1800));
+        }
+      }
+    }
+
+    if(!res)throw (lastCentralError||new Error('A base central não retornou os dados.'));
     applyPortalBackendSnapshot(res);
     nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',res?.atualizadoEm||'');
     updateBackendStatus(true,'Base central conectada.');
