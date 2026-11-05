@@ -1,6 +1,6 @@
-/* NÚCLEO | API EDITÁVEL v65
-   Mantém o sincronizador original do Núcleo.
-   A URL salva pela Administração tem prioridade; runtime-config é apenas fallback.
+/* NÚCLEO | API EDITÁVEL — recuperação v67
+   A URL usada pelo Núcleo vem SOMENTE da integração salva na própria tela.
+   Não usa URL fixa em código, runtime-config ou fallback oculto.
 */
 (function(){
   'use strict';
@@ -22,55 +22,42 @@
     try{localStorage.setItem(key,JSON.stringify(obj||{}));}catch(_){}
   }
 
-  function fallbackApi(){
-    return validApiUrl(window.NUCLEO_RUNTIME_CONFIG?.apiUrl||'');
-  }
-
-  function savedApi(){
+  function storedApi(){
     const integration=readObj(INTEGRATION_KEY);
     const admin=readObj(ADMIN_KEY);
     const sync=readObj(RO_SYNC_KEY);
-    return validApiUrl(integration.apiUrl)||validApiUrl(admin.apiUrl)||validApiUrl(sync.apiUrl)||'';
+    return validApiUrl(integration.apiUrl)||
+           validApiUrl(sync.apiUrl)||
+           validApiUrl(admin.apiUrl)||
+           '';
   }
 
-  // Restaurar a lógica original: API salva tem prioridade.
-  window.nucleoPersistedApiUrl=function(){
-    return savedApi();
-  };
-
+  // Only API source selection is overridden.
+  window.nucleoPersistedApiUrl=function(){ return storedApi(); };
   window.portalApiBase=function(){
-    return savedApi()||fallbackApi();
+    return storedApi();
   };
-
-  window.portalBackendEnabled=function(){
-    return !!window.portalApiBase();
-  };
+  window.portalBackendEnabled=function(){ return !!storedApi(); };
 
   const originalGetSaved=window.getSavedIntegrationSettings;
   window.getSavedIntegrationSettings=function(){
     let previous={};
-    try{
-      previous=typeof originalGetSaved==='function'?(originalGetSaved()||{}):{};
-    }catch(_){}
-    return {
-      ...previous,
-      apiUrl:window.portalApiBase()
-    };
+    try{previous=typeof originalGetSaved==='function'?(originalGetSaved()||{}):{};}catch(_){}
+    return {...previous,apiUrl:storedApi()};
   };
 
-  // Salva sem testar, sem ping e sem alterar o sincronizador.
-  window.saveIntegrationSettings=function(silent=false,candidateUrl){
+  // Reuse the original settings semantics but allow apiUrl from the field.
+  window.saveIntegrationSettings=function(silent=false){
     if(typeof window.requireIntegrationUnlock==='function'&&!window.requireIntegrationUnlock())return false;
 
-    const input=document.getElementById('apiUrl');
-    const apiUrl=validApiUrl(candidateUrl||input?.value||window.portalApiBase());
+    let current={};
+    try{current=window.getSavedIntegrationSettings?.()||{};}catch(_){}
+
+    const apiUrl=validApiUrl(document.getElementById('apiUrl')?.value||current.apiUrl||'');
     if(!apiUrl){
       if(!silent)alert('Informe uma URL válida do Web App / API terminando em /exec.');
       return false;
     }
-
-    let current={};
-    try{current=window.getSavedIntegrationSettings?.()||{};}catch(_){}
 
     const apiKey=String(document.getElementById('apiKey')?.value||current.apiKey||'').trim();
     const autoSync=document.getElementById('autoSync')?.value||current.autoSync||'0';
@@ -83,7 +70,6 @@
       return false;
     }
 
-    const previousApi=validApiUrl(window.portalApiBase());
     const payload={
       apiUrl,apiKey,autoSync,roSyncPeriod,roSyncDateFrom,roSyncDateTo,
       savedAt:new Date().toISOString()
@@ -97,20 +83,8 @@
     writeObj(ADMIN_KEY,admin);
 
     try{window.nucleoConfirmedApiUrl=apiUrl;}catch(_){}
-    if(input)input.value=apiUrl;
 
-    if(previousApi && previousApi!==apiUrl){
-      try{localStorage.removeItem('ro-pdca-session-v63')}catch(_){}
-      try{sessionStorage.removeItem('ro-pdca-session-v63')}catch(_){}
-      try{localStorage.removeItem('nucleo-central-data-state-v1')}catch(_){}
-      try{sessionStorage.removeItem('nucleo-central-data-state-v1')}catch(_){}
-      if(!silent){
-        alert('Integração salva. Como a API foi trocada, entre novamente no Núcleo para criar uma sessão válida nesta API.');
-      }
-      return payload;
-    }
-
-    if(!silent)alert('Integração salva. A nova API está ativa.');
+    if(!silent)alert('Integração salva.');
     return payload;
   };
 
@@ -125,34 +99,28 @@
     const st=document.getElementById('configSavedState');
     if(st){
       st.classList.remove('hidden');
-      st.textContent='Integração salva. A API informada está ativa.';
+      st.textContent='Integração salva.';
     }
-    alert('Integração salva. A API informada está ativa.');
+    alert('Integração salva.');
     return true;
   };
 
-  function enableApiField(){
+  function unlock(){
     const input=document.getElementById('apiUrl');
     if(!input)return;
-
-    if(input.readOnly)input.readOnly=false;
-    if(input.disabled)input.disabled=false;
+    input.readOnly=false;
+    input.disabled=false;
     input.removeAttribute('readonly');
     input.removeAttribute('aria-readonly');
     input.style.background='';
     input.title='';
-
-    const current=savedApi()||fallbackApi();
-    if(current && (!input.value || validApiUrl(input.value)!==current)){
+    const current=storedApi();
+    if(current){
       input.value=current;
     }
-
     document.querySelectorAll('[data-nucleo-api-lock-note]').forEach(el=>el.remove());
   }
 
-  enableApiField();
-  const observer=new MutationObserver(enableApiField);
-  observer.observe(document.documentElement,{childList:true,subtree:true});
-
-  console.info('[NÚCLEO] v65: sincronização original restaurada; API editável.');
+  unlock();
+  new MutationObserver(unlock).observe(document.documentElement,{childList:true,subtree:true});
 })();
