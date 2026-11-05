@@ -6300,6 +6300,7 @@ function nucleoRoPdfSemanticValues_(ro){
     'Cliente':raw.__cliente||val(['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
     'Tipo de ocorrência':tipo,
     'Tipo de ocorrencia':tipo,
+    'Identificação do desvio':raw.__identificacaoDesvio||val(['Identifique o desvio de qualidade:  Problemas oriundos ou que deveriam ser pegos em:  F -  Fabricação PA - Processos Administrativos E - Expedição C - Clicheria DT - Desenvolvimento Técnico FT - Fábrica de Tintas G - Geral EP - Estoque MP'])||'',
     'Descrição':descricao,
     'Descricao':descricao,
     'Setor identificado':setorIdentificado,
@@ -6366,11 +6367,49 @@ function nucleoRoCellPersistMeta(cell){
   return {source:dec(parts[0]),mask:/^[01]{4}$/.test(parts[1]||'')?parts[1]:'',fill:hasFill?parts[2]:'',label:dec(parts.slice(hasFill?3:2).join('~'))};
 }
 function nucleoRoModelRowUnits(row){const cells=row?.cells||[];if(!cells.length)return[];const total=cells.reduce((s,c)=>s+Math.max(.01,Number(c.width)||50),0)||100;let used=0;return cells.map((c,i)=>{if(i===cells.length-1)return Math.max(1,100-used);const rem=cells.length-i-1;let u=Math.max(1,Math.round((Math.max(.01,Number(c.width)||50)/total)*100));u=Math.min(u,Math.max(1,100-used-rem));used+=u;return u;});}
+
+function nucleoRoPdfCanonicalRowLabel_(v){
+  const n=nucleoRoModelNormKey(v);
+  const map={
+    'r o':'R.O.','ro':'RO','data':'Data','unidade':'Unidade','cliente':'Cliente',
+    'codigo do item':'Código do item','numero do pedido':'Número do pedido',
+    'nota fiscal de venda':'Nota fiscal de venda','ordem de producao':'Ordem de produção',
+    'tipo de ocorrencia':'Tipo de ocorrência','descricao':'Descrição',
+    'setor onde foi identificado':'Setor onde foi identificado',
+    'setor identificado':'Setor onde foi identificado',
+    'quantidade de pecas com desvio':'Quantidade de peças com desvio',
+    'peso do material descartado reaproveitado':'Peso do material descartado/reaproveitado',
+    'liberado pelo setor de qualidade':'Liberado pelo setor de qualidade?',
+    'liberado pelo setor da qualidade':'Liberado pelo setor de qualidade?',
+    'quem liberou':'Quem liberou','resultado':'Resultado',
+    'destinatario da triagem':'Destinatário da triagem',
+    'setor causa responsavel':'Setor causa / responsável',
+    'responsavel pelo registro':'Responsável pelo registro',
+    'matricula':'Matrícula'
+  };
+  return map[n]||'';
+}
+function nucleoRoPdfRowField_(row){
+  const cells=Array.isArray(row?.cells)?row.cells:[];
+  for(const c of cells){
+    const meta=nucleoRoCellPersistMeta(c);
+    const candidates=[
+      c?.labelText,c?.systemLabelText,meta?.label,
+      c?.text
+    ];
+    for(const candidate of candidates){
+      const canonical=nucleoRoPdfCanonicalRowLabel_(candidate);
+      if(canonical)return canonical;
+    }
+  }
+  return '';
+}
+
 function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
   const safeColor=(v,d)=>/^#[0-9a-f]{6}$/i.test(String(v||''))?v:d;
   const safeFill=(v,d='#ffffff')=>String(v||'').toLowerCase()==='transparent'?'transparent':safeColor(v,d);
   const rows=Array.isArray(grid)?grid:[];
-  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
+  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);const rowField=nucleoRoPdfRowField_(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
     const meta=nucleoRoCellPersistMeta(cell);
     // V62: alguns backends preservam o texto do placeholder, mas removem a origem
     // especial da célula. Nesse caso, recupere a origem pelo próprio placeholder
@@ -6388,6 +6427,18 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
     };
     let src=String(cell.source||meta.source||cell.systemSource||'');
     if(!src)src=placeholderSource[persistedText]||'';
+
+    // V43: em linhas padrão "rótulo | valor", o rótulo da própria linha é a
+    // fonte oficial do valor. Isso ignora source/systemSource antigas salvas no modelo.
+    if(rowField){
+      const thisCellCanonical=nucleoRoPdfCanonicalRowLabel_(
+        String(cell.labelText||cell.systemLabelText||meta.label||cell.text||'')
+      );
+      const isLabelCell=thisCellCanonical===rowField;
+      if(!isLabelCell && cell.type!=='image'){
+        src=rowField;
+      }
+    }
 
     // V40: campos padrão da R.O. são resolvidos pelo rótulo visível quando ele
     // identifica inequivocamente um campo do formulário. Isso impede que uma
