@@ -237,6 +237,7 @@ function nucleoRoEvidenceFileId_(value){
 
 async function nucleoLoadRoEvidenceDataUrls_(ro){
   const original=nucleoRoEvidenceUrls(ro).filter(x=>!/^data:image\//i.test(String(x||'')));
+  ro.__nucleoEvidenceDiagnostics=ro.__nucleoEvidenceDiagnostics||{};
   const existing=Array.isArray(ro?.__nucleoEvidenceDataUrls)
     ? ro.__nucleoEvidenceDataUrls.filter(x=>/^data:image\//i.test(String(x||'')))
     : [];
@@ -256,9 +257,28 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
       },90000);
       if(result?.sucesso&&/^data:image\//i.test(String(result.dataUrl||''))){
         loaded.push(result.dataUrl);
+        ro.__nucleoEvidenceDiagnostics[fileId]={
+          sucesso:true,
+          etapa:result.etapa||'concluido',
+          detalhe:result.detalhe||'Imagem baixada e incorporada pelo Apps Script.',
+          mime:result.mime||'',
+          bytes:Number(result.bytes||0)
+        };
+      }else{
+        ro.__nucleoEvidenceDiagnostics[fileId]={
+          sucesso:false,
+          etapa:result?.etapa||'resposta_backend',
+          detalhe:result?.erro||result?.detalhe||'O backend não devolveu a imagem em base64.',
+          http:result?.http||''
+        };
       }
     }catch(err){
       console.warn('Falha ao incorporar evidência '+fileId,err);
+      ro.__nucleoEvidenceDiagnostics[fileId]={
+        sucesso:false,
+        etapa:'chamada_backend',
+        detalhe:String(err?.message||err||'Falha desconhecida ao consultar o Apps Script.')
+      };
     }
   }
 
@@ -267,6 +287,22 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
     return loaded;
   }
   return existing;
+}
+
+
+function nucleoRoEvidenceDiagnosticText_(ro,url){
+  const fileId=nucleoRoEvidenceFileId_(url);
+  const d=fileId&&ro?.__nucleoEvidenceDiagnostics
+    ? ro.__nucleoEvidenceDiagnostics[fileId]
+    : null;
+  if(!d)return 'Diagnóstico: o frontend não recebeu resultado do backend para esta evidência.';
+  if(d.sucesso){
+    const size=d.bytes?(' · '+Math.round(Number(d.bytes)/1024)+' KB'):'';
+    return 'Diagnóstico: o backend baixou a imagem'+size+', mas ela não foi renderizada.';
+  }
+  const stage=d.etapa?('Etapa '+d.etapa+': '):'';
+  const http=d.http?('HTTP '+d.http+' · '):'';
+  return 'Diagnóstico: '+stage+http+String(d.detalhe||'falha sem detalhe.');
 }
 
 function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
@@ -305,7 +341,11 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
         <div class="evidence-frame">
           ${isEmbedded
             ? `<canvas class="evidence-canvas" data-evidence-index="${evidenceNumber-1}" aria-label="Evidência ${evidenceNumber}"></canvas>`
-            : `<div class="evidence-fallback" style="display:block">Não foi possível incorporar esta imagem.<br><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>`}
+            : `<div class="evidence-fallback" style="display:block">
+                <div style="font-weight:700;margin-bottom:1mm">Não foi possível incorporar esta imagem.</div>
+                <div class="evidence-debug">${nucleoRoModelEsc(nucleoRoEvidenceDiagnosticText_(ro,url))}</div>
+                <div style="margin-top:1mm"><a href="${nucleoRoModelEsc(url)}" target="_blank" rel="noopener noreferrer">Abrir evidência ${evidenceNumber}</a></div>
+              </div>`}
         </div>
       </div>`;
     }).join('');
@@ -316,7 +356,7 @@ function nucleoBuildRoModelPrintHtml(ro,model,assets={}){
   @page{size:A4 ${orientation};margin:0}*{box-sizing:border-box;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{margin:0;padding:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:${nucleoRoModelEsc(design.textColor||'#222222')}}
   .page{width:${orientation==='landscape'?'297mm':'210mm'};height:${orientation==='landscape'?'210mm':'297mm'};margin:0 auto 8mm;background:#fff;padding:${margin}mm;font-size:${Math.max(7,Math.min(18,Number(model?.fontSize)||9))}pt;display:flex;flex-direction:column;overflow:hidden;page-break-after:always}.page:last-child{page-break-after:auto}
   .grid{width:100%;border-collapse:collapse;table-layout:fixed}.grid col{width:1%}.page-main{flex:1 1 auto;min-height:0;overflow:hidden;display:block}.cell-stack{display:flex;flex-direction:column;gap:.35mm;min-width:0}.cell-label{line-height:1.05}.before,.after{white-space:pre-wrap;margin:2mm 0}.footer-wrap{margin-top:2mm;padding-top:0;flex:0 0 auto;page-break-inside:avoid;break-inside:avoid}
-  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-canvas{display:block;width:100%;height:100%;max-width:100%;max-height:100%}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}
+  .evidence-page{display:flex;flex:1;min-height:0;flex-direction:column;padding-top:2mm}.evidence-section-title{font-size:10pt;font-weight:700;margin:0 0 2mm}.evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr));gap:3mm;flex:1;min-height:0}.evidence-grid.count-1{grid-template-columns:1fr;grid-template-rows:1fr}.evidence-grid.count-2{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:1fr}.evidence-card{display:flex;min-width:0;min-height:0;flex-direction:column;border:.5pt solid #c8cdd3;padding:2mm;overflow:hidden}.evidence-title{font-size:8pt;font-weight:700;margin:0 0 1.5mm}.evidence-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden}.evidence-canvas{display:block;width:100%;height:100%;max-width:100%;max-height:100%}.evidence-fallback{text-align:center;font-size:8pt;line-height:1.35}.evidence-debug{font-size:6.8pt;line-height:1.25;color:#8a1c1c;overflow-wrap:anywhere}
   @media screen{body{padding:8mm}.page{box-shadow:0 2px 12px #0003}}@media print{body{background:#fff;padding:0}.page{box-shadow:none;margin:0}}
   </style></head><body>${pages}<script>
   (function(){
