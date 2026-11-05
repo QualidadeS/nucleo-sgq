@@ -251,7 +251,7 @@ async function nucleoLoadRoEvidenceDataUrls_(ro){
       const result=await portalJsonp({
         acao:'portal_ro_evidence_item',
         ro:ro.numero||ro.id||ro.codigo,
-        origin:ro.origem||ro.origin||'',
+        origin:ro.__origemBase||ro.origem||ro.origin||'',
         fileId:fileId
       },90000);
       if(result?.sucesso&&/^data:image\//i.test(String(result.dataUrl||''))){
