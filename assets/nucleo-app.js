@@ -5102,43 +5102,66 @@ async function openRoPdf(id){
   const wanted=String(id??'').trim();
   const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===wanted);
 
-  if(!ro){
-    alert('Não encontrei os dados desta R.O. para gerar o PDF.');
-    return;
-  }
+  if(!ro){alert('Não encontrei os dados desta R.O. para gerar o PDF.');return;}
 
   try{
+    const unit=explicitRecordUnit(ro);
+    let model=nucleoSystemFormat('ro',unit),assets={};
+
+    // O modelo precisa ser relido ANTES de decidir qual gerador usar. A versão
+    // anterior só consultava a base quando o cache local já tinha universalLayout;
+    // por isso um cache antigo fazia a R.O. continuar abrindo no PDF legado.
+    await showNucleoLoading('Carregando o modelo atual da R.O.…','Conferindo a estrutura salva na base central.');
+    try{
+      const fresh=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'ro'},60000);
+      if(fresh?.sucesso&&fresh.formats?.ro){
+        model=fresh.formats.ro;
+        assets=fresh;
+        // Atualiza o cache para as próximas telas, sem depender de recarregar a página.
+        try{
+          const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');
+          const own=configs.find(x=>x.id===unit)||{id:unit,unit};
+          own.documentFormats={...(own.documentFormats||{}),ro:model};
+          localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));
+        }catch(_){ }
+      }
+    }catch(e){
+      console.warn('Não foi possível reler o modelo atual da R.O.; usando a cópia local.',e);
+    }finally{
+      hideNucleoLoading(true);
+    }
+
+    const u=model?.universalLayout;
+    const hasUniversal=!!(u&&Number(u.version)>=2&&(Array.isArray(u.headerGrid)||Array.isArray(u.bodyGrid)||Array.isArray(u.footerGrid)));
+    if(hasUniversal){
+      try{
+        updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
+        const evidence=await portalJsonp({
+          acao:'portal_ro_evidence_data',
+          ro:ro.numero||ro.id||ro.codigo,
+          origin:ro.origem||ro.origin||''
+        },90000);
+        if(evidence?.sucesso&&Array.isArray(evidence.urls)){
+          ro.__nucleoEvidenceDataUrls=evidence.urls.filter(Boolean);
+        }
+      }catch(e){
+        console.warn('Não foi possível incorporar as evidências pela API; mantendo a visualização disponível.',e);
+      }finally{
+        hideNucleoLoading(true);
+      }
+      nucleoShowRoModelPreview(ro,model,assets);
+      return;
+    }
+
     let blob;
-    if(nucleoSystemFormat('ro',explicitRecordUnit(ro))?.design){
-      await showNucleoLoading('Gerando PDF com o modelo da unidade…','O logo, cabeçalho e rodapé serão aplicados pela base central.');
+    if(model?.design){
+      await showNucleoLoading('Gerando PDF com o modelo da unidade…','Aplicando o modelo salvo pela base central.');
       try{const result=await portalJsonp({acao:'portal_ro_model_pdf',ro:ro.numero||ro.id||ro.codigo,origin:ro.origem||ro.origin||''},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'});}finally{hideNucleoLoading(true);}
     }else blob=createRoPdfBlob(ro);
 
-    if(!(blob instanceof Blob) || blob.size===0){
-      throw new Error('O arquivo PDF foi gerado vazio.');
-    }
-
-    const url=URL.createObjectURL(blob);
-    const nome=(ro.numero||ro.id||ro.codigo||'RO')+'.pdf';
-
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=nome;
-    a.target='_self';
-    a.style.position='fixed';
-    a.style.left='-9999px';
-    document.body.appendChild(a);
-
-    a.click();
-
-    setTimeout(()=>{
-      try{a.remove();}catch(e){}
-      try{URL.revokeObjectURL(url);}catch(e){}
-    },10000);
-
-  }catch(err){
-    alert('Erro ao gerar o PDF: '+(err?.message||String(err)));
-  }
+    if(!(blob instanceof Blob)||blob.size===0)throw new Error('O arquivo PDF foi gerado vazio.');
+    showPdfBlob(blob,(ro.numero||ro.id||ro.codigo||'RO')+'.pdf');
+  }catch(err){alert('Erro ao gerar o PDF: '+(err?.message||String(err)));}
 }
 
 function openCurrentRoPdf(){
