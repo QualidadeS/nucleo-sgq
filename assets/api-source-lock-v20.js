@@ -74,7 +74,7 @@
       const base=validApiUrl(url);
       if(!base){reject(new Error('URL inválida.'));return;}
 
-      const cb='nucleoApiTestV59_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+      const cb='nucleoApiTestV60_'+Date.now()+'_'+Math.floor(Math.random()*100000);
       const script=document.createElement('script');
       let done=false;
       let timer=null;
@@ -216,25 +216,36 @@
       return false;
     }
 
+    // Salva e ativa PRIMEIRO. O teste é informativo e nunca mais bloqueia a troca da API.
+    const saved=window.saveIntegrationSettings(true,candidate);
+    if(!saved)return false;
+
+    if(st){
+      st.classList.remove('hidden');
+      st.textContent='Integração salva. A nova API já está ativa neste navegador.';
+    }
+
     try{
-      await window.nucleoEnsureApiConfigured(candidate);
-      const saved=window.saveIntegrationSettings(true,candidate);
-      if(!saved)return false;
-
+      const checked=await probeApi(candidate);
       if(st){
-        st.classList.remove('hidden');
-        st.textContent='API confirmada e integração salva.';
+        st.textContent=
+          checked.probe==='portal_public_config'
+            ? 'Integração salva e API confirmada.'
+            : 'Integração salva. O /exec respondeu ao Núcleo.';
       }
-
-      alert('API confirmada e salva. A nova URL já está ativa.');
+      alert('Integração salva. A nova API já está ativa.');
       return true;
     }catch(e){
+      // A URL permanece salva mesmo quando o teste falha.
       if(st){
-        st.classList.remove('hidden');
-        st.textContent='Não foi possível confirmar a API informada.';
+        st.textContent='Integração salva. O teste automático não conseguiu validar a resposta da API.';
       }
-      alert('Não foi possível confirmar a API: '+(e?.message||e));
-      return false;
+      alert(
+        'Integração salva e API alterada.\n\n'+
+        'O teste automático não conseguiu validar a resposta agora: '+
+        (e?.message||e)
+      );
+      return true;
     }
   };
 
