@@ -74,7 +74,7 @@
       const base=validApiUrl(url);
       if(!base){reject(new Error('URL inválida.'));return;}
 
-      const cb='nucleoApiTestV61_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+      const cb='nucleoApiTestV59_'+Date.now()+'_'+Math.floor(Math.random()*100000);
       const script=document.createElement('script');
       let done=false;
       let timer=null;
@@ -104,7 +104,7 @@
 
       script.async=true;
       script.src=base+'?'+parts.join('&');
-      script.onerror=()=>finish(new Error('A URL /exec não devolveu o ping JSONP esperado pelo Núcleo.'));
+      script.onerror=()=>finish(new Error('A URL /exec abriu, mas não devolveu JSONP utilizável ao Núcleo.'));
       timer=setTimeout(()=>finish(new Error('A API não respondeu dentro do tempo limite.')),timeoutMs);
       document.head.appendChild(script);
     });
@@ -114,29 +114,26 @@
     const url=validApiUrl(candidate);
     if(!url)throw new Error('Informe uma URL válida do Web App / API terminando em /exec.');
 
-    const data=await directJsonp(
-      url,
-      {
-        mode:'nucleo_ping_v61',
-        nucleoAction:'nucleo_ping_v61',
-        acao:'nucleo_ping_v61'
-      },
-      20000
-    );
+    // 1) Tenta a rota curta moderna.
+    try{
+      const data=await directJsonp(url,{acao:'portal_public_config',nucleoAction:'portal_public_config'},20000);
+      if(data?.sucesso){
+        return {url,result:data,probe:'portal_public_config'};
+      }
+    }catch(_){}
 
-    if(
-      data?.sucesso===true &&
-      data?.nucleo===true &&
-      data?.route==='nucleo_ping_v61'
-    ){
-      return {url,result:data,probe:'nucleo_ping_v61'};
+    // 2) Fallback compatível: testa o próprio /exec sem ação.
+    // Backends antigos do Núcleo respondem com portal_load nesse caso.
+    const root=await directJsonp(url,{},30000);
+    if(root?.sucesso && (
+      root?.config ||
+      Array.isArray(root?.dados) ||
+      Number.isFinite(Number(root?.quantidade))
+    )){
+      return {url,result:root,probe:'root'};
     }
 
-    let raw='';
-    try{raw=JSON.stringify(data);}catch(_){raw=String(data);}
-    throw new Error(
-      'A URL respondeu, mas não executou o backend V61 do Núcleo. Resposta: '+raw
-    );
+    throw new Error('O Apps Script respondeu, mas a resposta não foi reconhecida como uma API do Núcleo.');
   }
 
   window.nucleoEnsureApiConfigured=async function(candidateUrl){
@@ -219,33 +216,25 @@
       return false;
     }
 
-    // Salva e ativa PRIMEIRO. O teste é informativo e nunca mais bloqueia a troca da API.
-    const saved=window.saveIntegrationSettings(true,candidate);
-    if(!saved)return false;
-
-    if(st){
-      st.classList.remove('hidden');
-      st.textContent='Integração salva. A nova API já está ativa neste navegador.';
-    }
-
     try{
-      const checked=await probeApi(candidate);
+      await window.nucleoEnsureApiConfigured(candidate);
+      const saved=window.saveIntegrationSettings(true,candidate);
+      if(!saved)return false;
+
       if(st){
-        st.textContent='Integração salva e API V61 confirmada.';
+        st.classList.remove('hidden');
+        st.textContent='API confirmada e integração salva.';
       }
-      alert('Integração salva. A nova API já está ativa.');
+
+      alert('API confirmada e salva. A nova URL já está ativa.');
       return true;
     }catch(e){
-      // A URL permanece salva mesmo quando o teste falha.
       if(st){
-        st.textContent='Integração salva. O teste automático não conseguiu validar a resposta da API.';
+        st.classList.remove('hidden');
+        st.textContent='Não foi possível confirmar a API informada.';
       }
-      alert(
-        'Integração salva e API alterada.\n\n'+
-        'O teste automático não conseguiu validar a resposta agora: '+
-        (e?.message||e)
-      );
-      return true;
+      alert('Não foi possível confirmar a API: '+(e?.message||e));
+      return false;
     }
   };
 
@@ -278,7 +267,10 @@
       if(result){
         result.className='statusline okline';
         result.classList.remove('hidden');
-        result.textContent='API conectada. Backend V61 confirmado.';
+        result.textContent=
+          checked.probe==='portal_public_config'
+            ? 'API conectada e confirmada pelo teste curto.'
+            : 'API conectada. O /exec respondeu corretamente ao Núcleo.';
       }
       return true;
     }catch(err){
