@@ -16411,18 +16411,28 @@ if(getSession()){
 }
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
-  if(!getSession()?.authToken)return;
-  await showNucleoLoading('Confirmando dados com a base central...','Carregando NÚCLEO');
+  const token=getSession()?.authToken;
+  if(!token)return;
   try{
+    // A confirmação central é leve e não bloqueia a interface com overlay.
     const centralOk=await syncPortalBackend(false);
     if(!centralOk)throw new Error('A base central não confirmou os dados.');
-    if(!getSession()?.permissions||nucleoPersonCan('ros'))await refreshLegacyRoCacheFromApi(true);
+
+    // A leitura completa das R.O.s ocorre em segundo plano e sem force=true.
+    // Assim o Núcleo abre imediatamente com o cache disponível e atualiza a tela
+    // quando a leitura central terminar.
+    if((!getSession()?.permissions||nucleoPersonCan('ros')) && getSession()?.authToken===token){
+      void refreshLegacyRoCacheFromApi(false).then(()=>{
+        if(getSession()?.authToken!==token)return;
+        try{render();refreshRoSummary();refreshMenuNotificationBadges();}catch(e){}
+      }).catch(e=>console.warn('Atualização de R.O.s em segundo plano:',e));
+    }
   }
   catch(e){
     console.warn('Falha ao confirmar dados da base central.',e);
     nucleoSetCentralSyncState('error','Não foi possível confirmar os dados com a base central: '+(e?.message||e));
   }
-  finally{hideNucleoLoading(true);}
+  finally{try{hideNucleoLoading(true)}catch(e){}}
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
 try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
@@ -16749,7 +16759,7 @@ async function nucleoSyncAfterLogin(token){
  try{centralOk=await syncPortalBackend(false);}catch(e){console.warn('Atualização central após login:',e);}
  if(getSession()?.authToken!==token)return;
  if(centralOk && (!getSession()?.permissions||nucleoPersonCan('ros'))){
-   try{await refreshLegacyRoCacheFromApi(true);}catch(e){console.warn('Atualização de R.O.s após login:',e);}
+   try{void refreshLegacyRoCacheFromApi(false).then(()=>{try{render();refreshMenuNotificationBadges();}catch(e){}}).catch(e=>console.warn('Atualização de R.O.s após login:',e));}catch(e){console.warn('Atualização de R.O.s após login:',e);}
  }
  if(getSession()?.authToken!==token)return;
  try{refreshSectorSelectors();populateTriageSectors();render();}catch(e){console.warn('Atualização da tela após login:',e);}
