@@ -14360,25 +14360,26 @@ function pdcaExternalExists(ro){
   return tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external';
 }
 
-// R.O. com PDCA não pertence mais à fila de "R.O.s atribuídas".
-// Esta verificação reaproveita as mesmas evidências que o Núcleo já usa para
-// reconhecer "Tem PDCA": marcação SGQ, PDCA recebido/enviado e legado reconciliado.
-function assignedRoHasPdcaEvidence(ro,sentRoKeys){
+// Na fila de R.O.s atribuídas, qualquer evidência de PDCA já existente
+// remove a R.O. da pendência. Esta função usa somente dados já carregados
+// na própria linha/triagem para não disparar novas leituras durante o render.
+function assignedRoHasPdcaEvidence(ro){
   if(!ro)return false;
-
-  // A marcação visual "Tem PDCA" vem do próprio vínculo da triagem.
-  // Use o registro já anexado à linha sempre que existir para evitar novas
-  // buscas na base durante o render.
   const tri=ro.__triageRecord||getRoTriageRecord(ro);
-  if(tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external')return true;
+  if(tri?.pdcaExternal===true)return true;
+  if(String(tri?.pdcaSource||'').toLowerCase()==='external')return true;
 
-  const numero=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
-  if(numero && sentRoKeys instanceof Set && sentRoKeys.has(normalizeAnswer(numero).replace(/[^a-z0-9]/g,'')))return true;
+  const raw=ro?.raw||{};
+  const pdca=normalizeAnswer(String(
+    ro?.pdca ?? ro?.pdcaStatus ?? ro?.situacaoPdca ??
+    raw?.pdca ?? raw?.__pdca ?? raw?.situacaoPdca ?? ''
+  ));
+  const status=normalizeAnswer(String(
+    ro?.status ?? ro?.statusPlanilha ?? raw?.__statusOperacional ?? ''
+  ));
 
-  const status=normalizeAnswer(String(ro?.status||ro?.statusPlanilha||ro?.raw?.__statusOperacional||''));
-  const pdca=normalizeAnswer(String(ro?.pdca||ro?.raw?.__pdca||''));
-  if(pdca==='enviado'||pdca==='apresentado'||status==='pdca enviado'||status==='respondida'||status==='apresentada')return true;
-
+  if(['tem pdca','sim','enviado','respondido','respondida','apresentado','apresentada'].includes(pdca))return true;
+  if(['pdca enviado','respondida','apresentada'].includes(status))return true;
   return false;
 }
 function pdcaSituationLabel(ro){
@@ -14426,7 +14427,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
     },hasExternal?'Salvando PDCA externo':'Atualizando necessidade de PDCA');
 
     alert(hasExternal
-      ?'PDCA registrado. A R.O. saiu de R.O.s atribuídas e passa a ser acompanhada em PDCAs recebidos.'
+      ?'PDCA externo registrado. O setor continuará vendo a R.O., mas não será cobrado por um novo PDCA no Núcleo.'
       :'Marcado como PDCA necessário. O setor responsável verá a pendência e o prazo será a próxima terça-feira.');
   }catch(err){
     console.error('[NUCLEO PDCA EXTERNO]',err);
@@ -14624,10 +14625,6 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       .filter(Boolean);
   })() : ros;
 
-  const assignedSentRoKeys = roListMode==='assigned' ? new Set(
-    getAllSentPdcas().map(p=>normalizeAnswer(String(p?.ro||p?.roId||p?.numeroRo||'')).replace(/[^a-z0-9]/g,'')).filter(Boolean)
-  ) : new Set();
-
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
@@ -14665,11 +14662,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
-
-      // REGRA DA FILA: se já existe PDCA, a R.O. deixa de ser uma pendência
-      // atribuída e passa a ser acompanhada exclusivamente em PDCAs recebidos.
-      if(assignedRoHasPdcaEvidence(r,assignedSentRoKeys))return false;
-
+      if(assignedRoHasPdcaEvidence(r))return false;
       const tri=getRoTriageRecord(r,renderTriageMap);
       // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
       // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
