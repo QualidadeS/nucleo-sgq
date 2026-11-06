@@ -1,18 +1,13 @@
 
-// Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
-window.NUCLEO_BUILD_VERSION = '20261028-pdca-review-unlink-v7';
+// Núcleo build unificado. A versão continua disponível para diagnóstico,
+// mas nunca altera o endereço visível nem força reload por query string.
+window.NUCLEO_BUILD_VERSION = '20261106-clean-startup-v1';
 (function nucleoBuildConsistencyGuard(){
   try {
-    var meta=document.querySelector('meta[name="nucleo-build"]');
-    var htmlBuild=meta&&meta.getAttribute('content')||'';
-    if(htmlBuild && htmlBuild!==window.NUCLEO_BUILD_VERSION){
-      var k='nucleo-build-reload-'+window.NUCLEO_BUILD_VERSION;
-      if(!sessionStorage.getItem(k)){
-        sessionStorage.setItem(k,'1');
-        var u=new URL(location.href);
-        u.searchParams.set('_build',window.NUCLEO_BUILD_VERSION);
-        location.replace(u.toString());
-      }
+    var u=new URL(location.href);
+    if(u.searchParams.has('_build')){
+      u.searchParams.delete('_build');
+      history.replaceState(history.state,'',u.pathname+(u.search||'')+(u.hash||''));
     }
   } catch(e) {}
 })();
@@ -20686,8 +20681,8 @@ if(getSession()){
 }
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
-  if(!getSession()?.authToken)return;
-  await showNucleoLoading('Confirmando dados com a base central...','Carregando NÚCLEO');
+  const token=getSession()?.authToken;
+  if(!token)return;
   try{
     const centralOk=await syncPortalBackend(false);
     if(!centralOk){
@@ -20697,13 +20692,18 @@ setTimeout(async()=>{
       }
       throw new Error('A base central não confirmou os dados.');
     }
-    if(!getSession()?.permissions||nucleoPersonCan('ros'))await refreshLegacyRoCacheFromApi(true);
+    if((!getSession()?.permissions||nucleoPersonCan('ros')) && getSession()?.authToken===token){
+      void refreshLegacyRoCacheFromApi(false).then(()=>{
+        if(getSession()?.authToken!==token)return;
+        try{render();refreshRoSummary();refreshMenuNotificationBadges();}catch(e){}
+      }).catch(e=>console.warn('Atualização de R.O.s em segundo plano:',e));
+    }
   }
   catch(e){
     console.warn('Falha ao confirmar dados da base central.',e);
     nucleoSetCentralSyncState('error','Não foi possível confirmar os dados com a base central: '+(e?.message||e));
   }
-  finally{hideNucleoLoading(true);}
+  finally{try{hideNucleoLoading(true)}catch(e){}}
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
 try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
