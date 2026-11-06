@@ -812,6 +812,11 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
     const parts=[];
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
+    // Redundância intencional: algumas chamadas estão chegando ao Web App sem
+    // preservar "acao". nucleoAction é exclusivo do Núcleo e o backend o prioriza.
+    if(actionName && !requestParams.nucleoAction){
+      requestParams.nucleoAction=actionName;
+    }
     const sessionToken=String(getSession()?.authToken||'').trim();
     if(sessionToken && nucleoActionNeedsCentralConfirmation(actionName) && !nucleoCentralDataConfirmed()){
       cleanup();
@@ -5102,43 +5107,59 @@ async function openRoPdf(id){
   const wanted=String(id??'').trim();
   const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===wanted);
 
-  if(!ro){
-    alert('Não encontrei os dados desta R.O. para gerar o PDF.');
-    return;
-  }
+  if(!ro){alert('Não encontrei os dados desta R.O. para gerar o PDF.');return;}
 
   try{
+    const unit=explicitRecordUnit(ro);
+    let model=nucleoSystemFormat('ro',unit),assets={};
+
+    // O modelo precisa ser relido ANTES de decidir qual gerador usar. A versão
+    // anterior só consultava a base quando o cache local já tinha universalLayout;
+    // por isso um cache antigo fazia a R.O. continuar abrindo no PDF legado.
+    await showNucleoLoading('Carregando o modelo atual da R.O.…','Conferindo a estrutura salva na base central.');
+    try{
+      const fresh=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'ro'},60000);
+      if(fresh?.sucesso&&fresh.formats?.ro){
+        model=fresh.formats.ro;
+        assets=fresh;
+        // Atualiza o cache para as próximas telas, sem depender de recarregar a página.
+        try{
+          const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');
+          const own=configs.find(x=>x.id===unit)||{id:unit,unit};
+          own.documentFormats={...(own.documentFormats||{}),ro:model};
+          localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));
+        }catch(_){ }
+      }
+    }catch(e){
+      console.warn('Não foi possível reler o modelo atual da R.O.; usando a cópia local.',e);
+    }finally{
+      hideNucleoLoading(true);
+    }
+
+    const u=model?.universalLayout;
+    const hasUniversal=!!(u&&Number(u.version)>=2&&(Array.isArray(u.headerGrid)||Array.isArray(u.bodyGrid)||Array.isArray(u.footerGrid)));
+    if(hasUniversal){
+      try{
+        updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
+        await nucleoLoadRoEvidenceDataUrls_(ro);
+      }catch(e){
+        console.warn('Não foi possível incorporar as evidências pela API.',e);
+      }finally{
+        hideNucleoLoading(true);
+      }
+      nucleoShowRoModelPreview(ro,model,assets);
+      return;
+    }
+
     let blob;
-    if(nucleoSystemFormat('ro',explicitRecordUnit(ro))?.design){
-      await showNucleoLoading('Gerando PDF com o modelo da unidade…','O logo, cabeçalho e rodapé serão aplicados pela base central.');
+    if(model?.design){
+      await showNucleoLoading('Gerando PDF com o modelo da unidade…','Aplicando o modelo salvo pela base central.');
       try{const result=await portalJsonp({acao:'portal_ro_model_pdf',ro:ro.numero||ro.id||ro.codigo,origin:ro.origem||ro.origin||''},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'});}finally{hideNucleoLoading(true);}
     }else blob=createRoPdfBlob(ro);
 
-    if(!(blob instanceof Blob) || blob.size===0){
-      throw new Error('O arquivo PDF foi gerado vazio.');
-    }
-
-    const url=URL.createObjectURL(blob);
-    const nome=(ro.numero||ro.id||ro.codigo||'RO')+'.pdf';
-
-    const a=document.createElement('a');
-    a.href=url;
-    a.download=nome;
-    a.target='_self';
-    a.style.position='fixed';
-    a.style.left='-9999px';
-    document.body.appendChild(a);
-
-    a.click();
-
-    setTimeout(()=>{
-      try{a.remove();}catch(e){}
-      try{URL.revokeObjectURL(url);}catch(e){}
-    },10000);
-
-  }catch(err){
-    alert('Erro ao gerar o PDF: '+(err?.message||String(err)));
-  }
+    if(!(blob instanceof Blob)||blob.size===0)throw new Error('O arquivo PDF foi gerado vazio.');
+    showPdfBlob(blob,(ro.numero||ro.id||ro.codigo||'RO')+'.pdf');
+  }catch(err){alert('Erro ao gerar o PDF: '+(err?.message||String(err)));}
 }
 
 function openCurrentRoPdf(){
@@ -8027,7 +8048,7 @@ async function saveTriageRecord(){
     let totalSent=0;
     try{
       updateNucleoLoading('Enviando os e-mails por setor…','Processando');
-      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:'Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'})))},90000);
+      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:(record.assignmentReason||'Não informado')})))},90000);
       if(!Array.isArray(result?.results))throw new Error(result?.erro||'Atualize a implantação do Apps Script para a revisão 55.');
       totalSent=result.results.filter(r=>r.sucesso).length;
       result.results.filter(r=>!r.sucesso).forEach(r=>emailErrors.push(r.sector+': '+r.erro));
@@ -14359,29 +14380,6 @@ function pdcaExternalExists(ro){
   const tri=getRoTriageRecord(ro);
   return tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external';
 }
-
-// Na fila de R.O.s atribuídas, qualquer evidência de PDCA já existente
-// remove a R.O. da pendência. Esta função usa somente dados já carregados
-// na própria linha/triagem para não disparar novas leituras durante o render.
-function assignedRoHasPdcaEvidence(ro){
-  if(!ro)return false;
-  const tri=ro.__triageRecord||getRoTriageRecord(ro);
-  if(tri?.pdcaExternal===true)return true;
-  if(String(tri?.pdcaSource||'').toLowerCase()==='external')return true;
-
-  const raw=ro?.raw||{};
-  const pdca=normalizeAnswer(String(
-    ro?.pdca ?? ro?.pdcaStatus ?? ro?.situacaoPdca ??
-    raw?.pdca ?? raw?.__pdca ?? raw?.situacaoPdca ?? ''
-  ));
-  const status=normalizeAnswer(String(
-    ro?.status ?? ro?.statusPlanilha ?? raw?.__statusOperacional ?? ''
-  ));
-
-  if(['tem pdca','sim','enviado','respondido','respondida','apresentado','apresentada'].includes(pdca))return true;
-  if(['pdca enviado','respondida','apresentada'].includes(status))return true;
-  return false;
-}
 function pdcaSituationLabel(ro){
   if(pdcaExternalExists(ro))return 'PDCA externo';
   const status=String(ro?.status||'');
@@ -14593,7 +14591,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
-  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit]);
+  const assignedEmailFilter=document.getElementById('assignedEmailFilter')?.value||'all';
+  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit,assignedEmailFilter]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
   const renderTriageMap=roListMode==='assigned'?getSavedTriageMap():null;
@@ -14662,7 +14661,6 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
-      if(assignedRoHasPdcaEvidence(r))return false;
       const tri=getRoTriageRecord(r,renderTriageMap);
       // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
       // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
@@ -14686,6 +14684,13 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         if(assignedSector!=='all'&&rowSector!==assignedSector)return false;
         if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
+        // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
+        if(assignedEmailFilter==='error'){
+          const idx=window.__nucleoEmailErrorIndex;
+          if(!idx||!idx.has(roDigits(String(r.numero||r.id||r.codigo||'')))){
+            return false;
+          }
+        }
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r,pdcaExternalExists(r));
@@ -15601,6 +15606,13 @@ function showAssignedRos(){
   render();
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
+  // Carrega o histórico de e-mails em segundo plano.
+  // Quando terminar, rebuildErrorIndex chama render() novamente com o índice pronto.
+  try{
+    if(typeof window.__nucleoRoResendLoadHistory==='function'){
+      window.__nucleoRoResendLoadHistory(true).catch(()=>{});
+    }
+  }catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
   ensureUnitQualitySettings();
   ensureFixedEmailCopiesPanel();
