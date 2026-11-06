@@ -7192,6 +7192,25 @@ function saveDeletedTriageKeys(set){
   try{localStorage.setItem(DELETED_TRIAGE_KEYS_KEY,JSON.stringify([...set]))}catch(e){}
 }
 
+function getRealSavedTriageMap(){
+  let map=new Map();
+  try{
+    const arr=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');
+    if(Array.isArray(arr)){
+      arr.forEach(x=>{
+        const key=String(x?.roKey||'').trim();
+        if(!key)return;
+        // Somente registros que realmente existem na coleção de triagem.
+        // Nada é reconstruído a partir de setor/status da R.O. ou da planilha.
+        map.set(key,x);
+      });
+    }
+  }catch(e){
+    map=new Map();
+  }
+  return map;
+}
+
 function getSavedTriageMap(){
   let map=new Map();
   try{
@@ -14609,7 +14628,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit,assignedEmailFilter]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
-  const renderTriageMap=roListMode==='assigned'?getSavedTriageMap():null;
+  const renderTriageMap=roListMode==='assigned'?getRealSavedTriageMap():null;
   const assignedTriageByRo=new Map();
   if(roListMode==='assigned'){
     renderTriageMap.forEach(t=>{
@@ -14640,11 +14659,14 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
-    let records=(assignedTriageByRo.get(base)||[]).filter(t=>
-      String(t.decision||'')==='directed' &&
-      String(t.responsibleSector||t.setorDirecionado||'').trim() &&
-      !hiddenAssigned.has(String(t.roKey||''))
-    );
+    let records=(assignedTriageByRo.get(base)||[]).filter(t=>{
+      const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
+      const invalidSector=['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sector));
+      return String(t.decision||'')==='directed' &&
+        !!sector &&
+        !invalidSector &&
+        !hiddenAssigned.has(String(t.roKey||''));
+    });
 
     // R.O.s atribuídas deve refletir somente triagens reais salvas.
     // Não criar direcionamento sintético a partir de setor da planilha/R.O.
@@ -14669,10 +14691,13 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
       const tri=r.__triageRecord||getRoTriageRecord(r,renderTriageMap);
+      const triSector=String(tri?.responsibleSector||tri?.setorDirecionado||'').trim();
+      const triSectorInvalid=['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(triSector));
       const assignedByTriage=
         !!tri &&
         String(tri.decision||'')==='directed' &&
-        !!String(tri.responsibleSector||tri.setorDirecionado||'').trim();
+        !!triSector &&
+        !triSectorInvalid;
 
       if(!assignedByTriage)return false;
 
@@ -14682,7 +14707,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
-        const tri=getRoTriageRecord(r,renderTriageMap);
+        const tri=(roListMode==='assigned'&&r.__triageRecord)?r.__triageRecord:getRoTriageRecord(r,renderTriageMap);
         const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
         const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
         const rowUnit=String(r.unidade||'').trim();
@@ -14712,7 +14737,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const contest=status==='Em contestação';
     const externalPdca=pdcaExternalExists(r);
     const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
-    const tri=getRoTriageRecord(r,renderTriageMap);
+    const tri=(roListMode==='assigned'&&r.__triageRecord)?r.__triageRecord:getRoTriageRecord(r,renderTriageMap);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
     const displayStatus=assignedRoStatus(r,externalPdca);
@@ -15662,19 +15687,29 @@ function showList(){
 function populateAssignedRoFilters(){
   const sectorEl=document.getElementById('assignedSectorFilter');
   const unitEl=document.getElementById('assignedUnitFilter');
+  const real=[...getRealSavedTriageMap().values()].filter(t=>
+    String(t?.decision||'')==='directed' &&
+    !!String(t?.responsibleSector||t?.setorDirecionado||'').trim()
+  );
+
   if(sectorEl){
     const current=sectorEl.value||'all';
-    const sectors=nucleoVisibleManagerSectors(isManager(),managedSectorsForCurrentUser(),getTriageRecords().filter(r=>r.triagemStatus!=='new').map(r=>r.setorDirecionado));
+    const sectors=nucleoVisibleManagerSectors(
+      isManager(),
+      managedSectorsForCurrentUser(),
+      real.map(r=>String(r.responsibleSector||r.setorDirecionado||'').trim()).filter(Boolean)
+    );
     sectorEl.setAttribute('aria-label',isManager()?'Setor sob minha gestão':'Setor responsável');
     sectorEl.title=isManager()?'Escolha o setor que deseja acompanhar':'Filtrar por setor';
     sectorEl.innerHTML='<option value="all">'+(isManager()?'Todos os meus setores':'Todos os setores')+'</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
   }
+
   if(unitEl){
     const current=unitEl.value||'all';
-    const units=[...new Set(getTriageRecords()
-      .filter(r=>r.triagemStatus!=='new')
-      .map(r=>String(r.unidade||'').trim()).filter(Boolean))]
+    const units=[...new Set(real
+      .map(r=>String(r.unidade||r.unit||r.roUnit||'').trim())
+      .filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b,'pt-BR'));
     unitEl.innerHTML='<option value="all">Todas as unidades</option>'+units.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
     if([...unitEl.options].some(o=>o.value===current))unitEl.value=current;
