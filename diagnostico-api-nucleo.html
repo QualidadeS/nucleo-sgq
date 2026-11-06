@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnóstico da API do Núcleo</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#172033}
+.card{max-width:900px;margin:auto;background:#fff;border:1px solid #dfe5ef;border-radius:14px;padding:22px;box-shadow:0 4px 18px rgba(0,0,0,.05)}
+h1{margin:0 0 10px;font-size:24px}.muted{color:#657086}.row{margin:14px 0;padding:12px;background:#f8fafc;border-radius:10px}
+b{display:block;margin-bottom:5px}.ok{color:#0a7b3e}.bad{color:#b42318}.mono{font-family:Consolas,monospace;word-break:break-all}
+button{padding:10px 14px;border:0;border-radius:8px;background:#1455ff;color:#fff;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Diagnóstico da API do Núcleo</h1>
+  <div class="muted">Este arquivo não altera nada. Ele só mostra qual backend a URL publicada está executando.</div>
+  <div class="row"><b>API configurada</b><div id="api" class="mono">carregando...</div></div>
+  <div class="row"><b>Resultado</b><div id="result">aguardando...</div></div>
+  <div class="row"><b>Backend revision</b><div id="rev" class="mono">—</div></div>
+  <div class="row"><b>Ambiente</b><div id="env">—</div></div>
+  <div class="row"><b>Resposta completa</b><pre id="raw" class="mono" style="white-space:pre-wrap">—</pre></div>
+  <button onclick="run()">Testar novamente</button>
+</div>
+
+<script src="assets/nucleo-runtime-config.js?v=diag-20261030"></script>
+<script>
+function jsonp(url, params={}, timeout=20000){
+  return new Promise((resolve,reject)=>{
+    const cb='diagCb_'+Date.now()+'_'+Math.floor(Math.random()*99999);
+    const s=document.createElement('script');
+    let done=false;
+    const clean=()=>{try{delete window[cb]}catch(_){window[cb]=undefined} try{s.remove()}catch(_){} clearTimeout(t)};
+    const finish=(e,d)=>{if(done)return;done=true;clean();e?reject(e):resolve(d)};
+    window[cb]=(d)=>finish(null,d);
+    const q=new URLSearchParams({...params,callback:cb,_:Date.now()});
+    s.src=url.replace(/\/+$/,'')+'?'+q.toString();
+    s.onerror=()=>finish(new Error('script.onerror: o navegador não conseguiu carregar a resposta da API.'));
+    const t=setTimeout(()=>finish(new Error('timeout aguardando resposta da API')),timeout);
+    document.head.appendChild(s);
+  });
+}
+async function run(){
+  const api=String(window.NUCLEO_RUNTIME_CONFIG?.apiUrl||'').trim();
+  document.getElementById('api').textContent=api||'(vazia)';
+  document.getElementById('result').textContent='testando...';
+  document.getElementById('result').className='';
+  document.getElementById('rev').textContent='—';
+  document.getElementById('env').textContent='—';
+  document.getElementById('raw').textContent='—';
+  try{
+    if(!api) throw new Error('NUCLEO_RUNTIME_CONFIG.apiUrl está vazia.');
+    const r=await jsonp(api,{acao:'portal_public_config'});
+    document.getElementById('result').textContent='API respondeu';
+    document.getElementById('result').className='ok';
+    document.getElementById('rev').textContent=String(r?.backendRevision||r?.config?.backendRevision||'(não informado)');
+    document.getElementById('env').textContent=String(r?.ambiente||r?.config?.ambiente||'(não informado)');
+    document.getElementById('raw').textContent=JSON.stringify(r,null,2);
+  }catch(e){
+    document.getElementById('result').textContent=String(e?.message||e);
+    document.getElementById('result').className='bad';
+    document.getElementById('raw').textContent=String(e?.stack||e);
+  }
+}
+run();
+</script>
+</body>
+</html>
