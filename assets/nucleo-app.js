@@ -3772,7 +3772,12 @@ function openUserRegistrationEditor(key){
   const parts=splitPersonNameDescription(u.name,u.description);
   document.getElementById('userRegistrationEditName').value=parts.name;
   document.getElementById('userRegistrationEditDescription').value=parts.description;
-  if(unitSel)unitSel.value=canonicalPortalUnit(u.unit);
+  if(unitSel){
+    const units=nucleoPersonUnits(u);
+    unitSel.value=units.includes('matriz')&&units.includes('filial')
+      ? 'todas'
+      : canonicalPortalUnit(u.unit);
+  }
   if(sectorSel){
     const sectors=getConfiguredSectorsForTriage();
     sectorSel.innerHTML='<option value="">Selecione o setor...</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
@@ -3790,9 +3795,9 @@ async function saveUserRegistrationEditor(){
   if(!nucleoFeatureRequire('users','edit'))return;
   if(!isAdmin())return;
   const key=String(document.getElementById('userRegistrationEditKey')?.value||'');
-  const unit=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
+  const unitChoice=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
   const sector=String(document.getElementById('userRegistrationEditSector')?.value||'').trim();
-  if(!unit){alert('Selecione a unidade.');return}
+  if(!unitChoice){alert('Selecione a unidade.');return}
   if(!sector){alert('Selecione o setor principal.');return}
 
   const users=getOperationalUsers();
@@ -3802,9 +3807,18 @@ async function saveUserRegistrationEditor(){
   const name=String(document.getElementById('userRegistrationEditName').value||'').trim();
   const description=String(document.getElementById('userRegistrationEditDescription').value||'').trim();
   if(!name){alert('Informe o nome de acesso.');return;}
+  const currentPrimary=explicitPortalUnit(users[idx].unit)||'matriz';
+  const accessUnits=unitChoice==='todas'
+    ? ['matriz','filial']
+    : [explicitPortalUnit(unitChoice)||'matriz'];
+  const primaryUnit=unitChoice==='todas'
+    ? (currentPrimary==='filial'?'Unidade Linhares - Filial':'Unidade São Bento do Sul - Matriz')
+    : canonicalPortalUnit(unitChoice);
+
   const updated={
     ...users[idx],name,description,
-    unit:canonicalPortalUnit(unit),
+    unit:primaryUnit,
+    accessUnits,
     sector,
     updatedAt:new Date().toISOString(),
     updatedBy:getSession()?.name||'SGQ'
@@ -3812,7 +3826,7 @@ async function saveUserRegistrationEditor(){
 
   await showNucleoLoading('Salvando alteração na base central...','Atualizando cadastro');
   try{
-    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:canonicalPortalUnit(unit),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
+    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:primaryUnit,accessUnits:JSON.stringify(accessUnits),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
     if(!result?.sucesso)throw new Error(result?.erro||'Alteração não confirmada.');
     const fresh=await portalJsonp({acao:'portal_load'},60000);
     if(!fresh?.sucesso)throw new Error('Nome salvo; sincronize novamente para atualizar o cadastro.');
