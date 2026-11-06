@@ -16772,7 +16772,31 @@ function nucleoPersonPermissions(user){
  return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
 }
 function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
-function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
+function nucleoPersonUnits(user){
+  user=user||{};
+  let raw=user.accessUnits;
+  let units=[];
+
+  if(Array.isArray(raw)){
+    units=raw.slice();
+  }else if(typeof raw==='string'&&raw.trim()){
+    const txt=raw.trim();
+    try{
+      const parsed=JSON.parse(txt);
+      if(Array.isArray(parsed))units=parsed;
+    }catch(_){
+      units=txt.split(/[,;|/]+/);
+    }
+  }
+
+  units=units.map(v=>explicitPortalUnit(v)).filter(Boolean);
+  units=[...new Set(units)];
+
+  if(units.length)return units;
+  if(user.role==='admin')return ['matriz','filial'];
+  if(user.role==='quality')return ['filial'];
+  return [explicitPortalUnit(user.unit)||'matriz'];
+}
 function nucleoApplyPersonAccess(){
  const user=getSession();if(!user?.permissions)return;
  const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
