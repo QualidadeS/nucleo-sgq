@@ -15262,27 +15262,31 @@ function wasRoSubmittedByCurrentUser(ro){
 }
 
 
+function assignedRoMatchesPdca(ro,p){
+  const roKey=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
+  const pdcaKey=String(p?.ro||p?.roId||p?.numeroRo||'').trim();
+  if(!roKey||!pdcaKey)return false;
+  // A base central pode devolver a mesma R.O. com campos/formatos diferentes.
+  // A comparação legada preserva a origem para não misturar RO interna e externa.
+  return roKey===pdcaKey||roNumbersSameLegacy(roKey,pdcaKey);
+}
 function assignedRoHasReceivedPdca(ro){
   if(!ro)return false;
   const key=String(ro.numero||ro.id||ro.codigo||'').trim();
   if(!key)return false;
-
   // A própria marcação "Tem PDCA" na triagem já significa resposta recebida.
   // Isso cobre registros antigos criados antes de existir pdca_sent automático.
   if(pdcaExternalExists(ro))return true;
-
-  return getAllSentPdcas().some(p=>
-    String(p?.ro||p?.roId||p?.numeroRo||'').trim()===key
-  );
+  return getAllSentPdcas().some(p=>assignedRoMatchesPdca(ro,p));
 }
-
 function getPdcaReturnForRo(ro){
   const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
   if(!key)return null;
   const sector=ro.__assignedSector||ro.__triageRecord?.responsibleSector||'';
-  return getAllSentPdcas().find(p=>String(p.ro||p.roId||p.numeroRo||'').trim()===key&&(!sector||normalizeAnswer(p.setor||'')===normalizeAnswer(sector)))||null;
+  const matches=getAllSentPdcas().filter(p=>assignedRoMatchesPdca(ro,p));
+  // Prefere o mesmo setor; PDCAs antigos sem setor continuam vinculados à RO.
+  return matches.find(p=>!sector||!String(p.setor||'').trim()||normalizeAnswer(p.setor)===normalizeAnswer(sector))||matches[0]||null;
 }
-
 function complainantActionState(p){
   if(!p)return {code:'waiting',label:'Aguardando retorno',reason:'O PDCA ainda não foi recebido.'};
 
