@@ -14640,21 +14640,14 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
-    let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
-    const confirmed=resolvedTriageForRo(r,renderTriageMap);
-    if(confirmed?.decision&&confirmed.decision!=='directed')records=[confirmed];
-    // Recuperação segura: se SGQ_TRIAGENS estiver vazio/desatualizado, mas a
-    // própria R.O. importada ainda trouxer setor causa, ela continua atribuída.
-    // Não exige status operacional aqui, pois versões anteriores chegaram a
-    // limpar esse campo no cache e isso fazia a lista inteira desaparecer.
-    if(!records.length){
-      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
-      const norm=normalizeAnswer(sheetSector);
-      if(sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(norm)){
-        const syntheticKey=triageCompositeKey(base,sheetSector);
-        records=[{roKey:syntheticKey,roNumber:base,decision:'directed',responsibleSector:sheetSector,importedFromSheet:true,__synthetic:true}];
-      }
-    }
+    let records=(assignedTriageByRo.get(base)||[]).filter(t=>
+      String(t.decision||'')==='directed' &&
+      String(t.responsibleSector||t.setorDirecionado||'').trim() &&
+      !hiddenAssigned.has(String(t.roKey||''))
+    );
+
+    // R.O.s atribuídas deve refletir somente triagens reais salvas.
+    // Não criar direcionamento sintético a partir de setor da planilha/R.O.
     if(!records.length)return [];
     // Uma linha visual por R.O. + setor. Registros legados/duplicados não podem
     // reaparecer como uma segunda linha após atualizar o PDCA.
@@ -14675,17 +14668,15 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
-      const tri=getRoTriageRecord(r,renderTriageMap);
-      // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
-      // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
-      // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
-      const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
-      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
-      const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
-      const assignedBySheet=validSheetSector;
-      const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
-      if(!assignedByTriage && !assignedBySheet)return false;
-      // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
+      const tri=r.__triageRecord||getRoTriageRecord(r,renderTriageMap);
+      const assignedByTriage=
+        !!tri &&
+        String(tri.decision||'')==='directed' &&
+        !!String(tri.responsibleSector||tri.setorDirecionado||'').trim();
+
+      if(!assignedByTriage)return false;
+
+      // ADM vê toda triagem direcionada; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
     .map(r=>isAdmin()?r:getOperationalRoView(r))
@@ -14901,7 +14892,77 @@ function view(id){
   setTimeout(refreshRoPdfAccess,0);
   setNav('ros');
 }function fillDetail(){
-  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';pdcaBtn.disabled=noPDCA||contest;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!noPDCA&&!contest){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
+  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';pdcaBtn.disabled=noPDCA||contest;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!noPDCA&&!contest){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';renderRoDirectionReasonReadOnly();refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
+
+function roDirectionReasonRecordsForCurrentUser(ro){
+  if(!ro)return [];
+  const base=String(triageBaseRoNumber(ro)||ro.numero||ro.id||ro.codigo||'').trim();
+  if(!base)return [];
+
+  const records=getTriageRecordsForRoNumber(base)
+    .filter(t=>t?.decision==='directed' && String(t.assignmentReason||'').trim());
+
+  if(isAdmin())return records;
+
+  const session=getSession()||{};
+  const email=String(session.email||'').trim().toLowerCase();
+
+  return records.filter(t=>{
+    const sector=String(t.responsibleSector||'').trim();
+    const directedEmail=String(t.responsibleUserEmail||'').trim().toLowerCase();
+
+    // Gestor pode visualizar o motivo dos setores que acompanha.
+    if(isManager() && managesSector(sector))return true;
+
+    // Vínculo explícito de setor/unidade.
+    const linked=(session.sectorMemberships||[]).some(m=>
+      normalizePortalUnit(m?.unit)===roUnit(ro) &&
+      normalizeAnswer(m?.sector)===normalizeAnswer(sector)
+    );
+    if(linked){
+      return !directedEmail || directedEmail===email;
+    }
+
+    // Usuário comum: precisa pertencer ao setor e, quando há pessoa específica,
+    // ser exatamente a pessoa que recebeu o direcionamento.
+    if(!sameSector(sector))return false;
+    if(directedEmail && directedEmail!==email)return false;
+    return true;
+  });
+}
+
+function renderRoDirectionReasonReadOnly(){
+  const box=document.getElementById('roDirectionReasonReadOnly');
+  const content=document.getElementById('roDirectionReasonReadOnlyContent');
+  if(!box||!content)return;
+
+  const records=roDirectionReasonRecordsForCurrentUser(selected);
+  if(!records.length){
+    box.classList.add('hidden');
+    content.innerHTML='';
+    return;
+  }
+
+  box.classList.remove('hidden');
+
+  if(records.length===1){
+    const r=records[0];
+    const sector=String(r.responsibleSector||'').trim();
+    const reason=String(r.assignmentReason||'').trim();
+    content.innerHTML=
+      (isAdmin() && sector ? '<div class="small" style="margin-bottom:4px"><b>'+escapeHtml(sector)+'</b></div>' : '')+
+      '<div>'+escapeHtml(reason)+'</div>';
+    return;
+  }
+
+  content.innerHTML=records.map(r=>
+    '<div style="padding:8px 0;border-bottom:1px solid #e5e7eb">'+
+      '<div class="small"><b>'+escapeHtml(r.responsibleSector||'Setor')+'</b></div>'+
+      '<div style="margin-top:3px">'+escapeHtml(r.assignmentReason||'')+'</div>'+
+    '</div>'
+  ).join('');
+}
+
 function roSummaryData(){
   const source=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
   const visibleRos=source
@@ -15048,6 +15109,17 @@ function getPdcaReturnForRo(ro){
 
 function complainantActionState(p){
   if(!p)return {code:'waiting',label:'Aguardando retorno',reason:'O PDCA ainda não foi recebido.'};
+
+  // Receber/importar um PDCA não significa que exista uma ação em andamento.
+  // Só considera ação quando há ação efetivamente cadastrada no PDCA.
+  const actions=allPdcaActionsForRecord(p);
+  if(!actions.length){
+    return {
+      code:'no_action',
+      label:'Sem ação informada',
+      reason:'O PDCA foi recebido, mas não há ação cadastrada para acompanhamento.'
+    };
+  }
 
   const base=inferActionStatus(p);
   if(base.code==='done'){
