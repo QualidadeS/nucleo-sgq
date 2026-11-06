@@ -13582,7 +13582,7 @@ function collectRncTemplateForm(){
   const base=getRncProcessTemplate(),val=id=>document.getElementById(id)?.value||'';
   let fixedImages=base.fixedImages||[],photoFields=base.photoFields||[],fieldLayout=base.fieldLayout||defaultRncFieldLayout(),headerLayout=base.headerLayout||defaultRncHeaderLayout();try{fixedImages=JSON.parse(val('tplFixedImagesData')||'[]')}catch(e){}try{photoFields=JSON.parse(val('tplPhotoFieldsData')||'[]')}catch(e){}try{fieldLayout=JSON.parse(val('tplFieldLayoutData')||'[]')}catch(e){}try{headerLayout=JSON.parse(val('tplHeaderLayoutData')||'[]')}catch(e){}return {...base,fieldLayout,headerLayout,layoutId:val('tplLayoutBase')||'',code:val('tplCode').trim()||base.code,name:val('tplName').trim()||base.name,revision:val('tplRevision').trim()||base.revision,title:val('tplTitle').trim()||base.title,supplierResponseTitle:val('tplSupplierResponseTitle').trim()||base.supplierResponseTitle||'RESPOSTA DO FORNECEDOR',supplierResponseNote:val('tplSupplierResponseNote'),footerText:val('tplFooterText'),pageBreakBeforeSupplier:!!document.getElementById('tplPageBreakSupplier')?.checked,repeatHeaderOnPages:!!document.getElementById('tplRepeatHeader')?.checked,repeatFooterOnPages:!!document.getElementById('tplRepeatFooter')?.checked,sendFormat:val('tplSendFormat')||base.sendFormat||'pdf',logoText:val('tplLogoText').trim()||'SETA',logoDataUrl:val('tplLogoData'),logoFileId:window.__rncTemplateLogoChanged?'':String(base.logoFileId||''),layout:{logoWidth:Number(val('tplLogoWidth'))||19,metaWidth:Number(val('tplMetaWidth'))||25,headerHeight:Number(val('tplHeaderHeight'))||13,rowHeight:Number(val('tplRowHeight'))||7,borderWidth:Number(val('tplBorderWidth'))||0.65,fontScale:Number(val('tplFontScale'))||100,sectionHeight:Number(val('tplSectionHeight'))||5},fixedImages,photoFields,accent:val('tplAccent')||'#1f4e78',updatedAt:new Date().toISOString(),sections:base.sections.map((x,i)=>({...x,enabled:!!document.getElementById('tplSec'+i)?.checked,label:val('tplSecLabel'+i).trim()||x.label,align:val('tplSecAlign'+i)||x.align||'left',owner:val('tplSecOwner'+i)||x.owner||'sgq'}))};
 }
-const RNC_HEADER_STANDARD_KEY='nucleo_rnc_header_standard_v2',RNC_FOOTER_STANDARD_KEY='nucleo_rnc_footer_standard_v2';
+const NUCLEO_APP_RNC_HEADER_STANDARD_KEY='nucleo_rnc_header_standard_v2',NUCLEO_APP_RNC_FOOTER_STANDARD_KEY='nucleo_rnc_footer_standard_v2';
 function rncStandardUnit(){return getSession()?.role==='quality'?'filial':document.getElementById('qualityConfigUnit')?.value||'matriz';}
 function rncStandardFeedback(message,type='info'){
   let box=document.getElementById('rncStandardFeedback');
@@ -13616,7 +13616,7 @@ async function saveRncHeaderAsStandard(button){
     const header={version:2,headerLayout:t.headerLayout,logoDataUrl:t.logoDataUrl||'',logoFileId:t.logoFileId||'',logoText:t.logoText,layout:{logoWidth:t.layout.logoWidth,metaWidth:t.layout.metaWidth,headerHeight:t.layout.headerHeight},savedAt:new Date().toISOString()};
     const x=await rncStandardMutation({header});
     if(!x.header)throw new Error('A base central não devolveu o cabeçalho salvo.');
-    safeStorageSet(RNC_HEADER_STANDARD_KEY,JSON.stringify(x.header));
+    safeStorageSet(NUCLEO_APP_RNC_HEADER_STANDARD_KEY,JSON.stringify(x.header));
     rncStandardFeedback('Cabeçalho padrão salvo e confirmado na base central.','success');
     if(button){button.textContent='✓ Cabeçalho salvo';setTimeout(()=>{button.textContent=original},1800);}
   }catch(e){
@@ -13633,7 +13633,7 @@ async function saveRncFooterAsStandard(button){
     const footer={version:2,footerText:t.footerText,footerIds,footerSections:(t.sections||[]).filter(x=>footerIds.includes(x.id)),footerFields:(t.fieldLayout||[]).filter(x=>footerIds.includes(x.section)||x.owner==='footer'),savedAt:new Date().toISOString()};
     const x=await rncStandardMutation({footer});
     if(!x.footer)throw new Error('A base central não devolveu o rodapé salvo.');
-    safeStorageSet(RNC_FOOTER_STANDARD_KEY,JSON.stringify(x.footer));
+    safeStorageSet(NUCLEO_APP_RNC_FOOTER_STANDARD_KEY,JSON.stringify(x.footer));
     rncStandardFeedback('Rodapé padrão salvo e confirmado na base central.','success');
     if(button){button.textContent='✓ Rodapé salvo';setTimeout(()=>{button.textContent=original},1800);}
   }catch(e){
@@ -13653,7 +13653,7 @@ async function applyRncHeaderStandard(button){
     rncStandardFeedback('Buscando cabeçalho padrão salvo…');
     const standards=await rncLoadCentralStandards();
     let x=standards.header;
-    if(!x){try{x=JSON.parse(localStorage.getItem(RNC_HEADER_STANDARD_KEY)||'null')}catch(_){x=null}}
+    if(!x){try{x=JSON.parse(localStorage.getItem(NUCLEO_APP_RNC_HEADER_STANDARD_KEY)||'null')}catch(_){x=null}}
     if(!x)throw new Error('Ainda não existe cabeçalho padrão salvo para esta unidade.');
 
     // Substitui de fato a estrutura que o editor usa e redesenha os controles.
@@ -13686,7 +13686,7 @@ async function applyRncFooterStandard(button){
     rncStandardFeedback('Buscando rodapé padrão salvo…');
     const standards=await rncLoadCentralStandards();
     let x=standards.footer;
-    if(!x){try{x=JSON.parse(localStorage.getItem(RNC_FOOTER_STANDARD_KEY)||'null')}catch(_){x=null}}
+    if(!x){try{x=JSON.parse(localStorage.getItem(NUCLEO_APP_RNC_FOOTER_STANDARD_KEY)||'null')}catch(_){x=null}}
     if(!x)throw new Error('Ainda não existe rodapé padrão salvo para esta unidade.');
 
     const f=document.getElementById('tplFooterText');if(f)f.value=x.footerText||'';
