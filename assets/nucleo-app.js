@@ -1251,8 +1251,10 @@ async function syncPortalBackend(showMessage=false,options={}){
         populateTriageUnits();
         if(!document.getElementById('triageView')?.classList.contains('hidden'))renderTriage();
         if(!document.getElementById('externalRoControlView')?.classList.contains('hidden'))renderExternalRoControl();
-        refreshRoSummary();
-        if(!document.getElementById('roListView')?.classList.contains('hidden'))try{render()}catch(e){}
+        if(!document.getElementById('roListView')?.classList.contains('hidden')){
+          try{refreshRoSummary()}catch(e){}
+          try{render()}catch(e){}
+        }
         if(!document.getElementById('settingsView')?.classList.contains('hidden'))renderOperationalUsers();
         if(!document.getElementById('settingsView')?.classList.contains('hidden'))try{populateAdminCleanupRos();}catch(e){}
         setTimeout(()=>{try{showPendingAnnouncement()}catch(e){}},100);
@@ -11599,19 +11601,10 @@ function saveImportedRosByOrigin(internas,externas){
   const inList=Array.isArray(internas)?internas:[];
   const exList=Array.isArray(externas)?externas:[];
 
-  // Fonte persistente principal: IndexedDB. É adequado para milhares de R.O.s
-  // e não sofre o limite pequeno do localStorage.
-  saveImportedRosDurable(inList,exList).catch(e=>{
-    console.warn('NÚCLEO: falha ao salvar R.O.s no IndexedDB.',e);
-  });
-
-  // Remove a antiga cópia completa que consumia a quota do localStorage.
   try{localStorage.removeItem(IMPORTED_ROS_KEY)}catch(e){}
   try{localStorage.removeItem(IMPORTED_ROS_INTERNA_KEY)}catch(e){}
   try{localStorage.removeItem(IMPORTED_ROS_EXTERNA_KEY)}catch(e){}
 
-  // Mantém apenas um snapshot mínimo no localStorage para compatibilidade.
-  // Nunca guarda o raw completo aqui.
   const tiny=r=>({
     numero:r?.numero||'',
     numeroOriginal:r?.numeroOriginal||r?.numeroPlanilha||'',
@@ -11633,9 +11626,23 @@ function saveImportedRosByOrigin(internas,externas){
     statusControleEncontrado:r?.statusControleEncontrado===true||r?.raw?.__statusControleEncontrado===true
   });
 
-  // Salva apenas se couber; a persistência real já está no IndexedDB.
   safeStorageSet(IMPORTED_ROS_INTERNA_KEY,JSON.stringify(inList.map(tiny)));
   safeStorageSet(IMPORTED_ROS_EXTERNA_KEY,JSON.stringify(exList.map(tiny)));
+
+  // Persiste fora do pico de normalização/renderização e só com raw compacto.
+  const persist=()=>{
+    try{
+      const durableInternas=inList.map(compactRoForStorage);
+      const durableExternas=exList.map(compactRoForStorage);
+      saveImportedRosDurable(durableInternas,durableExternas).catch(e=>{
+        console.warn('NÚCLEO: falha ao salvar R.O.s no IndexedDB.',e);
+      });
+    }catch(e){
+      console.warn('NÚCLEO: falha ao preparar cache compacto de R.O.s.',e);
+    }
+  };
+  if('requestIdleCallback' in window)requestIdleCallback(persist,{timeout:5000});
+  else setTimeout(persist,800);
   return true;
 }
 
@@ -11668,9 +11675,6 @@ function importedRoStorageCounts(){
 function applyImportedRos(records,meta){
   const previousNumbers=ros.map(r=>String(r.numero||''));
 
-  // A API devolve Interna primeiro e Externa depois. Mesmo que uma versão antiga
-  // do backend não tenha colocado __origemBase em cada linha, as quantidades
-  // permitem identificar cada registro sem ambiguidade.
   const qtdInterna=(meta && Number.isFinite(Number(meta.quantidadeInterna)))
     ? Number(meta.quantidadeInterna)
     : null;
@@ -11678,105 +11682,106 @@ function applyImportedRos(records,meta){
     ? Number(meta.quantidadeExterna)
     : null;
 
-  const prepared=records.map((row,index)=>{
-    const copy={...(row||{})};
-    if(!String(copy.__origemBase||'').trim() && qtdInterna!==null){
-      copy.__origemBase=index<qtdInterna?'Interna':'Externa';
-      copy.__ehSac=copy.__origemBase==='Externa';
-    }
-    return copy;
-  });
-
   if(qtdInterna!==null && qtdExterna!==null && (qtdInterna+qtdExterna)!==records.length){
     throw new Error('A API informou quantidades de Interna/Externa incompatíveis com a lista recebida.');
   }
 
-  // Durante uma importação grande, rememberRoOrigin é chamado para cada linha.
-  // Acumula o mapa em memória e envia somente uma gravação central ao final.
+  const authoritativeInterna=meta && typeof meta.quantidadeInterna!=='undefined';
+  const authoritativeExterna=meta && typeof meta.quantidadeExterna!=='undefined';
+  const filteredPeriod=Boolean(meta?.filtroPeriodo?.ativo);
+
+  const incoming=[];
+  const incomingInterna=[];
+  const incomingExterna=[];
+  let hasOriginMarkers=false;
+
   nucleoBulkRoOriginRegistry=getRoOriginRegistry();
-  let incoming;
   try{
-    incoming=prepared.map(normalizeImportedRo).filter(r=>r.numero);
+    for(let index=0;index<records.length;index++){
+      const original=records[index]||{};
+      let source=original;
+      let origin=String(original.__origemBase||'').trim();
+      if(!origin && qtdInterna!==null){
+        origin=index<qtdInterna?'Interna':'Externa';
+        source={...original,__origemBase:origin,__ehSac:origin==='Externa'};
+      }
+      if(origin)hasOriginMarkers=true;
+
+      const normalized=compactRoForStorage(normalizeImportedRo(source,index));
+      if(!normalized?.numero)continue;
+
+      incoming.push(normalized);
+      if(String(normalized.origemBase||'')==='Interna')incomingInterna.push(normalized);
+      else if(String(normalized.origemBase||'')==='Externa')incomingExterna.push(normalized);
+    }
   }finally{
     const registry=nucleoBulkRoOriginRegistry;
     nucleoBulkRoOriginRegistry=null;
     if(registry)saveRoOriginRegistry(registry);
   }
-  // Uma resposta oficial vazia é válida: não mantenha registros antigos por causa dela.
+
   if(!incoming.length && !(meta && Number(meta.quantidadeInterna)===0 && Number(meta.quantidadeExterna)===0))
     throw new Error('Nenhuma R.O. válida foi encontrada.');
 
-  const hasOriginMarkers=prepared.some(x=>String(x?.__origemBase||'').trim());
   let normalized=incoming;
+  let finalInternas=incomingInterna;
+  let finalExternas=incomingExterna;
 
-  // A sincronização oficial informa as quantidades das duas abas.
-  // Se a chamada for parcial/antiga e trouxer somente uma origem, preserva a outra base
-  // em vez de substituir todas as R.O.s por apenas Interna ou apenas Externa.
-  const previousByOrigin=readImportedRosByOrigin();
-  const previous=[...previousByOrigin.internas,...previousByOrigin.externas];
+  if(hasOriginMarkers && !(filteredPeriod || (authoritativeInterna && authoritativeExterna))){
+    const previousByOrigin=readImportedRosByOrigin();
+    const prevInternas=previousByOrigin.internas;
+    const prevExternas=previousByOrigin.externas;
 
-  const incomingInterna=incoming.filter(r=>String(r.origemBase||'')==='Interna');
-  const incomingExterna=incoming.filter(r=>String(r.origemBase||'')==='Externa');
+    let internas=authoritativeInterna ? incomingInterna : (incomingInterna.length ? incomingInterna : prevInternas);
+    let externas=authoritativeExterna ? incomingExterna : (incomingExterna.length ? incomingExterna : prevExternas);
 
-  const authoritativeInterna=meta && typeof meta.quantidadeInterna!=='undefined';
-  const authoritativeExterna=meta && typeof meta.quantidadeExterna!=='undefined';
+    if(!incomingInterna.length && !prevInternas.length && authoritativeInterna)internas=[];
+    if(!incomingExterna.length && !prevExternas.length && authoritativeExterna)externas=[];
 
-  if(hasOriginMarkers){
-    const prevInternas=previous.filter(r=>String(r.origemBase||'')==='Interna');
-    const prevExternas=previous.filter(r=>String(r.origemBase||'')==='Externa');
-
-    // Uma sincronização parcial NÃO pode apagar a outra origem.
-    // Mesmo que uma resposta informe 0 registros de uma origem, preservamos o que
-    // já estava memorizado até recebermos registros concretos dessa origem.
-    const filteredPeriod=Boolean(meta?.filtroPeriodo?.ativo);
-    let internas=(filteredPeriod||authoritativeInterna) ? incomingInterna : (incomingInterna.length ? incomingInterna : prevInternas);
-    let externas=(filteredPeriod||authoritativeExterna) ? incomingExterna : (incomingExterna.length ? incomingExterna : prevExternas);
-
-    // Sem filtro, preserva a outra origem em sincronizações parciais.
-    // Com filtro de período, zero registros é um resultado válido e deve permanecer zero.
-    if(!filteredPeriod){
-      if(!incomingInterna.length && !prevInternas.length && authoritativeInterna)internas=[];
-      if(!incomingExterna.length && !prevExternas.length && authoritativeExterna)externas=[];
-    }
-
+    finalInternas=internas;
+    finalExternas=externas;
     normalized=[...internas,...externas];
   }
 
   applySacRepresentativeOverridesToRos(normalized);
   rebuildRoOriginRegistry(normalized);
 
-  const finalInternas=normalized.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Interna');
-  const finalExternas=normalized.filter(r=>String(r.origemBase||r.raw?.__origemBase||'')==='Externa');
-  saveImportedRosByOrigin(finalInternas,finalExternas);
-
-  try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
-
   ros.splice(0,ros.length,...normalized);
   selected=ros[0]||null;
 
-  // Não apaga a triagem a cada sincronização. Registros antigos sem marcador
-  // de origem precisam preservar a triagem já existente até a origem ser confirmada.
-  // Atualiza somente a tela que estiver realmente aberta.
-  const roListView=document.getElementById('roListView');
-  if(roListView && !roListView.classList.contains('hidden')){
-    try{render()}catch(e){}
-  }
-  refreshRoSummary();
-  if(isAdmin()){
-    const triageView=document.getElementById('triageView');
-    if(triageView && !triageView.classList.contains('hidden')){
-      try{renderTriage()}catch(e){}
+  saveImportedRosByOrigin(finalInternas,finalExternas);
+  try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
+
+  setTimeout(()=>{
+    const roListView=document.getElementById('roListView');
+    const overviewView=document.getElementById('listView');
+
+    if(roListView && !roListView.classList.contains('hidden')){
+      try{render()}catch(e){}
+      try{refreshRoSummary()}catch(e){}
     }
-    const indicatorView=document.getElementById('sgqIndicatorsView');
-    if(indicatorView && !indicatorView.classList.contains('hidden')){
-      try{renderSgqIndicators()}catch(e){}
+
+    if(isAdmin()){
+      const triageView=document.getElementById('triageView');
+      if(triageView && !triageView.classList.contains('hidden')){
+        try{renderTriage()}catch(e){}
+      }
+      const indicatorView=document.getElementById('sgqIndicatorsView');
+      if(indicatorView && !indicatorView.classList.contains('hidden')){
+        try{renderSgqIndicators()}catch(e){}
+      }
+      try{notifyNewImportedRos(previousNumbers,ros)}catch(e){}
     }
-    try{notifyNewImportedRos(previousNumbers,normalized)}catch(e){}
-  }
-  try{renderCurrentOverview()}catch(e){}
-  refreshNotificationBell();
+
+    if(overviewView && !overviewView.classList.contains('hidden')){
+      try{renderCurrentOverview()}catch(e){}
+    }
+    try{refreshNotificationBell()}catch(e){}
+  },0);
+
   return normalized.length;
 }
+
 let importedRoCacheNeedsRefresh=false;
 function restoreImportedRos(){
   try{
@@ -11944,6 +11949,7 @@ async function refreshRosFromOfficialSheets(force=false){
     if(!Array.isArray(data?.dados))throw new Error('Resposta sem lista de R.O.s.');
 
     applyImportedRos(data.dados,data);
+    data.dados=null;
     importedRoCacheNeedsRefresh=false;
     const syncMsg=document.getElementById('syncMsg');
     if(syncMsg){syncMsg.textContent='R.O.s e SACs atualizados pelas planilhas centrais às '+new Date().toLocaleTimeString('pt-BR')+'.';syncMsg.className='statusline okline'}
@@ -16411,6 +16417,7 @@ async function syncNow(){
     updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
     await new Promise(resolve=>requestAnimationFrame(resolve));
     const qty=applyImportedRos(data.dados,data);
+    data.dados=null;
     updateNucleoLoading('Confirmando configurações e cadastros na base central...');
     const centralOk=await syncPortalBackend(false,{foreground:false});
     if(!centralOk)throw new Error('As R.O.s foram lidas, mas a base central não confirmou todos os dados do Núcleo.');
@@ -16433,7 +16440,8 @@ ensurePreviewSession();
 initLogin();
 if(getSession()){
   nucleoSetCentralSyncState('syncing','Cache local exibido temporariamente. Confirmando dados com a base central…');
-  render();
+  const roListView=document.getElementById('roListView');
+  if(roListView && !roListView.classList.contains('hidden'))try{render()}catch(e){}
 }
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
@@ -16450,7 +16458,16 @@ setTimeout(async()=>{
     if((!getSession()?.permissions||nucleoPersonCan('ros')) && getSession()?.authToken===token){
       void refreshLegacyRoCacheFromApi(false).then(()=>{
         if(getSession()?.authToken!==token)return;
-        try{render();refreshRoSummary();refreshMenuNotificationBadges();}catch(e){}
+        try{
+          const roListView=document.getElementById('roListView');
+          const overviewView=document.getElementById('listView');
+          if(roListView && !roListView.classList.contains('hidden')){
+            render();
+            refreshRoSummary();
+          }
+          if(overviewView && !overviewView.classList.contains('hidden'))renderCurrentOverview();
+          refreshMenuNotificationBadges();
+        }catch(e){}
       }).catch(e=>console.warn('Atualização de R.O.s em segundo plano:',e));
     }
   }
