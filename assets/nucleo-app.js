@@ -812,11 +812,6 @@ function portalJsonp(params,timeoutMs=60000,baseOverride=''){
     const parts=[];
     const requestParams={...(params||{})};
     const actionName=String(requestParams.acao||'').toLowerCase();
-    // Redundância intencional: algumas chamadas estão chegando ao Web App sem
-    // preservar "acao". nucleoAction é exclusivo do Núcleo e o backend o prioriza.
-    if(actionName && !requestParams.nucleoAction){
-      requestParams.nucleoAction=actionName;
-    }
     const sessionToken=String(getSession()?.authToken||'').trim();
     if(sessionToken && nucleoActionNeedsCentralConfirmation(actionName) && !nucleoCentralDataConfirmed()){
       cleanup();
@@ -3615,7 +3610,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
-  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&nucleoPersonUnits(u).includes('filial'));
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&explicitPortalUnit(u.unit)==='filial');
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -3772,12 +3767,7 @@ function openUserRegistrationEditor(key){
   const parts=splitPersonNameDescription(u.name,u.description);
   document.getElementById('userRegistrationEditName').value=parts.name;
   document.getElementById('userRegistrationEditDescription').value=parts.description;
-  if(unitSel){
-    const units=nucleoPersonUnits(u);
-    unitSel.value=units.includes('matriz')&&units.includes('filial')
-      ? 'todas'
-      : canonicalPortalUnit(u.unit);
-  }
+  if(unitSel)unitSel.value=canonicalPortalUnit(u.unit);
   if(sectorSel){
     const sectors=getConfiguredSectorsForTriage();
     sectorSel.innerHTML='<option value="">Selecione o setor...</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
@@ -3795,9 +3785,9 @@ async function saveUserRegistrationEditor(){
   if(!nucleoFeatureRequire('users','edit'))return;
   if(!isAdmin())return;
   const key=String(document.getElementById('userRegistrationEditKey')?.value||'');
-  const unitChoice=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
+  const unit=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
   const sector=String(document.getElementById('userRegistrationEditSector')?.value||'').trim();
-  if(!unitChoice){alert('Selecione a unidade.');return}
+  if(!unit){alert('Selecione a unidade.');return}
   if(!sector){alert('Selecione o setor principal.');return}
 
   const users=getOperationalUsers();
@@ -3807,18 +3797,9 @@ async function saveUserRegistrationEditor(){
   const name=String(document.getElementById('userRegistrationEditName').value||'').trim();
   const description=String(document.getElementById('userRegistrationEditDescription').value||'').trim();
   if(!name){alert('Informe o nome de acesso.');return;}
-  const currentPrimary=explicitPortalUnit(users[idx].unit)||'matriz';
-  const accessUnits=unitChoice==='todas'
-    ? ['matriz','filial']
-    : [explicitPortalUnit(unitChoice)||'matriz'];
-  const primaryUnit=unitChoice==='todas'
-    ? (currentPrimary==='filial'?'Unidade Linhares - Filial':'Unidade São Bento do Sul - Matriz')
-    : canonicalPortalUnit(unitChoice);
-
   const updated={
     ...users[idx],name,description,
-    unit:primaryUnit,
-    accessUnits,
+    unit:canonicalPortalUnit(unit),
     sector,
     updatedAt:new Date().toISOString(),
     updatedBy:getSession()?.name||'SGQ'
@@ -3826,7 +3807,7 @@ async function saveUserRegistrationEditor(){
 
   await showNucleoLoading('Salvando alteração na base central...','Atualizando cadastro');
   try{
-    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:primaryUnit,accessUnits:JSON.stringify(accessUnits),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
+    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:canonicalPortalUnit(unit),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
     if(!result?.sucesso)throw new Error(result?.erro||'Alteração não confirmada.');
     const fresh=await portalJsonp({acao:'portal_load'},60000);
     if(!fresh?.sucesso)throw new Error('Nome salvo; sincronize novamente para atualizar o cadastro.');
@@ -3924,7 +3905,7 @@ function clearOperationalUsersFilters(){
 }
 function renderOperationalUsers(){
   const box=document.getElementById('operationalUsersList'); if(!box)return;
-  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||nucleoPersonUnits(u).includes('filial'));
+  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||explicitPortalUnit(u.unit)==='filial');
   let controls=document.getElementById('operationalUsersFilters');
   if(!controls){
     controls=document.createElement('div');controls.id='operationalUsersFilters';
@@ -3948,7 +3929,7 @@ function renderOperationalUsers(){
     const state=u.approvalStatus||'approved';
     return (!query||normalizePersonName([u.name,u.description,u.email,...(u.aliases||[])].join(' ')).includes(query))&&
       (!sector||u.sector===sector||(u.managedSectors||[]).includes(sector))&&
-      (!unit||nucleoPersonUnits(u).includes(explicitPortalUnit(unit)))&&
+      (!unit||explicitPortalUnit(u.unit)===explicitPortalUnit(unit))&&
       (!status||(status==='inactive'?['inactive','disabled'].includes(state):state===status));
   }).sort((a,b)=>Number(b.approvalStatus==='pending')-Number(a.approvalStatus==='pending')||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   const users=filtered.slice(0,operationalUsersLimit);
@@ -5121,59 +5102,43 @@ async function openRoPdf(id){
   const wanted=String(id??'').trim();
   const ro=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===wanted);
 
-  if(!ro){alert('Não encontrei os dados desta R.O. para gerar o PDF.');return;}
+  if(!ro){
+    alert('Não encontrei os dados desta R.O. para gerar o PDF.');
+    return;
+  }
 
   try{
-    const unit=explicitRecordUnit(ro);
-    let model=nucleoSystemFormat('ro',unit),assets={};
-
-    // O modelo precisa ser relido ANTES de decidir qual gerador usar. A versão
-    // anterior só consultava a base quando o cache local já tinha universalLayout;
-    // por isso um cache antigo fazia a R.O. continuar abrindo no PDF legado.
-    await showNucleoLoading('Carregando o modelo atual da R.O.…','Conferindo a estrutura salva na base central.');
-    try{
-      const fresh=await portalJsonp({acao:'nucleo_drive_process_formats',unit,kind:'ro'},60000);
-      if(fresh?.sucesso&&fresh.formats?.ro){
-        model=fresh.formats.ro;
-        assets=fresh;
-        // Atualiza o cache para as próximas telas, sem depender de recarregar a página.
-        try{
-          const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');
-          const own=configs.find(x=>x.id===unit)||{id:unit,unit};
-          own.documentFormats={...(own.documentFormats||{}),ro:model};
-          localStorage.setItem('nucleo-unit-configs',JSON.stringify(configs.filter(x=>x.id!==unit).concat(own)));
-        }catch(_){ }
-      }
-    }catch(e){
-      console.warn('Não foi possível reler o modelo atual da R.O.; usando a cópia local.',e);
-    }finally{
-      hideNucleoLoading(true);
-    }
-
-    const u=model?.universalLayout;
-    const hasUniversal=!!(u&&Number(u.version)>=2&&(Array.isArray(u.headerGrid)||Array.isArray(u.bodyGrid)||Array.isArray(u.footerGrid)));
-    if(hasUniversal){
-      try{
-        updateNucleoLoading('Carregando as evidências da R.O.…','Incorporando as fotos sem depender do login do Drive.');
-        await nucleoLoadRoEvidenceDataUrls_(ro);
-      }catch(e){
-        console.warn('Não foi possível incorporar as evidências pela API.',e);
-      }finally{
-        hideNucleoLoading(true);
-      }
-      nucleoShowRoModelPreview(ro,model,assets);
-      return;
-    }
-
     let blob;
-    if(model?.design){
-      await showNucleoLoading('Gerando PDF com o modelo da unidade…','Aplicando o modelo salvo pela base central.');
+    if(nucleoSystemFormat('ro',explicitRecordUnit(ro))?.design){
+      await showNucleoLoading('Gerando PDF com o modelo da unidade…','O logo, cabeçalho e rodapé serão aplicados pela base central.');
       try{const result=await portalJsonp({acao:'portal_ro_model_pdf',ro:ro.numero||ro.id||ro.codigo,origin:ro.origem||ro.origin||''},90000);if(!result?.sucesso||!result.base64)throw Error(result?.erro||'PDF não confirmado pela base central.');blob=new Blob([Uint8Array.from(atob(result.base64),c=>c.charCodeAt(0))],{type:'application/pdf'});}finally{hideNucleoLoading(true);}
     }else blob=createRoPdfBlob(ro);
 
-    if(!(blob instanceof Blob)||blob.size===0)throw new Error('O arquivo PDF foi gerado vazio.');
-    showPdfBlob(blob,(ro.numero||ro.id||ro.codigo||'RO')+'.pdf');
-  }catch(err){alert('Erro ao gerar o PDF: '+(err?.message||String(err)));}
+    if(!(blob instanceof Blob) || blob.size===0){
+      throw new Error('O arquivo PDF foi gerado vazio.');
+    }
+
+    const url=URL.createObjectURL(blob);
+    const nome=(ro.numero||ro.id||ro.codigo||'RO')+'.pdf';
+
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=nome;
+    a.target='_self';
+    a.style.position='fixed';
+    a.style.left='-9999px';
+    document.body.appendChild(a);
+
+    a.click();
+
+    setTimeout(()=>{
+      try{a.remove();}catch(e){}
+      try{URL.revokeObjectURL(url);}catch(e){}
+    },10000);
+
+  }catch(err){
+    alert('Erro ao gerar o PDF: '+(err?.message||String(err)));
+  }
 }
 
 function openCurrentRoPdf(){
@@ -7192,25 +7157,6 @@ function saveDeletedTriageKeys(set){
   try{localStorage.setItem(DELETED_TRIAGE_KEYS_KEY,JSON.stringify([...set]))}catch(e){}
 }
 
-function getRealSavedTriageMap(){
-  let map=new Map();
-  try{
-    const arr=JSON.parse(localStorage.getItem(TRIAGE_KEY)||'[]');
-    if(Array.isArray(arr)){
-      arr.forEach(x=>{
-        const key=String(x?.roKey||'').trim();
-        if(!key)return;
-        // Somente registros que realmente existem na coleção de triagem.
-        // Nada é reconstruído a partir de setor/status da R.O. ou da planilha.
-        map.set(key,x);
-      });
-    }
-  }catch(e){
-    map=new Map();
-  }
-  return map;
-}
-
 function getSavedTriageMap(){
   let map=new Map();
   try{
@@ -8081,7 +8027,7 @@ async function saveTriageRecord(){
     let totalSent=0;
     try{
       updateNucleoLoading('Enviando os e-mails por setor…','Processando');
-      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:(record.assignmentReason||'Não informado')})))},90000);
+      const result=await portalJsonp({acao:'portal_send_directed_ro_email',ro:roNumber,setor:savedRecords[0]?.responsibleSector||'',unidade:roUnitValue||triageRo.unidade||'',tipoRO:triageRo.tipoRO||triageRo.tipo||'',cliente:triageRo.cliente||'',registrante:triageRo.registrante||'',assignments:JSON.stringify(savedRecords.map(record=>({sector:record.responsibleSector,email:record.responsibleUserEmail||'',reason:'Motivo do direcionamento: '+(record.assignmentReason||'Não informado')+'. É necessário analisar a ocorrência e responder o PDCA.'})))},90000);
       if(!Array.isArray(result?.results))throw new Error(result?.erro||'Atualize a implantação do Apps Script para a revisão 55.');
       totalSent=result.results.filter(r=>r.sucesso).length;
       result.results.filter(r=>!r.sucesso).forEach(r=>emailErrors.push(r.sector+': '+r.erro));
@@ -14413,6 +14359,34 @@ function pdcaExternalExists(ro){
   const tri=getRoTriageRecord(ro);
   return tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external';
 }
+
+// R.O. com PDCA não pertence mais à fila de "R.O.s atribuídas".
+// Esta verificação reaproveita as mesmas evidências que o Núcleo já usa para
+// reconhecer "Tem PDCA": marcação SGQ, PDCA recebido/enviado e legado reconciliado.
+function assignedRoHasPdcaEvidence(ro){
+  if(!ro)return false;
+
+  if(pdcaExternalExists(ro))return true;
+  if(getPdcaReturnForRo(ro))return true;
+
+  const status=normalizeAnswer(String(ro?.status||ro?.statusPlanilha||ro?.raw?.__statusOperacional||''));
+  const pdca=normalizeAnswer(String(ro?.pdca||ro?.raw?.__pdca||''));
+  if(pdca==='enviado'||pdca==='apresentado'||status==='pdca enviado')return true;
+
+  try{
+    const rawObj=ro?.raw||{};
+    const canonical=nucleoPdcaReviewCanonical2026(
+      nucleoPdcaReviewRoKey2026(ro),
+      String(ro?.origemBase||rawObj?.__origemBase||'')
+    );
+    const reviewState=nucleoPdcaReviewMap2026()[canonical];
+    const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(ro);
+    const decision=reviewState?.decision||(reviewHasEvidence?'yes':'');
+    if(decision==='yes')return true;
+  }catch(_){ }
+
+  return false;
+}
 function pdcaSituationLabel(ro){
   if(pdcaExternalExists(ro))return 'PDCA externo';
   const status=String(ro?.status||'');
@@ -14458,7 +14432,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
     },hasExternal?'Salvando PDCA externo':'Atualizando necessidade de PDCA');
 
     alert(hasExternal
-      ?'PDCA externo registrado. O setor continuará vendo a R.O., mas não será cobrado por um novo PDCA no Núcleo.'
+      ?'PDCA registrado. A R.O. saiu de R.O.s atribuídas e passa a ser acompanhada em PDCAs recebidos.'
       :'Marcado como PDCA necessário. O setor responsável verá a pendência e o prazo será a próxima terça-feira.');
   }catch(err){
     console.error('[NUCLEO PDCA EXTERNO]',err);
@@ -14624,11 +14598,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const assignedSector=document.getElementById('assignedSectorFilter')?.value||'all';
   const assignedOrigin=document.getElementById('assignedOriginFilter')?.value||'all';
   const assignedUnit=document.getElementById('assignedUnitFilter')?.value||'all';
-  const assignedEmailFilter=document.getElementById('assignedEmailFilter')?.value||'all';
-  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit,assignedEmailFilter]);
+  const filterSignature=JSON.stringify([q,f,roListMode,assignedSector,assignedOrigin,assignedUnit]);
   if(filterSignature!==roListFilterSignature){roListVisibleLimit=60;roListFilterSignature=filterSignature}
   const hiddenAssigned=roListMode==='assigned'?getHiddenAssignedKeys():null;
-  const renderTriageMap=roListMode==='assigned'?getRealSavedTriageMap():null;
+  const renderTriageMap=roListMode==='assigned'?getSavedTriageMap():null;
   const assignedTriageByRo=new Map();
   if(roListMode==='assigned'){
     renderTriageMap.forEach(t=>{
@@ -14659,17 +14632,21 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
-    let records=(assignedTriageByRo.get(base)||[]).filter(t=>{
-      const sector=String(t.responsibleSector||t.setorDirecionado||'').trim();
-      const invalidSector=['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sector));
-      return String(t.decision||'')==='directed' &&
-        !!sector &&
-        !invalidSector &&
-        !hiddenAssigned.has(String(t.roKey||''));
-    });
-
-    // R.O.s atribuídas deve refletir somente triagens reais salvas.
-    // Não criar direcionamento sintético a partir de setor da planilha/R.O.
+    let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
+    const confirmed=resolvedTriageForRo(r,renderTriageMap);
+    if(confirmed?.decision&&confirmed.decision!=='directed')records=[confirmed];
+    // Recuperação segura: se SGQ_TRIAGENS estiver vazio/desatualizado, mas a
+    // própria R.O. importada ainda trouxer setor causa, ela continua atribuída.
+    // Não exige status operacional aqui, pois versões anteriores chegaram a
+    // limpar esse campo no cache e isso fazia a lista inteira desaparecer.
+    if(!records.length){
+      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
+      const norm=normalizeAnswer(sheetSector);
+      if(sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(norm)){
+        const syntheticKey=triageCompositeKey(base,sheetSector);
+        records=[{roKey:syntheticKey,roNumber:base,decision:'directed',responsibleSector:sheetSector,importedFromSheet:true,__synthetic:true}];
+      }
+    }
     if(!records.length)return [];
     // Uma linha visual por R.O. + setor. Registros legados/duplicados não podem
     // reaparecer como uma segunda linha após atualizar o PDCA.
@@ -14685,48 +14662,39 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       };
       if(!prev||score(t)>=score(prev))bySector.set(visualKey,t);
     });
-    return [...bySector.values()]
-      .map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}))
-      .filter(row=>!assignedRoHasReceivedPdca(row));
+    return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
   }) : ros;
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
       if(roListMode!=='assigned')return canViewRO(r);
-      const tri=r.__triageRecord||getRoTriageRecord(r,renderTriageMap);
-      const triSector=String(tri?.responsibleSector||tri?.setorDirecionado||'').trim();
-      const triSectorInvalid=['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(triSector));
-      const assignedByTriage=
-        !!tri &&
-        String(tri.decision||'')==='directed' &&
-        !!triSector &&
-        !triSectorInvalid;
 
-      if(!assignedByTriage)return false;
+      // REGRA DA FILA: se já existe PDCA, a R.O. deixa de ser uma pendência
+      // atribuída e passa a ser acompanhada exclusivamente em PDCAs recebidos.
+      if(assignedRoHasPdcaEvidence(r))return false;
 
-      // Se já existe PDCA recebido para esta R.O./setor, ela sai de "R.O.s atribuídas"
-      // e passa a aparecer somente em "PDCAs recebidos".
-      if(assignedRoHasReceivedPdca(r))return false;
-
-      // ADM vê toda triagem direcionada; usuário/gestor continua limitado ao que pode visualizar.
+      const tri=getRoTriageRecord(r,renderTriageMap);
+      // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
+      // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
+      // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
+      const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
+      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
+      const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
+      const assignedBySheet=validSheetSector;
+      const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
+      if(!assignedByTriage && !assignedBySheet)return false;
+      // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
     })
     .map(r=>isAdmin()?r:getOperationalRoView(r))
     .filter(r=>{
       if(roListMode==='assigned'){
-        const tri=(roListMode==='assigned'&&r.__triageRecord)?r.__triageRecord:getRoTriageRecord(r,renderTriageMap);
+        const tri=getRoTriageRecord(r,renderTriageMap);
         const rowSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.setor||'').trim();
         const rowOrigin=String(r.origemBase||r.raw?.__origemBase||'').trim();
         const rowUnit=String(r.unidade||'').trim();
         if(assignedSector!=='all'&&rowSector!==assignedSector)return false;
         if(assignedOrigin!=='all'&&rowOrigin!==assignedOrigin)return false;
         if(assignedUnit!=='all'&&!sameCanonicalUnit(rowUnit,assignedUnit))return false;
-        // Filtro de erro de e-mail: usa o índice assíncrono exposto pelo módulo de reenvio.
-        if(assignedEmailFilter==='error'){
-          const idx=window.__nucleoEmailErrorIndex;
-          if(!idx||!idx.has(roDigits(String(r.numero||r.id||r.codigo||'')))){
-            return false;
-          }
-        }
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=assignedRoStatus(r,pdcaExternalExists(r));
@@ -14743,7 +14711,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const contest=status==='Em contestação';
     const externalPdca=pdcaExternalExists(r);
     const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
-    const tri=(roListMode==='assigned'&&r.__triageRecord)?r.__triageRecord:getRoTriageRecord(r,renderTriageMap);
+    const tri=getRoTriageRecord(r,renderTriageMap);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r);
     const displayStatus=assignedRoStatus(r,externalPdca);
@@ -14923,77 +14891,7 @@ function view(id){
   setTimeout(refreshRoPdfAccess,0);
   setNav('ros');
 }function fillDetail(){
-  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';pdcaBtn.disabled=noPDCA||contest;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!noPDCA&&!contest){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';renderRoDirectionReasonReadOnly();refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
-
-function roDirectionReasonRecordsForCurrentUser(ro){
-  if(!ro)return [];
-  const base=String(triageBaseRoNumber(ro)||ro.numero||ro.id||ro.codigo||'').trim();
-  if(!base)return [];
-
-  const records=getTriageRecordsForRoNumber(base)
-    .filter(t=>t?.decision==='directed' && String(t.assignmentReason||'').trim());
-
-  if(isAdmin())return records;
-
-  const session=getSession()||{};
-  const email=String(session.email||'').trim().toLowerCase();
-
-  return records.filter(t=>{
-    const sector=String(t.responsibleSector||'').trim();
-    const directedEmail=String(t.responsibleUserEmail||'').trim().toLowerCase();
-
-    // Gestor pode visualizar o motivo dos setores que acompanha.
-    if(isManager() && managesSector(sector))return true;
-
-    // Vínculo explícito de setor/unidade.
-    const linked=(session.sectorMemberships||[]).some(m=>
-      normalizePortalUnit(m?.unit)===roUnit(ro) &&
-      normalizeAnswer(m?.sector)===normalizeAnswer(sector)
-    );
-    if(linked){
-      return !directedEmail || directedEmail===email;
-    }
-
-    // Usuário comum: precisa pertencer ao setor e, quando há pessoa específica,
-    // ser exatamente a pessoa que recebeu o direcionamento.
-    if(!sameSector(sector))return false;
-    if(directedEmail && directedEmail!==email)return false;
-    return true;
-  });
-}
-
-function renderRoDirectionReasonReadOnly(){
-  const box=document.getElementById('roDirectionReasonReadOnly');
-  const content=document.getElementById('roDirectionReasonReadOnlyContent');
-  if(!box||!content)return;
-
-  const records=roDirectionReasonRecordsForCurrentUser(selected);
-  if(!records.length){
-    box.classList.add('hidden');
-    content.innerHTML='';
-    return;
-  }
-
-  box.classList.remove('hidden');
-
-  if(records.length===1){
-    const r=records[0];
-    const sector=String(r.responsibleSector||'').trim();
-    const reason=String(r.assignmentReason||'').trim();
-    content.innerHTML=
-      (isAdmin() && sector ? '<div class="small" style="margin-bottom:4px"><b>'+escapeHtml(sector)+'</b></div>' : '')+
-      '<div>'+escapeHtml(reason)+'</div>';
-    return;
-  }
-
-  content.innerHTML=records.map(r=>
-    '<div style="padding:8px 0;border-bottom:1px solid #e5e7eb">'+
-      '<div class="small"><b>'+escapeHtml(r.responsibleSector||'Setor')+'</b></div>'+
-      '<div style="margin-top:3px">'+escapeHtml(r.assignmentReason||'')+'</div>'+
-    '</div>'
-  ).join('');
-}
-
+  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';pdcaBtn.disabled=noPDCA||contest;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!noPDCA&&!contest){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
 function roSummaryData(){
   const source=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
   const visibleRos=source
@@ -15131,32 +15029,6 @@ function wasRoSubmittedByCurrentUser(ro){
 }
 
 
-function assignedRoHasReceivedPdca(ro){
-  if(!ro)return false;
-  const key=String(ro.numero||ro.id||ro.codigo||'').trim();
-  if(!key)return false;
-
-  const tri=ro.__triageRecord||null;
-  const sector=String(
-    ro.__assignedSector ||
-    tri?.responsibleSector ||
-    tri?.setorDirecionado ||
-    ''
-  ).trim();
-
-  return getAllSentPdcas().some(p=>{
-    const sameRo=String(p?.ro||p?.roId||p?.numeroRo||'').trim()===key;
-    if(!sameRo)return false;
-
-    // Quando a atribuição tem setor, exige o mesmo setor para não esconder
-    // outro direcionamento da mesma R.O. que ainda aguarda resposta.
-    if(sector){
-      return normalizeAnswer(p?.setor||'')===normalizeAnswer(sector);
-    }
-    return true;
-  });
-}
-
 function getPdcaReturnForRo(ro){
   const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
   if(!key)return null;
@@ -15166,17 +15038,6 @@ function getPdcaReturnForRo(ro){
 
 function complainantActionState(p){
   if(!p)return {code:'waiting',label:'Aguardando retorno',reason:'O PDCA ainda não foi recebido.'};
-
-  // Receber/importar um PDCA não significa que exista uma ação em andamento.
-  // Só considera ação quando há ação efetivamente cadastrada no PDCA.
-  const actions=allPdcaActionsForRecord(p);
-  if(!actions.length){
-    return {
-      code:'no_action',
-      label:'Sem ação informada',
-      reason:'O PDCA foi recebido, mas não há ação cadastrada para acompanhamento.'
-    };
-  }
 
   const base=inferActionStatus(p);
   if(base.code==='done'){
@@ -15719,29 +15580,19 @@ function showList(){
 function populateAssignedRoFilters(){
   const sectorEl=document.getElementById('assignedSectorFilter');
   const unitEl=document.getElementById('assignedUnitFilter');
-  const real=[...getRealSavedTriageMap().values()].filter(t=>
-    String(t?.decision||'')==='directed' &&
-    !!String(t?.responsibleSector||t?.setorDirecionado||'').trim()
-  );
-
   if(sectorEl){
     const current=sectorEl.value||'all';
-    const sectors=nucleoVisibleManagerSectors(
-      isManager(),
-      managedSectorsForCurrentUser(),
-      real.map(r=>String(r.responsibleSector||r.setorDirecionado||'').trim()).filter(Boolean)
-    );
+    const sectors=nucleoVisibleManagerSectors(isManager(),managedSectorsForCurrentUser(),getTriageRecords().filter(r=>r.triagemStatus!=='new').map(r=>r.setorDirecionado));
     sectorEl.setAttribute('aria-label',isManager()?'Setor sob minha gestão':'Setor responsável');
     sectorEl.title=isManager()?'Escolha o setor que deseja acompanhar':'Filtrar por setor';
     sectorEl.innerHTML='<option value="all">'+(isManager()?'Todos os meus setores':'Todos os setores')+'</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
     if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
   }
-
   if(unitEl){
     const current=unitEl.value||'all';
-    const units=[...new Set(real
-      .map(r=>String(r.unidade||r.unit||r.roUnit||'').trim())
-      .filter(Boolean))]
+    const units=[...new Set(getTriageRecords()
+      .filter(r=>r.triagemStatus!=='new')
+      .map(r=>String(r.unidade||'').trim()).filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b,'pt-BR'));
     unitEl.innerHTML='<option value="all">Todas as unidades</option>'+units.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
     if([...unitEl.options].some(o=>o.value===current))unitEl.value=current;
@@ -15759,13 +15610,6 @@ function showAssignedRos(){
   render();
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
-  // Carrega o histórico de e-mails em segundo plano.
-  // Quando terminar, rebuildErrorIndex chama render() novamente com o índice pronto.
-  try{
-    if(typeof window.__nucleoRoResendLoadHistory==='function'){
-      window.__nucleoRoResendLoadHistory(true).catch(()=>{});
-    }
-  }catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
   ensureUnitQualitySettings();
   ensureFixedEmailCopiesPanel();
@@ -16911,47 +16755,7 @@ function nucleoPersonPermissions(user){
  return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
 }
 function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
-function nucleoPersonUnits(user){
-  user=user||{};
-  const units=[];
-
-  function add(v){
-    const u=explicitPortalUnit(v);
-    if(u && !units.includes(u))units.push(u);
-  }
-
-  // Unidade principal também faz parte do cadastro.
-  add(user.unit);
-
-  // Acessos explícitos, aceitando array, JSON em texto ou lista simples.
-  let raw=user.accessUnits;
-  let access=[];
-  if(Array.isArray(raw)){
-    access=raw.slice();
-  }else if(typeof raw==='string'&&raw.trim()){
-    const txt=raw.trim();
-    try{
-      const parsed=JSON.parse(txt);
-      if(Array.isArray(parsed))access=parsed;
-    }catch(_){
-      access=txt.split(/[,;|/]+/);
-    }
-  }
-  access.forEach(add);
-
-  // Cadastros antigos podem ter a segunda unidade somente nos vínculos de setor.
-  const memberships=Array.isArray(user.sectorMemberships)?user.sectorMemberships:[];
-  memberships.forEach(m=>add(m?.unit));
-
-  if(user.role==='admin'){
-    add('matriz');
-    add('filial');
-  }else if(user.role==='quality'){
-    add('filial');
-  }
-
-  return units.length?units:['matriz'];
-}
+function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
 function nucleoApplyPersonAccess(){
  const user=getSession();if(!user?.permissions)return;
  const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
