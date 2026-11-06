@@ -14685,7 +14685,9 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       };
       if(!prev||score(t)>=score(prev))bySector.set(visualKey,t);
     });
-    return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
+    return [...bySector.values()]
+      .map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}))
+      .filter(row=>!assignedRoHasReceivedPdca(row));
   }) : ros;
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
@@ -14700,6 +14702,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
         !triSectorInvalid;
 
       if(!assignedByTriage)return false;
+
+      // Se já existe PDCA recebido para esta R.O./setor, ela sai de "R.O.s atribuídas"
+      // e passa a aparecer somente em "PDCAs recebidos".
+      if(assignedRoHasReceivedPdca(r))return false;
 
       // ADM vê toda triagem direcionada; usuário/gestor continua limitado ao que pode visualizar.
       return isAdmin()?true:canViewRO(r);
@@ -15124,6 +15130,32 @@ function wasRoSubmittedByCurrentUser(ro){
   return !!session.email&&String(session.email).trim().toLowerCase()===String(user.email||'').trim().toLowerCase();
 }
 
+
+function assignedRoHasReceivedPdca(ro){
+  if(!ro)return false;
+  const key=String(ro.numero||ro.id||ro.codigo||'').trim();
+  if(!key)return false;
+
+  const tri=ro.__triageRecord||null;
+  const sector=String(
+    ro.__assignedSector ||
+    tri?.responsibleSector ||
+    tri?.setorDirecionado ||
+    ''
+  ).trim();
+
+  return getAllSentPdcas().some(p=>{
+    const sameRo=String(p?.ro||p?.roId||p?.numeroRo||'').trim()===key;
+    if(!sameRo)return false;
+
+    // Quando a atribuição tem setor, exige o mesmo setor para não esconder
+    // outro direcionamento da mesma R.O. que ainda aguarda resposta.
+    if(sector){
+      return normalizeAnswer(p?.setor||'')===normalizeAnswer(sector);
+    }
+    return true;
+  });
+}
 
 function getPdcaReturnForRo(ro){
   const key=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
