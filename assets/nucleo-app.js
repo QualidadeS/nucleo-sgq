@@ -16774,28 +16774,44 @@ function nucleoPersonPermissions(user){
 function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
 function nucleoPersonUnits(user){
   user=user||{};
-  let raw=user.accessUnits;
-  let units=[];
+  const units=[];
 
+  function add(v){
+    const u=explicitPortalUnit(v);
+    if(u && !units.includes(u))units.push(u);
+  }
+
+  // Unidade principal também faz parte do cadastro.
+  add(user.unit);
+
+  // Acessos explícitos, aceitando array, JSON em texto ou lista simples.
+  let raw=user.accessUnits;
+  let access=[];
   if(Array.isArray(raw)){
-    units=raw.slice();
+    access=raw.slice();
   }else if(typeof raw==='string'&&raw.trim()){
     const txt=raw.trim();
     try{
       const parsed=JSON.parse(txt);
-      if(Array.isArray(parsed))units=parsed;
+      if(Array.isArray(parsed))access=parsed;
     }catch(_){
-      units=txt.split(/[,;|/]+/);
+      access=txt.split(/[,;|/]+/);
     }
   }
+  access.forEach(add);
 
-  units=units.map(v=>explicitPortalUnit(v)).filter(Boolean);
-  units=[...new Set(units)];
+  // Cadastros antigos podem ter a segunda unidade somente nos vínculos de setor.
+  const memberships=Array.isArray(user.sectorMemberships)?user.sectorMemberships:[];
+  memberships.forEach(m=>add(m?.unit));
 
-  if(units.length)return units;
-  if(user.role==='admin')return ['matriz','filial'];
-  if(user.role==='quality')return ['filial'];
-  return [explicitPortalUnit(user.unit)||'matriz'];
+  if(user.role==='admin'){
+    add('matriz');
+    add('filial');
+  }else if(user.role==='quality'){
+    add('filial');
+  }
+
+  return units.length?units:['matriz'];
 }
 function nucleoApplyPersonAccess(){
  const user=getSession();if(!user?.permissions)return;
