@@ -236,129 +236,151 @@ function nucleoRoEvidenceFileId_(value){
 }
 
 
-async function nucleoLoadRoEvidenceDataUrls_(ro){
-  const original=nucleoRoEvidenceUrls(ro)
-    .filter(x=>!/^data:image\//i.test(String(x||'')));
+function nucleoEvidenceChunkJsonpV57_(params,timeoutMs=90000){
+  return new Promise((resolve,reject)=>{
+    const base=portalApiBase();
+    if(!base){
+      reject(new Error('URL do Apps Script não configurada.'));
+      return;
+    }
 
+    const cb='nucleoEvidenceV57_'+Date.now()+'_'+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let done=false;
+
+    function cleanup(){
+      try{clearTimeout(timer)}catch(_){}
+      try{delete window[cb]}catch(_){window[cb]=undefined}
+      try{script.remove()}catch(_){}
+    }
+    function finish(err,data){
+      if(done)return;
+      done=true;
+      cleanup();
+      if(err)reject(err);else resolve(data);
+    }
+
+    window[cb]=data=>finish(null,data);
+
+    const request={
+      mode:'nucleo_evidence_chunk_v57',
+      nucleoAction:'portal_ro_evidence_chunk',
+      acao:'portal_ro_evidence_chunk',
+      ...(params||{})
+    };
+
+    const token=String(getSession()?.authToken||'').trim();
+    if(token&&!request.token)request.token=token;
+
+    const parts=[];
+    Object.entries(request).forEach(([k,v])=>{
+      if(v!==undefined&&v!==null){
+        parts.push(encodeURIComponent(k)+'='+encodeURIComponent(String(v)));
+      }
+    });
+    parts.push('callback='+encodeURIComponent(cb));
+    parts.push('_='+Date.now());
+
+    script.async=true;
+    script.src=base+'?'+parts.join('&');
+    script.onerror=()=>finish(new Error('Falha ao carregar a rota dedicada de evidência.'));
+    const timer=setTimeout(
+      ()=>finish(new Error('A rota dedicada da evidência não respondeu dentro do limite.')),
+      timeoutMs
+    );
+
+    document.head.appendChild(script);
+  });
+}
+
+async function nucleoLoadRoEvidenceDataUrls_(ro){
+  const original=nucleoRoEvidenceUrls(ro).filter(x=>!/^data:image\//i.test(String(x||'')));
   ro.__nucleoEvidenceDiagnostics=ro.__nucleoEvidenceDiagnostics||{};
 
   const existing=Array.isArray(ro?.__nucleoEvidenceDataUrls)
-    ? ro.__nucleoEvidenceDataUrls.map(x=>String(x||'').trim()).filter(Boolean)
+    ? ro.__nucleoEvidenceDataUrls.filter(x=>/^data:image\//i.test(String(x||'')))
     : [];
 
-  // Se já temos imagens incorporadas, não busca novamente.
-  if(existing.length && existing.some(x=>/^data:image\//i.test(x))){
-    return existing;
-  }
+  if(existing.length && existing.length>=original.length)return existing;
 
-  if(!original.length)return existing;
+  const ids=[...new Set(original.map(nucleoRoEvidenceFileId_).filter(Boolean))];
+  if(!ids.length)return existing;
 
-  const roId=String(
-    ro?.numero||
-    ro?.id||
-    ro?.codigo||
-    ro?.__numeroApp||
-    ro?.__numeroPlanilha||
-    ''
-  ).trim();
+  const loaded=[];
 
-  try{
-    const result=await portalJsonp({
-      acao:'portal_ro_evidence_data',
-      ro:roId,
-      origin:ro?.__origemBase||ro?.origem||ro?.origin||'',
-      evidence:original.join(', ')
-    },90000);
+  for(const fileId of ids){
+    try{
+      const common={
+        acao:'portal_ro_evidence_chunk',
+        ro:ro.numero||ro.id||ro.codigo,
+        origin:ro.__origemBase||ro.origem||ro.origin||'',
+        fileId:fileId
+      };
 
-    if(!result?.sucesso){
-      const msg=String(result?.erro||'O Apps Script não conseguiu carregar as evidências.');
-      original.forEach(url=>{
-        const id=nucleoRoEvidenceFileId_(url);
-        if(id){
-          ro.__nucleoEvidenceDiagnostics[id]={
-            sucesso:false,
-            etapa:'portal_ro_evidence_data',
-            detalhe:msg
-          };
-        }
-      });
-      return original;
-    }
+      const first=await nucleoEvidenceChunkJsonpV57_({...common,part:0},90000);
 
-    const items=Array.isArray(result.items)?result.items:[];
-    const dataUrls=Array.isArray(result.urls)?result.urls.map(x=>String(x||'').trim()):[];
-    const resolved=original.slice();
-
-    // O backend adiciona uma URL somente quando item.image === true.
-    let imageUrlIndex=0;
-    let embeddedCount=0;
-
-    items.forEach((item,itemIndex)=>{
-      const fileId=String(item?.id||'').trim();
-      const originalIndex=fileId
-        ? original.findIndex(url=>nucleoRoEvidenceFileId_(url)===fileId)
-        : itemIndex;
-
-      if(item?.image===true){
-        const dataUrl=dataUrls[imageUrlIndex++]||'';
-        if(/^data:image\//i.test(dataUrl)){
-          if(originalIndex>=0 && originalIndex<resolved.length){
-            resolved[originalIndex]=dataUrl;
-          }
-          embeddedCount++;
-          if(fileId){
-            ro.__nucleoEvidenceDiagnostics[fileId]={
-              sucesso:true,
-              etapa:'portal_ro_evidence_data',
-              detalhe:'Imagem carregada pelo Apps Script.',
-              mime:String(item?.mime||''),
-              bytes:Number(item?.bytes||0)
-            };
-          }
-          return;
-        }
-      }
-
-      if(fileId){
+      if(!first?.sucesso||!first.chunk){
+        let raw='';
+        try{ raw=JSON.stringify(first); }catch(_){ raw=String(first); }
         ro.__nucleoEvidenceDiagnostics[fileId]={
           sucesso:false,
-          etapa:'portal_ro_evidence_data',
-          detalhe:String(item?.error||'O Apps Script não devolveu este arquivo como imagem.'),
-          mime:String(item?.mime||'')
+          etapa:first?.etapa||'primeiro_chunk',
+          detalhe:'V57 | Rota dedicada não devolveu chunk. '+
+                  'API: '+portalApiBase()+'. '+
+                  (first?.__route?('Rota backend: '+first.__route+'. '):'')+
+                  (first?.erro?('Erro backend: '+first.erro+'. '):'')+
+                  'Resposta recebida: '+raw,
+          http:first?.http||''
         };
+        continue;
       }
-    });
 
-    // Compatibilidade caso o backend devolva URLs sem items.
-    if(!items.length && dataUrls.length){
-      dataUrls.forEach((dataUrl,i)=>{
-        if(i<resolved.length && /^data:image\//i.test(dataUrl)){
-          resolved[i]=dataUrl;
-          embeddedCount++;
+      const totalParts=Math.max(1,Number(first.totalParts)||1);
+      const chunks=new Array(totalParts);
+      chunks[0]=String(first.chunk||'');
+
+      for(let part=1;part<totalParts;part++){
+        const result=await nucleoEvidenceChunkJsonpV57_({...common,part},90000);
+        if(!result?.sucesso||typeof result.chunk!=='string'){
+          throw new Error(
+            (result?.etapa?('Etapa '+result.etapa+': '):'')+
+            (result?.erro||('falha ao carregar o bloco '+(part+1)+' de '+totalParts))
+          );
         }
-      });
-    }
-
-    if(embeddedCount){
-      ro.__nucleoEvidenceDataUrls=resolved;
-      return resolved;
-    }
-
-    return original;
-  }catch(err){
-    const msg=String(err?.message||err||'Falha ao consultar as evidências no Apps Script.');
-    original.forEach(url=>{
-      const id=nucleoRoEvidenceFileId_(url);
-      if(id){
-        ro.__nucleoEvidenceDiagnostics[id]={
-          sucesso:false,
-          etapa:'portal_ro_evidence_data',
-          detalhe:msg
-        };
+        chunks[part]=result.chunk;
       }
-    });
-    return original;
+
+      const base64=chunks.join('');
+      if(!base64){
+        throw new Error('A imagem foi recebida em blocos, mas o base64 ficou vazio.');
+      }
+
+      const mime=String(first.mime||'image/jpeg');
+      const dataUrl='data:'+mime+';base64,'+base64;
+      loaded.push(dataUrl);
+
+      ro.__nucleoEvidenceDiagnostics[fileId]={
+        sucesso:true,
+        etapa:'chunks_concluidos',
+        detalhe:'Imagem recebida em '+totalParts+' bloco(s) pelo Apps Script.',
+        mime:mime,
+        bytes:Number(first.bytes||0)
+      };
+    }catch(err){
+      console.warn('Falha ao incorporar evidência '+fileId,err);
+      ro.__nucleoEvidenceDiagnostics[fileId]={
+        sucesso:false,
+        etapa:'chunks',
+        detalhe:String(err?.message||err||'Falha ao remontar a imagem.')
+      };
+    }
   }
+
+  if(loaded.length){
+    ro.__nucleoEvidenceDataUrls=loaded;
+  }
+
+  return loaded.length?loaded:existing;
 }
 
 function nucleoRoEvidenceDiagnosticText_(ro,url){

@@ -155,7 +155,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
-  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&nucleoPersonUnits(u).includes('filial'));
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&explicitPortalUnit(u.unit)==='filial');
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -302,12 +302,7 @@ function openUserRegistrationEditor(key){
   const parts=splitPersonNameDescription(u.name,u.description);
   document.getElementById('userRegistrationEditName').value=parts.name;
   document.getElementById('userRegistrationEditDescription').value=parts.description;
-  if(unitSel){
-    const units=nucleoPersonUnits(u);
-    unitSel.value=units.includes('matriz')&&units.includes('filial')
-      ? 'todas'
-      : canonicalPortalUnit(u.unit);
-  }
+  if(unitSel)unitSel.value=canonicalPortalUnit(u.unit);
   if(sectorSel){
     const sectors=getConfiguredSectorsForTriage();
     sectorSel.innerHTML='<option value="">Selecione o setor...</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
@@ -327,9 +322,9 @@ async function saveUserRegistrationEditor(){
   if(!nucleoFeatureRequire('users','edit'))return;
   if(!isAdmin())return;
   const key=String(document.getElementById('userRegistrationEditKey')?.value||'');
-  const unitChoice=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
+  const unit=String(document.getElementById('userRegistrationEditUnit')?.value||'').trim();
   const sector=String(document.getElementById('userRegistrationEditSector')?.value||'').trim();
-  if(!unitChoice){alert('Selecione a unidade.');return}
+  if(!unit){alert('Selecione a unidade.');return}
   if(!sector){alert('Selecione o setor principal.');return}
 
   const users=getOperationalUsers();
@@ -339,18 +334,9 @@ async function saveUserRegistrationEditor(){
   const name=String(document.getElementById('userRegistrationEditName').value||'').trim();
   const description=String(document.getElementById('userRegistrationEditDescription').value||'').trim();
   if(!name){alert('Informe o nome de acesso.');return;}
-  const currentPrimary=explicitPortalUnit(users[idx].unit)||'matriz';
-  const accessUnits=unitChoice==='todas'
-    ? ['matriz','filial']
-    : [explicitPortalUnit(unitChoice)||'matriz'];
-  const primaryUnit=unitChoice==='todas'
-    ? (currentPrimary==='filial'?'Unidade Linhares - Filial':'Unidade São Bento do Sul - Matriz')
-    : canonicalPortalUnit(unitChoice);
-
   const updated={
     ...users[idx],name,description,
-    unit:primaryUnit,
-    accessUnits,
+    unit:canonicalPortalUnit(unit),
     sector,
     updatedAt:new Date().toISOString(),
     updatedBy:getSession()?.name||'SGQ'
@@ -358,7 +344,7 @@ async function saveUserRegistrationEditor(){
 
   await showNucleoLoading('Salvando alteração na base central...','Atualizando cadastro');
   try{
-    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:primaryUnit,accessUnits:JSON.stringify(accessUnits),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
+    const result=await portalJsonp({acao:'portal_person_identity',person:updated.personId||users[idx].email||users[idx].name,name,description,unit:canonicalPortalUnit(unit),sector,aliases:JSON.stringify(updated.aliases||[])},60000);
     if(!result?.sucesso)throw new Error(result?.erro||'Alteração não confirmada.');
     const fresh=await portalJsonp({acao:'portal_load'},60000);
     if(!fresh?.sucesso)throw new Error('Nome salvo; sincronize novamente para atualizar o cadastro.');
@@ -402,7 +388,7 @@ function clearOperationalUsersFilters(){
 
 function renderOperationalUsers(){
   const box=document.getElementById('operationalUsersList'); if(!box)return;
-  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||nucleoPersonUnits(u).includes('filial'));
+  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||explicitPortalUnit(u.unit)==='filial');
   let controls=document.getElementById('operationalUsersFilters');
   if(!controls){
     controls=document.createElement('div');controls.id='operationalUsersFilters';
@@ -426,7 +412,7 @@ function renderOperationalUsers(){
     const state=u.approvalStatus||'approved';
     return (!query||normalizePersonName([u.name,u.description,u.email,...(u.aliases||[])].join(' ')).includes(query))&&
       (!sector||u.sector===sector||(u.managedSectors||[]).includes(sector))&&
-      (!unit||nucleoPersonUnits(u).includes(explicitPortalUnit(unit)))&&
+      (!unit||explicitPortalUnit(u.unit)===explicitPortalUnit(unit))&&
       (!status||(status==='inactive'?['inactive','disabled'].includes(state):state===status));
   }).sort((a,b)=>Number(b.approvalStatus==='pending')-Number(a.approvalStatus==='pending')||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   const users=filtered.slice(0,operationalUsersLimit);
