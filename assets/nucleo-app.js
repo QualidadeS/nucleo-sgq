@@ -14413,7 +14413,7 @@ async function setExternalPdca(numero,hasExternal,sector=''){
   }
 }
 
-function assignedRoStatus(r,externalPdcaKnown,sentPdcaKnown,presentationMapKnown,reviewMapKnown){
+function assignedRoStatus(r,externalPdcaKnown,sentPdcaKnown,presentationMapKnown,reviewMapKnown,reviewEvidenceKnown){
   const rawObj=r?.raw||{};
 
   const statusControle=String(
@@ -14478,7 +14478,11 @@ function assignedRoStatus(r,externalPdcaKnown,sentPdcaKnown,presentationMapKnown
   );
   const reviewMap=(reviewMapKnown&&typeof reviewMapKnown==='object')?reviewMapKnown:nucleoPdcaReviewMap2026();
   const reviewState=reviewMap[reviewCanonical];
-  const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(r);
+  // Na tela de atribuídas, a evidência de PDCA já vem indexada em memória.
+  // Evita varrer getAllSentPdcas() novamente para cada R.O. renderizada.
+  const reviewHasEvidence=(reviewEvidenceKnown instanceof Set)
+    ? reviewEvidenceKnown.has(reviewCanonical)
+    : nucleoPdcaReviewHasEvidence2026(r);
   const reviewDecision=reviewState?.decision||(reviewHasEvidence?'yes':'');
   if(reviewDecision==='yes'){
     const sentPdca=(arguments.length>=3)?sentPdcaKnown:getPdcaReturnForRo(r);
@@ -14592,6 +14596,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const renderSentPdcas=roListMode==='assigned'?getAllSentPdcas():[];
   const renderPdcaByRo=new Map();
   const renderPdcaByRoSector=new Map();
+  const renderPdcaEvidence=new Set();
   if(roListMode==='assigned'){
     renderSentPdcas.forEach(p=>{
       const roKey=String(p?.ro||p?.roId||p?.numeroRo||'').trim();
@@ -14599,6 +14604,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       if(!renderPdcaByRo.has(roKey))renderPdcaByRo.set(roKey,p);
       const sectorKey=normalizeAnswer(String(p?.setor||'').trim());
       if(sectorKey)renderPdcaByRoSector.set(roKey+'@@'+sectorKey,p);
+      const canonical=nucleoPdcaReviewCanonical2026(roKey,String(p?.origin||p?.origemBase||''));
+      if(canonical)renderPdcaEvidence.add(canonical);
     });
   }
   const renderPresentationMap=roListMode==='assigned'&&typeof getPdcaPresentationMap==='function'?getPdcaPresentationMap():new Map();
@@ -14612,7 +14619,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const roKey=String(r?.numero||r?.id||r?.codigo||'').trim();
     const sector=String(r?.__assignedSector||r?.__triageRecord?.responsibleSector||tri?.responsibleSector||'').trim();
     const sentPdca=(sector?renderPdcaByRoSector.get(roKey+'@@'+normalizeAnswer(sector)):null)||renderPdcaByRo.get(roKey)||null;
-    const displayStatus=assignedRoStatus(r,externalPdca,sentPdca,renderPresentationMap,renderReviewMap);
+    const displayStatus=assignedRoStatus(r,externalPdca,sentPdca,renderPresentationMap,renderReviewMap,renderPdcaEvidence);
     cached={tri,externalPdca,sentPdca,displayStatus};
     renderComputed.set(r,cached);
     return cached;
@@ -14630,9 +14637,28 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       arr.push(r);
       grouped.set(k,arr);
     });
-    return [...grouped.values()]
-      .map(items=>nucleoPdcaPreferredRo2026(items,renderTriageMap))
-      .filter(Boolean);
+    // Escolhe a R.O. preferida sem chamar nucleoPdcaReviewHasEvidence2026()
+    // dentro do sort. O Set acima transforma a checagem de PDCA em lookup O(1).
+    const preferredFast=items=>{
+      const list=(items||[]).filter(Boolean);
+      if(!list.length)return null;
+      const active=list.filter(r=>!nucleoPdcaReviewOwnTerminal2026(r));
+      const pool=active.length?active:list;
+      let best=null,bestScore=null;
+      pool.forEach(r=>{
+        const sector=String(r?.setorResponsavelPlanilha||r?.raw?.__setorResponsavel||r?.setor||'').trim();
+        const sectorScore=sector&&!['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sector))?1:0;
+        const canonical=nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(r),String(r?.origemBase||r?.raw?.__origemBase||''));
+        const evidenceScore=renderPdcaEvidence.has(canonical)?1:0;
+        const dateScore=nucleoPdcaReviewDate2026(r)?.getTime()||0;
+        const score=[evidenceScore,sectorScore,dateScore];
+        if(!bestScore || score[0]>bestScore[0] || (score[0]===bestScore[0] && (score[1]>bestScore[1] || (score[1]===bestScore[1] && score[2]>bestScore[2])))){
+          best=r;bestScore=score;
+        }
+      });
+      return best;
+    };
+    return [...grouped.values()].map(preferredFast).filter(Boolean);
   })() : ros;
 
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
