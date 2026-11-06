@@ -14363,27 +14363,21 @@ function pdcaExternalExists(ro){
 // R.O. com PDCA não pertence mais à fila de "R.O.s atribuídas".
 // Esta verificação reaproveita as mesmas evidências que o Núcleo já usa para
 // reconhecer "Tem PDCA": marcação SGQ, PDCA recebido/enviado e legado reconciliado.
-function assignedRoHasPdcaEvidence(ro){
+function assignedRoHasPdcaEvidence(ro,sentRoKeys){
   if(!ro)return false;
 
-  if(pdcaExternalExists(ro))return true;
-  if(getPdcaReturnForRo(ro))return true;
+  // A marcação visual "Tem PDCA" vem do próprio vínculo da triagem.
+  // Use o registro já anexado à linha sempre que existir para evitar novas
+  // buscas na base durante o render.
+  const tri=ro.__triageRecord||getRoTriageRecord(ro);
+  if(tri?.pdcaExternal===true || String(tri?.pdcaSource||'').toLowerCase()==='external')return true;
+
+  const numero=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
+  if(numero && sentRoKeys instanceof Set && sentRoKeys.has(normalizeAnswer(numero).replace(/[^a-z0-9]/g,'')))return true;
 
   const status=normalizeAnswer(String(ro?.status||ro?.statusPlanilha||ro?.raw?.__statusOperacional||''));
   const pdca=normalizeAnswer(String(ro?.pdca||ro?.raw?.__pdca||''));
-  if(pdca==='enviado'||pdca==='apresentado'||status==='pdca enviado')return true;
-
-  try{
-    const rawObj=ro?.raw||{};
-    const canonical=nucleoPdcaReviewCanonical2026(
-      nucleoPdcaReviewRoKey2026(ro),
-      String(ro?.origemBase||rawObj?.__origemBase||'')
-    );
-    const reviewState=nucleoPdcaReviewMap2026()[canonical];
-    const reviewHasEvidence=nucleoPdcaReviewHasEvidence2026(ro);
-    const decision=reviewState?.decision||(reviewHasEvidence?'yes':'');
-    if(decision==='yes')return true;
-  }catch(_){ }
+  if(pdca==='enviado'||pdca==='apresentado'||status==='pdca enviado'||status==='respondida'||status==='apresentada')return true;
 
   return false;
 }
@@ -14630,6 +14624,10 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       .filter(Boolean);
   })() : ros;
 
+  const assignedSentRoKeys = roListMode==='assigned' ? new Set(
+    getAllSentPdcas().map(p=>normalizeAnswer(String(p?.ro||p?.roId||p?.numeroRo||'')).replace(/[^a-z0-9]/g,'')).filter(Boolean)
+  ) : new Set();
+
   const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
     let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
@@ -14670,7 +14668,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
 
       // REGRA DA FILA: se já existe PDCA, a R.O. deixa de ser uma pendência
       // atribuída e passa a ser acompanhada exclusivamente em PDCAs recebidos.
-      if(assignedRoHasPdcaEvidence(r))return false;
+      if(assignedRoHasPdcaEvidence(r,assignedSentRoKeys))return false;
 
       const tri=getRoTriageRecord(r,renderTriageMap);
       // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
