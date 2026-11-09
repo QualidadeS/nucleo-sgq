@@ -1,7 +1,7 @@
-/* NÚCLEO | Reenviar e-mail | v34 | fila real de erros sem reenvio */
+/* NÚCLEO | Reenviar e-mail | v35 | ignora falso erro em triagem histórica importada */
 (function(){
-  if(window.__nucleoRoResendEmailV34)return;
-  window.__nucleoRoResendEmailV34=true;
+  if(window.__nucleoRoResendEmailV35)return;
+  window.__nucleoRoResendEmailV35=true;
 
   function esc(v){
     if(typeof escapeHtml==='function')return escapeHtml(String(v??''));
@@ -153,13 +153,15 @@
   window.__nucleoEmailErrorIndex = window.__nucleoEmailErrorIndex || new Set();
 
   function rebuildErrorIndex(history){
-    const idx=new Set(pendingEmailFailures(history).map(x=>x.ro));
+    const failures=pendingEmailFailures(history);
+    // O render principal filtra por roDigits(...), portanto o índice precisa usar
+    // exatamente a mesma chave. A linha continua sendo montada pelo render normal.
+    const idx=new Set(failures.map(x=>roDigits(x.ro)).filter(Boolean));
     window.__nucleoEmailErrorIndex=idx;
-    window.__nucleoPendingEmailFailures=pendingEmailFailures(history);
+    window.__nucleoPendingEmailFailures=failures;
     try{
-      const mode=document.getElementById('assignedEmailFilter')?.value||'all';
-      if(mode==='error')renderPendingErrorView(history);
-      else if(typeof render==='function')render();
+      if(typeof render==='function')render();
+      setTimeout(updateAssignedEmailMarkers,0);
     }catch(e){}
   }
 
@@ -197,6 +199,17 @@
     );
     if(!all.length)return [];
 
+    // Triagens históricas reconhecidas a partir da planilha existiam antes do Núcleo.
+    // Elas não podem herdar um erro genérico de e-mail da R.O. apenas porque o
+    // histórico antigo não informa claramente setor/destinatário.
+    let assignment=null;
+    try{ assignment=currentAssignment(roNumber,sector,ro); }catch(e){}
+    const assignmentNote=norm(assignment?.note||assignment?.motivo||assignment?.reason||'');
+    const legacyImported=assignment?.importedFromSheet===true ||
+      assignment?.__synthetic===true ||
+      assignmentNote.includes('triagem reconhecida automaticamente a partir da planilha') ||
+      assignmentNote.includes('importado da planilha');
+
     const wanted=norm(sector||'');
     if(wanted && wanted!=='nao direcionado'){
       const exact=all.filter(h=>norm(h?.sector||h?.setor||h?.responsibleSector||'')===wanted);
@@ -212,7 +225,19 @@
       });
       if(fuzzy.length)return fuzzy;
 
-      // Fallback 2: histórico legado — tenta descobrir setor somente pelo cadastro do destinatário.
+      // Fallback 2: se a própria atribuição guarda um destinatário, erros antigos
+      // sem setor podem ser vinculados diretamente pelo e-mail responsável.
+      const triEmail=String(assignment?.responsibleUserEmail||'').trim().toLowerCase();
+      if(triEmail){
+        const byResponsibleEmail=all.filter(h=>
+          String(h?.email||h?.recipient||h?.destinatario||'')
+            .split(/[;,]/).map(x=>x.trim().toLowerCase()).filter(Boolean)
+            .includes(triEmail)
+        );
+        if(byResponsibleEmail.length)return byResponsibleEmail;
+      }
+
+      // Fallback 3: histórico legado — tenta descobrir setor pelo cadastro atual do destinatário.
       const inferred=all.filter(h=>{
         const raw=String(h?.email||h?.recipient||h?.destinatario||'').trim();
         const emails=raw.split(/[;,]/).map(x=>x.trim()).filter(Boolean);
@@ -231,10 +256,32 @@
       String(h?.email||h?.recipient||h?.destinatario||'').toLowerCase().includes(emails[0])
     );
 
-    // Fallback final: se a R.O. tem QUALQUER erro no histórico e não foi possível
-    // vincular por setor, retorna todos os eventos da R.O. para que o badge apareça.
+    // Fallback final controlado. Um erro genérico só pode ser associado a uma
+    // importação histórica quando existe UMA ÚNICA atribuição dirigida possível
+    // para a R.O. Assim recuperamos falhas antigas reais sem marcar vários setores
+    // da mesma R.O. como erro por falta de informação no histórico.
     const hasError=all.some(h=>String(h?.status||'').toLowerCase()==='error');
-    if(hasError)return all;
+    if(hasError){
+      if(!legacyImported)return all;
+      try{
+        const rows=getTriageRecordsForRoNumber(roNumber,getSavedTriageMap())||[];
+        const directed=rows.filter(t=>{
+          const sec=String(t?.responsibleSector||t?.setorDirecionado||'').trim();
+          const bad=['','nao direcionado','nao informado','sem setor','-'].includes(norm(sec));
+          return String(t?.decision||'')==='directed' && !bad;
+        });
+        const unique=new Map();
+        directed.forEach(t=>{
+          const sec=String(t?.responsibleSector||t?.setorDirecionado||'').trim();
+          const k=norm(sec);
+          if(k&&!unique.has(k))unique.set(k,t);
+        });
+        if(unique.size===1){
+          const only=[...unique.keys()][0];
+          if(!wanted || wanted===only)return all;
+        }
+      }catch(e){}
+    }
 
     return [];
   }
@@ -730,13 +777,11 @@
     sel.innerHTML='<option value="all">Todos os envios</option><option value="error">Erro no envio</option>';
     sel.value='all';
     sel.addEventListener('change',async()=>{
-      if(sel.value==='error'){
-        const history=await loadHistory(true);
-        renderPendingErrorView(history);
-      }else{
-        try{if(typeof render==='function')render()}catch(e){}
-        setTimeout(updateAssignedEmailMarkers,0);
-      }
+      // O filtro nunca cria uma tabela alternativa. Mantém o render normal e
+      // apenas restringe as mesmas linhas pelo status de envio.
+      if(sel.value==='error')await loadHistory(true);
+      try{if(typeof render==='function')render()}catch(e){}
+      setTimeout(updateAssignedEmailMarkers,0);
     });
     base.insertAdjacentElement('afterend',sel);
     return sel;
@@ -836,10 +881,6 @@
       if(!assigned)return;
       const history=await loadHistory();
       const sel=ensureAssignedEmailFilter();
-      if((sel?.value||'all')==='error'){
-        renderPendingErrorView(history);
-        return;
-      }
 
       document.querySelectorAll('#rows tr').forEach(tr=>{
         const roBtn=tr.querySelector('td:first-child .ro-link-btn');
@@ -854,6 +895,14 @@
         ensureStatusBadge(tr,emailStatus,events);
         applyAssignedEmailFilter(tr,emailStatus.code);
       });
+
+      if((sel?.value||'all')==='error'){
+        const visible=[...document.querySelectorAll('#rows tr')].filter(tr=>tr.style.display!=='none'&&tr.dataset.roEmailStatus==='error').length;
+        const more=document.getElementById('roListMore');
+        if(more)more.innerHTML=visible
+          ? visible+' R.O.(s) com erro de envio ainda sem reenvio confirmado'
+          : 'Nenhuma R.O. com erro de envio ainda sem reenvio confirmado';
+      }
     }catch(e){
       console.warn('[NÚCLEO EMAIL STATUS] Falha ao marcar R.O.s atribuídas.',e);
     }

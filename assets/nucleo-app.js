@@ -428,7 +428,7 @@ function pendingHubData(){
   const sentRos=new Set((Array.isArray(sent)?sent:[]).map(p=>String(p?.ro||p?.numeroRo||p?.roNumber||'').trim()));
 
   const roItems=getAllRoRecords()
-    .filter(ro=>canAdminSeeAllPortalRecords()?true:canViewRO(ro))
+    .filter(ro=>canAdminSeeAllPortalRecords()?true:canViewRO(ro,triageMap))
     .filter(ro=>{
       const st=normalizeAnswer(ro.status||'');
       if(st.includes('cancel')||st.includes('somente para registro'))return false;
@@ -2808,6 +2808,31 @@ function getConfiguredSectors(unit){
   let sectors=normalizeSectorList(own?.sectorList??(unit==='filial'?'':cfg.sectorList));
   if(unit==='todas'){const configs=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]');sectors=[...new Set(sectors.concat(configs.flatMap(c=>normalizeSectorList(c.sectorList))))];}
 
+  // Fonte real dos setores compartilhados: usuários cujo cadastro possui acesso
+  // simultâneo à Matriz e Filial. O mesmo setor passa a aparecer nas duas unidades.
+  try{
+    const shared=[];
+    const users=typeof activeOperationalUsers==='function'?activeOperationalUsers():getOperationalUsers();
+    (users||[]).forEach(u=>{
+      const units=nucleoPersonUnits(u).map(normalizePortalUnit);
+      if(!units.includes('matriz')||!units.includes('filial'))return;
+      [u?.sector,...(u?.managedSectors||[]),...(u?.sectorMemberships||[]).map(m=>m?.sector)]
+        .filter(Boolean).forEach(sec=>shared.push(String(sec).trim()));
+    });
+    if(['matriz','filial','todas'].includes(unit)){
+      const seen=new Set(sectors.map(sec=>normalizeAnswer(sec)));
+      shared.forEach(sec=>{const k=normalizeAnswer(sec);if(k&&!seen.has(k)){seen.add(k);sectors.push(sec);}});
+    }
+  }catch(e){}
+
+  // Compatibilidade com a lista global antiga de setores unificados.
+  // Eles devem aparecer nos seletores das duas unidades sem duplicar o cadastro.
+  const unified=normalizeSectorList(Array.isArray(cfg.unifiedSectors)?cfg.unifiedSectors:[]);
+  if(['matriz','filial','todas'].includes(unit)){
+    const seen=new Set(sectors.map(s=>normalizeAnswer(s)));
+    unified.forEach(s=>{const k=normalizeAnswer(s);if(k&&!seen.has(k)){seen.add(k);sectors.push(s);}});
+  }
+
   // Na primeira utilização, usa a lista padrão exibida nas configurações.
   if(!sectors.length&&unit!=='filial'){
     const field=document.getElementById('sectorList');
@@ -3055,15 +3080,24 @@ async function loginUser(){
     // A partir daqui o servidor JÁ autorizou. Nada do estado local pode cancelar o acesso.
     const u=remote.user||remote.usuario||{};
     const rawRole=String(u.role||u.perfil||u.tipoAcesso||'operational').toLowerCase();
+    // Segurança de perfil: SGQ/admin só existe para cadastro cujo setor é SGQ.
+    // Isso impede um role antigo/inconsistente no backend de promover um usuário comum.
+    const loginSectorKey=normalizeAnswer(String(u.sector||u.setor||sector||''));
+    const safeRole=rawRole==='quality'?'quality'
+      :((rawRole==='admin'||rawRole.includes('admin'))&&loginSectorKey==='sgq'?'admin'
+      :((rawRole==='manager'||rawRole.includes('gest'))?'manager':'operational'));
+    const safePermissions=(u.permissions&&u.permissions.version===1)
+      ? {...u.permissions,sgq:safeRole==='admin'}
+      : (u.permissions||null);
     const session={
-      permissions:u.permissions||null,accessUnits:u.accessUnits||null,
+      permissions:safePermissions,accessUnits:u.accessUnits||null,
       personId:u.personId||'',
       description:u.description||'',
       name:u.name||u.nome||name,
       email:u.email||u.e_mail||'',
       unit:u.unit||u.unidade||unit,
       sector:u.sector||u.setor||sector,
-      role:rawRole==='quality'?'quality':((rawRole==='admin'||rawRole.includes('admin'))?'admin':((rawRole==='manager'||rawRole.includes('gest'))?'manager':'operational')),
+      role:safeRole,
       sectorMemberships:Array.isArray(u.sectorMemberships)?u.sectorMemberships:[],
       managedSectors:Array.isArray(u.managedSectors)?u.managedSectors:[],
       approvalStatus:u.approvalStatus||'approved',
@@ -3612,7 +3646,7 @@ function getOperationalUsers(){
   const hadStoredUsers=Array.isArray(parsed);
   let users=hadStoredUsers?parsed:[];
 
-  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&explicitPortalUnit(u.unit)==='filial');
+  if(getSession()?.role==='quality')return users.filter(u=>!isDeletedUserRecord(u)&&!nucleoPersonPermissions(u).sgq&&operationalUserAccessUnits(u).includes('filial'));
   // Usuários apagados pelo ADM não podem reaparecer por cache antigo/sincronização atrasada.
   users=users.filter(u=>!isDeletedUserRecord(u));
 
@@ -3905,9 +3939,19 @@ function clearOperationalUsersFilters(){
   ['operationalUserSearch','operationalUserSector','operationalUserUnit','operationalUserStatus'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   filterOperationalUsers();
 }
+function operationalUserAccessUnits(user){
+  const units=typeof nucleoPersonUnits==='function'?nucleoPersonUnits(user):[];
+  return [...new Set((Array.isArray(units)?units:[]).map(normalizePortalUnit).filter(u=>u==='matriz'||u==='filial'))];
+}
+function operationalUserUnitsLabel(user){
+  const units=operationalUserAccessUnits(user);
+  if(units.includes('matriz')&&units.includes('filial'))return 'Matriz e Filial';
+  if(units.includes('filial'))return portalUnitDisplay('filial');
+  return portalUnitDisplay('matriz');
+}
 function renderOperationalUsers(){
   const box=document.getElementById('operationalUsersList'); if(!box)return;
-  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||explicitPortalUnit(u.unit)==='filial');
+  const allUsers=getOperationalUsers().filter(u=>getSession()?.role!=='quality'||operationalUserAccessUnits(u).includes('filial'));
   let controls=document.getElementById('operationalUsersFilters');
   if(!controls){
     controls=document.createElement('div');controls.id='operationalUsersFilters';
@@ -3922,7 +3966,7 @@ function renderOperationalUsers(){
     el.value=selected;
   }
   options('operationalUserSector',allUsers.flatMap(u=>[u.sector,...(u.managedSectors||[])]),'Todos os setores');
-  options('operationalUserUnit',allUsers.map(u=>portalUnitDisplay(u.unit)),'Todas as unidades');
+  options('operationalUserUnit',allUsers.flatMap(u=>operationalUserAccessUnits(u).map(portalUnitDisplay)),'Todas as unidades');
   const query=normalizePersonName(document.getElementById('operationalUserSearch').value);
   const sector=document.getElementById('operationalUserSector').value;
   const unit=getSession()?.role==='quality'?'SETA ES - Filial':document.getElementById('operationalUserUnit').value;
@@ -3931,7 +3975,7 @@ function renderOperationalUsers(){
     const state=u.approvalStatus||'approved';
     return (!query||normalizePersonName([u.name,u.description,u.email,...(u.aliases||[])].join(' ')).includes(query))&&
       (!sector||u.sector===sector||(u.managedSectors||[]).includes(sector))&&
-      (!unit||explicitPortalUnit(u.unit)===explicitPortalUnit(unit))&&
+      (!unit||operationalUserAccessUnits(u).includes(explicitPortalUnit(unit)))&&
       (!status||(status==='inactive'?['inactive','disabled'].includes(state):state===status));
   }).sort((a,b)=>Number(b.approvalStatus==='pending')-Number(a.approvalStatus==='pending')||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   const users=filtered.slice(0,operationalUsersLimit);
@@ -3952,7 +3996,7 @@ function renderOperationalUsers(){
             <div class="admin-avatar">${escapeHtml((u.name||'?').charAt(0).toUpperCase())}</div>
             <div>
               <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
-              <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'—')}</div>
+              <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(operationalUserUnitsLabel(u))} · ${escapeHtml(u.sector||'—')}</div>
               <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
               <span class="role-tag">Aguardando aprovação</span>
             </div>
@@ -3972,7 +4016,7 @@ function renderOperationalUsers(){
         <div class="admin-avatar">${escapeHtml((u.name||u.email||'?').charAt(0).toUpperCase())}</div>
         <div>
           <div class="admin-email">${escapeHtml(personDisplayName(u)||u.email||'Usuário')}</div>
-          <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(portalUnitDisplay(u.unit))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
+          <div class="small">${escapeHtml(u.email||'')} · ${escapeHtml(operationalUserUnitsLabel(u))} · ${escapeHtml(u.sector||'Todos os setores')}</div>
           <div class="small" style="margin-top:3px">Senha: ${String(u.password||'').trim()?'cadastrada':'não definida'}</div>
           <span class="role-tag">${u.permissions?'Acesso personalizado':u.role==='admin'?'SGQ':u.role==='quality'?'Qualidade — Filial':u.role==='manager'?'Gestor':'Usuário operacional'}</span>
           ${u.role==='manager'||(u.managedSectors||[]).length?`<div class="small" style="margin-top:4px"><b>Gerencia:</b> ${escapeHtml((u.managedSectors||[]).join(', ')||'Nenhum setor')}</div>`:''}
@@ -7426,6 +7470,7 @@ function renderTriage(){
 }
 
 function showTriage(){
+  if(!nucleoCanTriageRos()){alert('Somente SGQ e Qualidade podem triar R.O.s.');return;}
   if(!nucleoFeatureRequire('ros','triage'))return;
   try{refreshMenuNotificationBadges()}catch(e){}
   if(!isAdmin()){showList();return}
@@ -7566,6 +7611,7 @@ function updateRoUnitLocal(roKey,newUnit){
 }
 
 function openTriageRecord(id,originHint=''){
+  if(!nucleoCanTriageRos()){alert('Somente SGQ e Qualidade podem triar R.O.s.');return;}
   if(!nucleoFeatureRequire('ros','triage'))return;
   try{hideNucleoLoading(true)}catch(e){}
 
@@ -9266,6 +9312,49 @@ function findSentPdcaById(id){
   return getAllSentPdcas().find(p=>String(p.id||p.pdcaId||'').trim()===wanted) || null;
 }
 
+
+function nucleoReceivedPdcaDisplayData(){
+  const real=getSentPdcas();
+  if(!isAdmin())return real;
+  const out=real.slice();
+  const triageMap=getSavedTriageMap();
+  const reviewMap=(typeof nucleoPdcaReviewMap2026==='function')?nucleoPdcaReviewMap2026():{};
+  const realKeys=new Set();
+  real.forEach(p=>{
+    const ro=String(p?.ro||p?.roId||p?.numeroRo||'').trim();
+    const sector=normalizeAnswer(String(p?.setor||'').trim());
+    const unit=normalizeAnswer(String(explicitRecordUnit(p)||p?.unidade||p?.unit||'').trim());
+    if(ro)realKeys.add([ro,sector,unit].join('@@'));
+  });
+  const seenVirtual=new Set();
+  getAllRoRecords().forEach(ro=>{
+    const roNumber=String(ro?.numero||ro?.id||ro?.codigo||'').trim();
+    if(!roNumber)return;
+    const triages=getTriageRecordsForRoNumber(roNumber,triageMap).filter(t=>{
+      const sector=String(t?.responsibleSector||t?.setorDirecionado||'').trim();
+      const norm=normalizeAnswer(sector);
+      return String(t?.decision||'')==='directed' && !!sector && !['nao direcionado','nao informado','sem setor','-'].includes(norm);
+    });
+    triages.forEach(tri=>{
+      const sector=String(tri?.responsibleSector||tri?.setorDirecionado||'').trim();
+      const unit=String(explicitRecordUnit(ro)||ro?.unidade||'').trim();
+      const key=[roNumber,normalizeAnswer(sector),normalizeAnswer(unit)].join('@@');
+      if(realKeys.has(key)||seenVirtual.has(key))return;
+      const scoped={...ro,__triageRecord:tri,__assignedSector:sector};
+      const canonical=nucleoPdcaReviewCanonical2026(nucleoPdcaReviewRoKey2026(scoped),String(scoped?.origemBase||scoped?.raw?.__origemBase||''));
+      const reviewDecision=reviewMap?.[canonical]?.decision||'';
+      const external=tri?.pdcaExternal===true||String(tri?.pdcaSource||'').toLowerCase()==='external';
+      const displayStatus=assignedRoStatus(scoped,external,null,null,reviewMap,new Set());
+      const received=external || reviewDecision==='yes' || ['Respondida','Apresentada'].includes(displayStatus);
+      if(!received)return;
+      const id='RO-PDCA-RECEIVED-'+roNumber+'-'+normalizeAnswer(sector).replace(/[^a-z0-9]+/g,'-');
+      out.push({id,ro:roNumber,responsavel:String(tri?.responsibleUserName||tri?.pessoaResponsavel||'').trim(),email:String(tri?.responsibleUserEmail||'').trim(),unidade:unit,setor:sector,cliente:String(ro?.cliente||'').trim(),envio:String(tri?.pdcaExternalUpdatedAt||tri?.updatedAt||tri?.triagedAt||ro?.updatedAt||'').trim(),status:displayStatus==='Apresentada'?'Apresentado':'Respondido',__virtualReceived:true,__displayStatus:displayStatus,__sourceRo:ro});
+      seenVirtual.add(key);
+    });
+  });
+  return out;
+}
+
 function pendingActionItems(){
   return getAllSentPdcas()
     .map(p=>{
@@ -10209,8 +10298,8 @@ function showSentPdcas(){
 function renderSentPdcas(){
  refreshPdcaSidebarBadge();
  const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase(),sf=document.getElementById('sentStatusFilter')?.value||'todos';
- let data=getSentPdcas();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
- const rows=data.map(p=>{const ro=getAllRoRecords().find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):p.id};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
+ let data=nucleoReceivedPdcaDisplayData();if(!isAdmin()){const email=currentEmail();data=data.filter(p=>String(p.email||'').toLowerCase()===email);}
+ const allRosForReceived=getAllRoRecords(); const rows=data.map(p=>{const ro=p.__sourceRo||allRosForReceived.find(r=>String(r.numero||r.id)===String(p.ro)&&(!explicitRecordUnit(p)||explicitRecordUnit(r)===explicitRecordUnit(p))),user=ro?resolveRoClaimant(ro):null;return {p,ro,user,name:p.externalPdf&&p.fileName?p.fileName.replace(/\.pdf$/i,''):(p.__virtualReceived?'PDCA recebido':p.id)};}).filter(({p,ro,user,name})=>[name,p.ro,p.responsavel,p.setor,p.cliente,ro?roRegistrantName(ro):'',user?personDisplayName(user):''].join(' ').toLowerCase().includes(q)&&(sf==='todos'||p.status===sf));
  const body=document.getElementById('sentRows');if(!body)return;
  const lifecycle=isAdmin()?(document.getElementById('sentLifecycleFilter')?.value||'active'):'all';
  nucleoRenderPdcaLifecycle(data,lifecycle);
@@ -10220,6 +10309,10 @@ function renderSentPdcas(){
   const claimant=user?personDisplayName(user):(ro?roRegistrantName(ro):'');
   const delivery=nucleoPdcaDelivery(p),confirmed=!!delivery||!!(ro&&claimantIdentityIndex().bindings.get(claimantRoKey(ro))?.confirmedAt);
   const detail=delivery?'Encerrada — entregue ao reclamante':confirmed?'Reclamante confirmado — falta entregar a resposta':user?'Cadastro identificado — confirmar':'Reclamante a confirmar';
+  if(p.__virtualReceived){
+    const virtualDetail=p.__displayStatus==='Apresentada'?'Apresentada — aguardando conclusão da etapa final':'PDCA identificado — aguardando envio ao reclamante';
+    return '<tr class="click" onclick="openRO(\''+escapeHtml(p.ro||'')+'\')"><td><b>PDCA recebido</b><div class="small">'+escapeHtml(p.setor||'')+'</div></td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'—')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(virtualDetail)+'</div></td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(p.__displayStatus||'Respondida')+'</span></td><td class="sent-action">Ver R.O. →</td></tr>';
+  }
   return '<tr class="click" onclick="openPdcaReport(\''+escapeHtml(p.id)+'\')"><td><b>'+escapeHtml(name||'PDCA')+'</b>'+(p.externalPdf?'<div class="small">'+escapeHtml(p.setor||'')+' · V'+escapeHtml(p.version||1)+'</div>':'')+'</td><td>'+escapeHtml(p.ro||'')+'</td><td>'+escapeHtml(p.responsavel||'')+'</td><td>'+escapeHtml(claimant||'—')+'<div class="small">'+escapeHtml(detail)+'</div>'+(isAdmin()&&p.externalPdf&&!delivery?'<button class="btn secondary" type="button" onclick="event.stopPropagation();'+(confirmed?'nucleoConsultPdcaClaimant':'confirmReceivedPdcaClaimant')+'(\''+escapeHtml(p.id)+'\')">'+(confirmed?'Consultar reclamante':'Confirmar reclamante')+'</button>'+(confirmed?'<button class="btn primary" type="button" onclick="event.stopPropagation();confirmReceivedPdcaClaimant(\''+escapeHtml(p.id)+'\')">Entregar resposta</button>':''):'')+'</td><td>'+escapeHtml(canonicalUnitName(p.unidade||p.unit||''))+'</td><td>'+escapeHtml(when||'')+'</td><td><span class="badge">'+escapeHtml(delivery?'Encerrada':confirmed?'Aguardando entrega':'Confirmar reclamante')+'</span></td><td class="sent-action">Ver PDCA →</td></tr>';
  }).join(''):'<tr><td colspan="8" class="small">Nenhum PDCA encontrado.</td></tr>';
 }
@@ -10468,41 +10561,69 @@ function notifyManagersOfDirectedRo(roKey,sector,triageRo,responsibleUserName){
   });
 }
 
-function canViewRO(ro){
+function nucleoBroadRoScope(){
+  const s=getSession()||{};
+  const role=String(s.role||'').toLowerCase();
+  const sector=sectorCompareKey(canonicalSectorName(String(s.sector||'')));
+  const sgqSector=sectorCompareKey(canonicalSectorName('SGQ'));
+
+  // Regra fixa de segurança:
+  // - Qualidade possui visão ampla dentro das unidades permitidas;
+  // - admin só é SGQ quando o próprio cadastro está no setor SGQ.
+  // Um role/cache antigo com admin em Financeiro, PCP etc. NÃO concede visão ampla.
+  if(role==='quality')return true;
+  if(role==='admin')return !!sector && sector===sgqSector;
+  return false;
+}
+function nucleoOperationalAllowedSectors(){
+  const s=getSession()||{};
+  const sectors=[String(s.sector||'').trim()];
+  if(String(s.role||'').toLowerCase()==='manager' && Array.isArray(s.managedSectors)){
+    sectors.push(...s.managedSectors.map(v=>String(v||'').trim()));
+  }
+  return [...new Set(sectors.filter(Boolean).map(canonicalSectorName).filter(Boolean))];
+}
+function nucleoOperationalSectorAllowed(sector){
+  const wanted=canonicalSectorName(sector);
+  if(!wanted)return false;
+  return nucleoOperationalAllowedSectors().some(s=>sectorCompareKey(s)===sectorCompareKey(wanted));
+}
+function nucleoCanTriageRos(){return nucleoBroadRoScope();}
+
+function canViewRO(ro,preloadedTriageMap=null){
   if(!nucleoManagerScopeAllows(ro))return false;
-  // ADM Geral vê as duas unidades. ADM Matriz/Filial fica restrito à sua unidade.
-  if(isAdmin())return getSession()?.role==='quality'?qualityRecordAllowed(ro):isGeneralAdmin()||sameUnitAsCurrentUser(ro);
 
-  const tri=getRoTriageRecord(ro);
+  // Somente SGQ e Qualidade possuem visão ampla de R.O.s.
+  // Qualidade continua limitada às unidades explicitamente permitidas no cadastro.
+  if(nucleoBroadRoScope()){
+    return getSession()?.role==='quality'?qualityRecordAllowed(ro):true;
+  }
+
+  const tri=getRoTriageRecord(ro,preloadedTriageMap);
   if(!tri || tri.decision!=='directed')return false;
-  const linked=(getSession()?.sectorMemberships||[]).some(m=>normalizePortalUnit(m.unit)===roUnit(ro)&&normalizeAnswer(m.sector)===normalizeAnswer(tri.responsibleSector));
-  if(linked)return userMatchesDirectedPerson(tri);
 
-  // Regra de unidade:
-  // usuário comum vê a própria unidade; setor explicitamente unificado também
-  // recebe R.O.s direcionadas a ele vindas da outra unidade como uma R.O. normal.
-  const crossUnitUnified=isUnifiedSector(tri.responsibleSector) &&
-    (sameSector(tri.responsibleSector) || (isManager() && managesSector(tri.responsibleSector)));
+  // Usuário operacional NÃO herda escopo de sectorMemberships/cache antigo.
+  // A fonte de verdade é o setor principal da sessão; gestor soma apenas
+  // os setores gerenciados explicitamente recebidos do backend no login.
+  if(!nucleoOperationalSectorAllowed(tri.responsibleSector))return false;
+
+  // Regra de unidade: setor unificado pode receber a mesma área entre unidades,
+  // mas nunca amplia para outro setor.
+  const crossUnitUnified=isUnifiedSector(tri.responsibleSector)&&nucleoOperationalSectorAllowed(tri.responsibleSector);
   if(!sameUnitAsCurrentUser(ro) && !crossUnitUnified)return false;
 
-  // Dentro do escopo permitido, a R.O. precisa estar direcionada ao setor.
-  // Gestor vinculado ao setor sempre acompanha, mesmo quando existe
-  // uma pessoa específica responsável.
-  if(isManager() && managesSector(tri.responsibleSector))return true;
+  // Gestor acompanha o setor gerenciado mesmo quando existe uma pessoa específica.
+  if(isManager() && (getSession()?.managedSectors||[]).some(s=>sameCanonicalSector(s,tri.responsibleSector)))return true;
 
-  if(!sameSector(tri.responsibleSector))return false;
-
-  // Se o SGQ escolheu uma pessoa específica, somente ela recebe a R.O.
-  // Sem pessoa específica, todos os usuários cadastrados no setor recebem.
+  // Operacional do setor só recebe a R.O. do próprio setor e, quando houver
+  // responsável nominal, somente a pessoa indicada recebe a ocorrência.
   return userMatchesDirectedPerson(tri);
 }
 
 function isAdmin(){
-  // A permissão deve vir exclusivamente do perfil autenticado pelo backend.
-  // Não inferir ADM pelo e-mail/cache local: isso fazia um usuário operacional
-  // ganhar o menu completo quando usava um e-mail presente na antiga lista de ADMs.
-  const session=getSession();
-  return !!(session && ['admin','quality'].includes(String(session.role||'').toLowerCase()));
+  // SGQ real ou Qualidade real. Um cadastro operacional que por erro/cache chegue
+  // com role=admin não recebe menus nem atalhos administrativos.
+  return nucleoBroadRoScope();
 }
 
 function showConfigSection(name){
@@ -14667,21 +14788,43 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     return [...grouped.values()].map(preferredFast).filter(Boolean);
   })() : ros;
 
-  const assignedSource = roListMode==='assigned' ? assignedBaseRos.flatMap(r=>{
+  // Para usuário operacional/gestor, a fonte da tela precisa ser exatamente a
+  // mesma base visível usada por roSummaryData(). Isso garante que toda R.O.
+  // contada como pendente também apareça aqui para Responder/Contestar.
+  const operationalAssignedSource = roListMode==='assigned' && !nucleoBroadRoScope()
+    ? ros.filter(r=>canViewRO(r,renderTriageMap)).map(r=>{
+        const tri=getRoTriageRecord(r,renderTriageMap);
+        const viewRo=getOperationalRoView(r,renderTriageMap);
+        return {...viewRo,__triageRecord:tri,__assignedSector:String(tri?.responsibleSector||'').trim(),__scopeVerified:true};
+      })
+    : null;
+
+  const assignedSource = roListMode==='assigned' ? (operationalAssignedSource || assignedBaseRos.flatMap(r=>{
     const base=String(r.numero||r.id||r.codigo||'').trim();
-    let records=(assignedTriageByRo.get(base)||[]).filter(t=>String(t.decision||'')!=='' && !hiddenAssigned.has(String(t.roKey||'')));
+    // Não descarte uma atribuição válida só porque a chave foi ocultada em algum
+    // momento no cache visual local. A ocultação só deve resolver duplicidade;
+    // se esta for a única linha válida daquele R.O.+setor, ela precisa aparecer.
+    // R.O.s atribuídas representam SOMENTE o meio do fluxo: a ocorrência já foi
+    // triada/direcionada para um setor e ainda aguarda a tratativa. Ter um setor
+    // preenchido na planilha, por si só, não cria uma atribuição.
+    let records=(assignedTriageByRo.get(base)||[]).filter(t=>{
+      const sector=String(t?.responsibleSector||t?.setorDirecionado||'').trim();
+      const norm=normalizeAnswer(sector);
+      const validSector=!!sector && !['nao direcionado','nao informado','sem setor','-'].includes(norm);
+      return String(t?.decision||'')==='directed' && validSector;
+    });
+
+    // Se a fonte oficial da triagem (planilha-base + SGQ_TRIAGENS) reconhece um
+    // direcionamento válido, use-o. Nunca sintetize atribuição apenas a partir de
+    // setor solto da R.O.; sem decisão directed, a ocorrência fica só em Para triar.
     const confirmed=resolvedTriageForRo(r,renderTriageMap);
-    if(confirmed?.decision&&confirmed.decision!=='directed')records=[confirmed];
-    // Recuperação segura: se SGQ_TRIAGENS estiver vazio/desatualizado, mas a
-    // própria R.O. importada ainda trouxer setor causa, ela continua atribuída.
-    // Não exige status operacional aqui, pois versões anteriores chegaram a
-    // limpar esse campo no cache e isso fazia a lista inteira desaparecer.
-    if(!records.length){
-      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
-      const norm=normalizeAnswer(sheetSector);
-      if(sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(norm)){
-        const syntheticKey=triageCompositeKey(base,sheetSector);
-        records=[{roKey:syntheticKey,roNumber:base,decision:'directed',responsibleSector:sheetSector,importedFromSheet:true,__synthetic:true}];
+    if(confirmed?.decision==='directed'){
+      const sector=String(confirmed?.responsibleSector||confirmed?.setorDirecionado||'').trim();
+      const norm=normalizeAnswer(sector);
+      if(sector && !['nao direcionado','nao informado','sem setor','-'].includes(norm)){
+        const confirmedKey=String(confirmed?.roKey||triageCompositeKey(base,sector));
+        const already=records.some(t=>String(t?.roKey||'')===confirmedKey || sameCanonicalSector(t?.responsibleSector||t?.setorDirecionado||'',sector));
+        if(!already)records.push({...confirmed,roKey:confirmedKey,roNumber:base,responsibleSector:sector});
       }
     }
     if(!records.length)return [];
@@ -14693,38 +14836,63 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       const visualKey=base+'::'+nucleoAssignedSectorVisualKey(sector);
       const prev=bySector.get(visualKey);
       const score=x=>{
+        // Uma chave ocultada perde prioridade apenas quando existe outra linha
+        // equivalente para o mesmo R.O.+setor. Nunca esconda a única atribuição.
+        const visibleBonus=hiddenAssigned.has(String(x?.roKey||''))?0:100000000000000;
         const composite=String(x?.roKey||'').includes('::')?10000000000000:0;
         const ts=Date.parse(x?.pdcaExternalUpdatedAt||x?.updatedAt||x?.triagedAt||x?.createdAt||'')||0;
-        return composite+ts;
+        return visibleBonus+composite+ts;
       };
       if(!prev||score(t)>=score(prev))bySector.set(visualKey,t);
     });
     return [...bySector.values()].map(t=>({...r,__triageKey:t.roKey,__triageRecord:t,__assignedSector:t.responsibleSector||''}));
-  }) : ros;
+  })) : ros;
   const list=assignedSource.filter(nucleoManagerScopeAllows)
     .filter(r=>{
-      if(roListMode!=='assigned')return canViewRO(r);
+      if(roListMode!=='assigned')return canViewRO(r,renderTriageMap);
       const tri=getRoTriageRecord(r,renderTriageMap);
-      // R.O. que já possui PDCA não pertence mais à fila de atribuídas.
-      // Usa somente a triagem/status que já estão carregados neste mesmo render.
-      const assignedHasPdca = tri?.pdcaExternal===true
-        || String(tri?.pdcaSource||'').toLowerCase()==='external'
-        || ['enviado','respondido','respondida','apresentado','apresentada'].includes(normalizeAnswer(String(r?.pdca||'')))
-        || ['pdca enviado','respondida','apresentada'].includes(normalizeAnswer(String(r?.status||r?.statusPlanilha||'')));
-      if(assignedHasPdca)return false;
-      // Uma R.O. é atribuída quando existe uma decisão central OU quando a própria
-      // planilha ainda comprova o direcionamento. Isso evita esvaziar esta tela se
-      // o cache de SGQ_TRIAGENS ainda não tiver sido restaurado/sincronizado.
-      const triStatus=String(tri?.status||tri?.triagemStatus||tri?.decision||'').toLowerCase();
-      const sheetSector=String(r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setor||'').trim();
-      const validSheetSector=!!sheetSector && !['nao direcionado','nao informado','sem setor','-'].includes(normalizeAnswer(sheetSector));
-      const assignedBySheet=validSheetSector;
-      const assignedByTriage=!!tri && !['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
-      if(!assignedByTriage && !assignedBySheet)return false;
-      // ADM vê todo o restante; usuário/gestor continua limitado ao que pode visualizar.
-      return isAdmin()?true:canViewRO(r);
+      // A fila de atribuídas deve seguir a mesma lógica da Visão geral:
+      // a R.O. só sai daqui quando existe resposta/PDCA efetivamente enviado
+      // ou um estado final de resposta. Uma simples marcação de PDCA externo
+      // não pode esconder uma pendência que ainda exige atuação do setor.
+      const computedRow=computeAssignedRow(r);
+      // R.O.s terminalizadas não pertencem mais à fila ativa.
+      // Elas permanecem acessíveis na aba Encerradas para consulta/histórico.
+      const terminalAssigned=assignedTerminalStatus(computedRow.displayStatus);
+      if(assignedLifecycle==='history'){
+        if(!terminalAssigned)return false;
+      }else if(terminalAssigned){
+        return false;
+      }
+      // A fila de atribuídas é somente o meio do fluxo. Assim que já existe
+      // evidência de PDCA/resposta, a R.O. passa para PDCAs recebidos.
+      const receivedCanonical=nucleoPdcaReviewCanonical2026(
+        nucleoPdcaReviewRoKey2026(r),
+        String(r?.origemBase||r?.raw?.__origemBase||'')
+      );
+      const receivedReviewDecision=renderReviewMap?.[receivedCanonical]?.decision||'';
+      const assignedHasReceivedPdca =
+        !!computedRow.sentPdca ||
+        computedRow.externalPdca===true ||
+        receivedReviewDecision==='yes' ||
+        ['Respondida','Apresentada'].includes(computedRow.displayStatus);
+      if(assignedHasReceivedPdca)return false;
+      // Atribuição exige triagem/direcionamento real. Setor preenchido isoladamente
+      // na R.O. não basta e não pode duplicar a ocorrência em Para triar + Atribuídas.
+      const triSector=String(tri?.responsibleSector||tri?.setorDirecionado||'').trim();
+      const triSectorNorm=normalizeAnswer(triSector);
+      const assignedByTriage=!!tri && String(tri?.decision||'')==='directed' && !!triSector &&
+        !['nao direcionado','nao informado','sem setor','-'].includes(triSectorNorm);
+      if(!assignedByTriage)return false;
+      // Somente SGQ real/Qualidade real pulam o filtro setorial.
+      // Usuário comum SEMPRE passa por canViewRO(), mesmo se um role antigo vier como admin.
+      // Usuários comuns já passaram por canViewRO() ao montar
+      // operationalAssignedSource. Não refaça o filtro nem perca a linha
+      // operacional transformada por getOperationalRoView().
+      if(r.__scopeVerified===true)return true;
+      return nucleoBroadRoScope()?true:canViewRO(r,renderTriageMap);
     })
-    .map(r=>isAdmin()?r:getOperationalRoView(r,renderTriageMap))
+    .map(r=>nucleoBroadRoScope()?r:getOperationalRoView(r,renderTriageMap))
     .filter(r=>{
       if(roListMode==='assigned'){
         const tri=getRoTriageRecord(r,renderTriageMap);
@@ -14737,6 +14905,11 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       }
       const text=nucleoRoSearchMatches(r,q);
       const displayStatus=roListMode==='assigned'?computeAssignedRow(r).displayStatus:assignedRoStatus(r);
+      if(roListMode==='assigned'){
+        const finalized=['Cancelada','Registro','Obsoleto'].includes(displayStatus);
+        if(assignedLifecycle==='active' && finalized)return false;
+        if(assignedLifecycle==='history' && !finalized)return false;
+      }
       const statusKey={'Pendente':'precisa_resposta','Respondida':'ja_respondeu','Apresentada':'ja_respondeu','Cancelada':'cancelada','Registro':'registro','Obsoleto':'obsoleto'}[displayStatus]||'precisa_resposta';
       const filt=f==='todas'||f===statusKey;
       return text&&filt;
@@ -14750,7 +14923,12 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     const contest=status==='Em contestação';
     const computed=roListMode==='assigned'?computeAssignedRow(r):null;
     const externalPdca=computed?computed.externalPdca:pdcaExternalExists(r);
-    const alreadySent=pdca==='Enviado' || status==='PDCA enviado' || externalPdca;
+    // Para usuário operacional, somente uma resposta realmente enviada/concluída
+    // bloqueia Responder/Contestar. A marcação de PDCA externo, sozinha, não
+    // transforma a pendência em resposta concluída.
+    const alreadySent=!!computed?.sentPdca
+      || ['enviado','respondido','respondida','apresentado','apresentada'].includes(normalizeAnswer(pdca))
+      || ['pdca enviado','respondida','apresentada'].includes(normalizeAnswer(status));
     const tri=computed?computed.tri:getRoTriageRecord(r,renderTriageMap);
     const responsibleSector=String(tri?.responsibleSector||tri?.setorDirecionado||r.__assignedSector||r.setorResponsavelPlanilha||r.raw?.__setorResponsavel||r.setorResponsavel||r.setor||'—').trim()||'—';
     const pdcaSituation=pdcaSituationLabel(r,externalPdca);
@@ -14778,6 +14956,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       operationalActions=`<td class="operational-action-col ro-eye-cell">
         <div class="assigned-operational-icons ro-row-actions">
           <button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>
+          <button class="ro-eye-btn" type="button" onclick="if(typeof nucleoOpenRoExtension==='function'){nucleoOpenRoExtension('${escapeHtml(r.numero)}','${escapeHtml(responsibleSector)}','${escapeHtml(tri?.roKey||'')}')}else{alert('O módulo Estender R.O. não está disponível.')}" title="Estender R.O. para outros setores" aria-label="Estender R.O. para outros setores">↗</button>
           ${tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}
         </div>
       </td>`;
@@ -14934,9 +15113,10 @@ function view(id){
   document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';pdcaBtn.disabled=noPDCA||contest;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!noPDCA&&!contest){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
 function roSummaryData(){
   const source=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
+  const triageMap=getSavedTriageMap();
   const visibleRos=source
-    .filter(ro=>canViewRO(ro))
-    .map(ro=>isAdmin()?ro:getOperationalRoView(ro));
+    .filter(ro=>canViewRO(ro,triageMap))
+    .map(ro=>isAdmin()?ro:getOperationalRoView(ro,triageMap));
 
   const sent=getSentPdcas().filter(p=>isAdmin() || sameSector(p.setor));
   const byRo=new Map();
@@ -14945,7 +15125,6 @@ function roSummaryData(){
     if(key)byRo.set(key,p);
   });
 
-  const triageMap=getSavedTriageMap();
   let pending=0,noPresentation=0,openActions=0,overdue=0;
   const now=new Date();
 
@@ -15597,7 +15776,7 @@ function renderCurrentOverview(){
     console.error('Falha ao renderizar Visão geral:',e);
     const k=document.getElementById('overviewKpis');
     if(k)k.innerHTML=[
-      overviewKpi(overviewSafe(()=>getAllRoRecords().filter(r=>canViewRO(r)).length,0),'R.O.s disponíveis','','showAssignedRos()','Abrir'),
+      overviewKpi(overviewSafe(()=>{const m=getSavedTriageMap();return getAllRoRecords().filter(r=>canViewRO(r,m)).length},0),'R.O.s disponíveis','','showAssignedRos()','Abrir'),
       overviewKpi(overviewSafe(()=>userSectorPendingActions().length,0),'Ações em acompanhamento','','showActionsDashboard()','Abrir')
     ].join('');
     renderOverviewPriorities([]);
@@ -15620,25 +15799,38 @@ function showList(){
 function populateAssignedRoFilters(){
   const sectorEl=document.getElementById('assignedSectorFilter');
   const unitEl=document.getElementById('assignedUnitFilter');
+  const broad=nucleoBroadRoScope();
   if(sectorEl){
     const current=sectorEl.value||'all';
-    const sectors=nucleoVisibleManagerSectors(isManager(),managedSectorsForCurrentUser(),getTriageRecords().filter(r=>r.triagemStatus!=='new').map(r=>r.setorDirecionado));
-    sectorEl.setAttribute('aria-label',isManager()?'Setor sob minha gestão':'Setor responsável');
-    sectorEl.title=isManager()?'Escolha o setor que deseja acompanhar':'Filtrar por setor';
-    sectorEl.innerHTML='<option value="all">'+(isManager()?'Todos os meus setores':'Todos os setores')+'</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-    if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
+    const sectors=broad
+      ? nucleoVisibleManagerSectors(isManager(),managedSectorsForCurrentUser(),getTriageRecords().filter(r=>r.triagemStatus!=='new').map(r=>r.setorDirecionado))
+      : nucleoOperationalAllowedSectors();
+    sectorEl.setAttribute('aria-label',broad?(isManager()?'Setor sob minha gestão':'Setor responsável'):'Meu setor');
+    sectorEl.title=broad?'Filtrar por setor':'Seu acesso está limitado ao seu setor';
+    if(broad){
+      sectorEl.disabled=false;
+      sectorEl.innerHTML='<option value="all">'+(isManager()?'Todos os meus setores':'Todos os setores')+'</option>'+sectors.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+      if([...sectorEl.options].some(o=>o.value===current))sectorEl.value=current;
+      else sectorEl.value='all';
+    }else{
+      const own=sectors[0]||String(getSession()?.sector||'').trim()||'Meu setor';
+      sectorEl.innerHTML=`<option value="${escapeHtml(own)}">${escapeHtml(own)}</option>`;
+      sectorEl.value=own;
+      sectorEl.disabled=true;
+    }
   }
   if(unitEl){
     const current=unitEl.value||'all';
     const units=[...new Set(getTriageRecords()
       .filter(r=>r.triagemStatus!=='new')
+      .filter(r=>broad?true:nucleoOperationalSectorAllowed(r.setorDirecionado))
       .map(r=>String(r.unidade||'').trim()).filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b,'pt-BR'));
-    unitEl.innerHTML='<option value="all">Todas as unidades</option>'+units.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+    unitEl.innerHTML='<option value="all">Todas as unidades permitidas</option>'+units.map(u=>`<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
     if([...unitEl.options].some(o=>o.value===current))unitEl.value=current;
+    else unitEl.value='all';
   }
 }
-
 function showAssignedRos(){
   if(!nucleoFeatureRequire('ros','assigned'))return;
   roListMode='assigned';
@@ -16678,9 +16870,29 @@ function openUnitUserAccess(encoded){
 
 function userHasUnitSector(user,unit,sector){
   const key=normalizeAnswer(sector||'');
-  if(unit==='todas')return normalizeAnswer(user.sector||'')===key||(user.sectorMemberships||[]).some(m=>normalizeAnswer(m.sector)===key);
-  if((user.sectorMemberships||[]).some(m=>m.unit===unit&&normalizeAnswer(m.sector)===key))return true;
-  return normalizePortalUnit(user.unit)===unit&&[user.sector,...(user.managedSectors||[])].some(s=>normalizeAnswer(s||'')===key);
+  if(!key)return false;
+  const sectorMatch=[user?.sector,...(user?.managedSectors||[]),(user?.sectorMemberships||[]).map(m=>m?.sector)].flat().some(s=>normalizeAnswer(s||'')===key);
+  if(!sectorMatch)return false;
+  if(unit==='todas')return true;
+
+  const target=normalizePortalUnit(unit);
+
+  // Vínculo explícito da pessoa continua tendo prioridade.
+  if((user?.sectorMemberships||[]).some(m=>{
+    const memberUnit=normalizePortalUnit(m?.unit);
+    return (memberUnit===target||memberUnit==='todas')&&normalizeAnswer(m?.sector)===key;
+  }))return true;
+
+  // Regra principal: se o cadastro da pessoa foi autorizado para a unidade,
+  // o mesmo setor dela pode ser usado nessa unidade sem duplicar a pessoa.
+  const access=nucleoPersonUnits(user).map(normalizePortalUnit);
+  if(access.includes(target))return true;
+
+  // Compatibilidade com a lista global antiga.
+  if(isUnifiedSector(sector))return true;
+
+  const userUnit=normalizePortalUnit(user?.unit);
+  return userUnit==='todas'||userUnit===target;
 }
 
 function explicitPortalUnit(value){
@@ -16810,10 +17022,15 @@ async function nucleoSyncAfterLogin(token){
 }
 
 function nucleoPersonPermissions(user){
- if(user.permissions?.version===1)return user.permissions;
- const elevated=['admin','quality'].includes(user.role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
+ const role=String(user?.role||'').toLowerCase();
+ if(user?.permissions?.version===1){
+   // Nunca confiar em sgq=true gravado em permissões antigas para um perfil
+   // operacional/gestor. O papel autenticado pelo backend é a fonte de verdade.
+   return {...user.permissions,sgq:role==='admin'};
+ }
+ const elevated=['admin','quality'].includes(role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
  if(!elevated)modules.documents.view=['comercial interno','comercial externo','diretoria','sgq'].includes(normalizeAnswer(user.sector||''));
- return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
+ return {version:1,modules,registerRo:role!=='admin',registerExternal:role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:role==='admin'};
 }
 function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
 function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
@@ -16846,6 +17063,11 @@ function nucleoAnnouncementInScope(a,user){
 function nucleoPersonFeatureAllowed(user,module,feature){
  if(!user)return false;
  const p=nucleoPersonPermissions(user),definition=NUCLEO_PERSON_FEATURES[module]?.[feature];if(!definition)return false;
+ // Triagem de R.O. é exclusiva de SGQ e Qualidade, independentemente de
+ // permissões antigas eventualmente gravadas no cadastro operacional.
+ if(module==='ros'&&feature==='triage'){
+   return p.sgq===true || String(user.role||'').toLowerCase()==='quality' || String(user.role||'').toLowerCase()==='admin';
+ }
  if(p.sgq)return true;
  if(p.detailVersion===1)return p.features?.[module]?.[feature]===true;
  return p.modules[module]?.[definition[2]]===true;
@@ -17160,7 +17382,7 @@ function nucleoKpiExtraCatalog(){return [['ro_total','R.O.s disponíveis','ros',
 function nucleoKpiClassificationNames(){const names=['Método','Máquina','Mão de obra','Material','Medição','Meio ambiente'];if(document.readyState!=='loading'){const map=getSavedTriageMap();map.forEach(t=>{(t.classificationMs||[]).concat(t.classificationOther?[t.classificationOther]:!t.classificationMs&&t.classification?[t.classification]:[]).forEach(n=>{const name=String(n||'').trim();if(name&&!names.some(x=>normalizeAnswer(x)===normalizeAnswer(name)))names.push(name);});});}return names;}
 function nucleoKpiDefaultIds(){return isAdmin()?['triage','sac_classify','action_review','contests','registrations','documents']:['pdca_pending','sector_actions','submitted','sacs','documents'];}
 function nucleoKpiExtraCounts(){
- const map=getSavedTriageMap(),classNames=nucleoKpiClassificationNames(),ros=getAllRoRecords().filter(r=>canViewRO(r)&&nucleoManagerScopeAllows(r)),pdcas=getAllSentPdcas().filter(p=>canViewPdca(p)&&nucleoManagerScopeAllows(p)),byRo=new Map();pdcas.forEach(p=>{const key=String(p.ro||p.roId||'').split('::')[0];if(!byRo.has(key))byRo.set(key,[]);byRo.get(key).push(p);});
+ const map=getSavedTriageMap(),classNames=nucleoKpiClassificationNames(),ros=getAllRoRecords().filter(r=>canViewRO(r,map)&&nucleoManagerScopeAllows(r)),pdcas=getAllSentPdcas().filter(p=>canViewPdca(p)&&nucleoManagerScopeAllows(p)),byRo=new Map();pdcas.forEach(p=>{const key=String(p.ro||p.roId||'').split('::')[0];if(!byRo.has(key))byRo.set(key,[]);byRo.get(key).push(p);});
  const triageByRo=new Map();map.forEach(t=>{const key=String(t.roNumber||t.roKey||'').split('::')[0],old=triageByRo.get(key);if(!old||old.importedFromSheet&&!t.importedFromSheet||old.importedFromSheet===t.importedFromSheet&&String(t.triagedAt||'')>String(old.triagedAt||''))triageByRo.set(key,t);});
  const counts={ro_total:ros.length,ro_pending:0,ro_answered:0,ro_presented:0,ro_finalized:0,ro_record:0,ro_cancelled:0,ro_obsolete:0,ro_box:0,pdca_received:pdcas.length,pdca_dispatch:0,actions_ontime:0,actions_late:0,actions_done:0,sacs_done:0,docs_done:0};
  let deliveries=[];try{deliveries=JSON.parse(localStorage.getItem('nucleo-pdca-dispatches-v1')||'[]');}catch(_){}const delivered=p=>deliveries.some(d=>d.ro===p.ro&&d.unit===explicitRecordUnit(p)&&(d.pdcaFileId&&d.pdcaFileId===p.pdcaFileId||d.fileId&&d.fileId===p.fileId)&&Number(d.version||1)===Number(p.version||1));
@@ -18477,9 +18699,9 @@ function nucleoAssignedExportDataset(){
         .includes(normalizeAnswer(sheetSector));
       const assignedByTriage=!!tri&&!['','new','nova','aguardando','aguardando triagem'].includes(triStatus);
       if(!assignedByTriage&&!validSheetSector)return false;
-      return isAdmin()?true:canViewRO(r);
+      return isAdmin()?true:canViewRO(r,triageMap);
     })
-    .map(r=>isAdmin()?r:getOperationalRoView(r));
+    .map(r=>isAdmin()?r:getOperationalRoView(r,triageMap));
 }
 
 function nucleoAssignedExportDateValue(r){

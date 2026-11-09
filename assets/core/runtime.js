@@ -1,13 +1,32 @@
+(function(){
+  const __realDocument = window.document;
+  const document = new Proxy(__realDocument,{
+    get(target,prop){
+      if(prop==='addEventListener'){
+        return function(type,handler,options){
+          if(type==='DOMContentLoaded') return;
+          return target.addEventListener(type,handler,options);
+        };
+      }
+      const value=target[prop];
+      return typeof value==='function'?value.bind(target):value;
+    }
+  });
 
-// Núcleo build unificado. A versão continua disponível para diagnóstico,
-// mas nunca altera o endereço visível nem força reload por query string.
-window.NUCLEO_BUILD_VERSION = '20261106-clean-startup-v1';
+// Núcleo build unificado: todos os navegadores devem carregar a mesma implantação.
+window.NUCLEO_BUILD_VERSION = '20261028-pdca-review-unlink-v7';
 (function nucleoBuildConsistencyGuard(){
   try {
-    var u=new URL(location.href);
-    if(u.searchParams.has('_build')){
-      u.searchParams.delete('_build');
-      history.replaceState(history.state,'',u.pathname+(u.search||'')+(u.hash||''));
+    var meta=document.querySelector('meta[name="nucleo-build"]');
+    var htmlBuild=meta&&meta.getAttribute('content')||'';
+    if(htmlBuild && htmlBuild!==window.NUCLEO_BUILD_VERSION){
+      var k='nucleo-build-reload-'+window.NUCLEO_BUILD_VERSION;
+      if(!sessionStorage.getItem(k)){
+        sessionStorage.setItem(k,'1');
+        var u=new URL(location.href);
+        u.searchParams.set('_build',window.NUCLEO_BUILD_VERSION);
+        location.replace(u.toString());
+      }
     }
   } catch(e) {}
 })();
@@ -6233,94 +6252,6 @@ function closeRoReport(){
 function nucleoRoModelNormKey(v){
   return String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
 }
-function nucleoRoPdfKnownSectors_(){
-  const out=[];
-  try{if(typeof getConfiguredSectorsForTriage==='function')out.push(...(getConfiguredSectorsForTriage()||[]));}catch(_){ }
-  try{if(typeof getConfiguredSectors==='function'){out.push(...(getConfiguredSectors('matriz')||[]));out.push(...(getConfiguredSectors('filial')||[]));}}catch(_){ }
-  return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
-}
-function nucleoRoPdfIsSector_(v){
-  const n=nucleoRoModelNormKey(v);if(!n)return false;
-  return nucleoRoPdfKnownSectors_().some(s=>nucleoRoModelNormKey(s)===n);
-}
-function nucleoRoPdfLooksNumeric_(v){
-  const s=String(v??'').trim();
-  if(!s)return false;
-  return /^-?\d+(?:[\.,]\d+)?(?:\s*(?:kg|g|un|unid|pc|pcs|peças|pecas))?$/i.test(s);
-}
-function nucleoRoPdfFirstNonEmpty_(arr){
-  for(const v of arr){if(v!==undefined&&v!==null&&String(v).trim()!=='')return v;}
-  return '';
-}
-function nucleoRoPdfSemanticValues_(ro){
-  const raw=ro?.raw||{};
-  const val=(names)=>firstValue(raw,names)||'';
-  const tri=(()=>{try{return typeof getRoTriageRecord==='function'?getRoTriageRecord(ro,typeof getSavedTriageMap==='function'?getSavedTriageMap():undefined):null;}catch(_){return null;}})();
-
-  // V42: os campos oficiais do PDF usam primeiro os marcadores posicionais
-  // enviados pela API. Eles vêm diretamente das colunas reais da planilha e
-  // não sofrem com cabeçalhos antigos/deslocados do Google Forms.
-  const tipo=String(raw.__tipoOcorrencia ?? ro?.tipoRO ?? ro?.assunto ?? val(['Tipo de Ocorrência','Tipo de ocorrência','Classificação']) ?? '').trim();
-  const descricao=String(raw.__descricaoProblema ?? ro?.descricao ?? val(['Descreva sobre o problema encontrado:','Descreva sobre o problema encontrado','Descrição','Descricao']) ?? '').trim();
-  const setorIdentificado=String(raw.__setorIdentificado ?? ro?.setorIdentificado ?? val(['Setor (onde foi identificado o desvio de qualidade):','Setor (onde foi identificado o desvio de qualidade)','Setor onde foi identificado o desvio de qualidade','Setor onde foi identificado','Setor identificado']) ?? '').trim();
-  const quantidade=String(raw.__quantidadeDesvio ?? ro?.quantidade ?? val(['Quantidade de peças com desvio:','Quantidade de peças com desvio','Quantidade','Qtd','Qtd.']) ?? '').trim();
-  const peso=String(raw.__pesoMaterial ?? val(['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado','Peso do material descartado/reaproveitado']) ?? '').trim();
-  const liberado=String(raw.__liberadoQualidade ?? val(['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']) ?? '').trim();
-  const quemLiberou=String(raw.__quemLiberou ?? val(['Registre o nome de quem liberou:','Registre o nome de quem liberou','Quem liberou']) ?? '').trim();
-
-  let resultado=String(ro?.resultadoEnvio||raw?.__resultadoOperacional||val(['Resultado'])||'').trim();
-  if(/nenhum\s+email\s+encontrado/i.test(resultado))resultado='';
-
-  const destinatario=String(nucleoRoPdfFirstNonEmpty_([
-    tri?.responsibleUserName,
-    tri?.responsibleUserEmail,
-    tri?.destinatario,
-    tri?.recipient,
-    raw?.__pessoaResponsavel,
-    ro?.pessoaResponsavel
-  ])||'').trim();
-  const setorCausa=String(nucleoRoPdfFirstNonEmpty_([
-    tri?.responsibleSector,
-    tri?.setorDirecionado,
-    raw?.__setorResponsavel,
-    ro?.setorResponsavelPlanilha,
-    ro?.setor
-  ])||'').trim();
-
-  return {
-    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
-    'RO':ro?.numero||ro?.id||ro?.codigo||'',
-    'Data':ro?.data||ro?.dataSolicitacao||'',
-    'Unidade':ro?.unidade||'',
-    'Cliente':raw.__cliente||val(['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
-    'Tipo de ocorrência':tipo,
-    'Tipo de ocorrencia':tipo,
-    'Identificação do desvio':raw.__identificacaoDesvio||val(['Identifique o desvio de qualidade:  Problemas oriundos ou que deveriam ser pegos em:  F -  Fabricação PA - Processos Administrativos E - Expedição C - Clicheria DT - Desenvolvimento Técnico FT - Fábrica de Tintas G - Geral EP - Estoque MP'])||'',
-    'Descrição':descricao,
-    'Descricao':descricao,
-    'Setor identificado':setorIdentificado,
-    'Setor onde foi identificado':setorIdentificado,
-    'Quantidade de peças com desvio':quantidade,
-    'Peso do material descartado/reaproveitado':peso,
-    'Liberado pelo setor de qualidade?':liberado,
-    'Quem liberou':quemLiberou,
-    'Resultado':resultado,
-    'Destinatário da triagem':destinatario,
-    'Destinatario da triagem':destinatario,
-    'Setor causa/responsável':setorCausa,
-    'Setor causa / responsável':setorCausa,
-    'Setor':setorCausa,
-    'Status':ro?.status||'',
-    'Matrícula':val(['Matrícula','Matricula']),
-    'Responsável pelo registro':raw?.['Nome e Sobrenome (responsável pelo registro deste formulário):']||val(['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
-    'Número do pedido':val(['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
-    'Código do item':val(['Código do item:','Código do item','Codigo do item:','Codigo do item']),
-    'Ordem de produção':val(['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
-    'Nota fiscal de venda':val(['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda','Nota Fiscal']),
-    'Ação preventiva':raw?.__acaoPreventiva||val(['Ação preventiva','Acao preventiva']),
-    'Prazo conclusão ação':raw?.__prazoConclusaoAcao||val(['Prazo conclusão ação','Prazo conclusao acao'])
-  };
-}
 function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   const raw=ro?.raw||{},src=String(source||'');
   if(src==='#TITLE')return model?.title||'RELATO DE OCORRÊNCIA';
@@ -6331,27 +6262,48 @@ function nucleoRoModelValue(ro,source,model,pageNo=1,totalPages=1){
   if(src==='#PAGE')return totalPages>1?(pageNo+' / '+totalPages):String(pageNo);
   if(src==='#FOOTER')return model?.footer||'';
   if(src==='#GENERATED')return new Date().toLocaleString('pt-BR');
-  if(src==='#EVIDENCE'||src==='#HISTORY')return '';
+  if(src==='#EVIDENCE')return '';
+  if(src==='#HISTORY')return '';
 
-  const wanted=nucleoRoModelNormKey(src);
-  const semantic=nucleoRoPdfSemanticValues_(ro);
-  for(const [k,v] of Object.entries(semantic)){
-    if(nucleoRoModelNormKey(k)===wanted)return v??'';
-  }
-
-  // Somente campos não padronizados recorrem diretamente ao raw. Isso evita
-  // cabeçalhos históricos deslocados contaminarem os campos oficiais do PDF.
   if(Object.prototype.hasOwnProperty.call(raw,src) && String(raw[src]??'').trim()!=='')return raw[src];
+  const wanted=nucleoRoModelNormKey(src);
   for(const [k,v] of Object.entries(raw))if(nucleoRoModelNormKey(k)===wanted && String(v??'').trim()!=='')return v;
 
+  const values={
+    'R.O.':ro?.numero||ro?.id||ro?.codigo||'',
+    'RO':ro?.numero||ro?.id||ro?.codigo||'',
+    'Data':ro?.data||ro?.dataSolicitacao||'',
+    'Unidade':ro?.unidade||'',
+    'Cliente':firstValue(raw,['Nome do cliente:','Nome do cliente','Cliente','Cliente / origem'])||ro?.cliente||'',
+    'Tipo de ocorrência':ro?.tipoRO||ro?.assunto||'',
+    'Setor identificado':ro?.setorIdentificado||'',
+    'Setor onde foi identificado':ro?.setorIdentificado||'',
+    'Setor causa/responsável':ro?.setor||'',
+    'Setor causa / responsável':ro?.setor||'',
+    'Setor':ro?.setor||'',
+    'Status':ro?.status||'',
+    'Descrição':ro?.descricao||'',
+    'Matrícula':firstValue(raw,['Matrícula','Matricula']),
+    'Responsável pelo registro':firstValue(raw,['Nome e Sobrenome (responsável pelo registro deste formulário):','Nome e Sobrenome (responsável pelo registro deste formulário)','Responsável pelo registro','Responsavel pelo registro']),
+    'Número do pedido':firstValue(raw,['Número do pedido:','Número do pedido','Numero do pedido:','Numero do pedido']),
+    'Código do item':firstValue(raw,['Código do item:','Código do item','Codigo do item:','Codigo do item']),
+    'Ordem de produção':firstValue(raw,['Ordem de produção (código de barras):','Ordem de produção (código de barras)','Ordem de produção','Ordem de producao']),
+    'Nota fiscal de venda':firstValue(raw,['Nota fiscal de venda','Nota fiscal de venda:','NF de venda','NF venda']),
+    'Quantidade de peças com desvio':firstValue(raw,['Quantidade de peças com desvio:','Quantidade de peças com desvio']),
+    'Peso do material descartado/reaproveitado':firstValue(raw,['Peso do material descartado e/ou reaproveitado:','Peso do material descartado e/ou reaproveitado']),
+    'Liberado pelo setor de qualidade?':firstValue(raw,['Liberado pelo setor de qualidade?','Liberado pelo setor de qualidade']),
+    'Quem liberou':firstValue(raw,['Registre o nome de quem liberou:','Registre o nome de quem liberou']),
+    'Ação preventiva':firstValue(raw,['Ação preventiva','Acao preventiva']),
+    'Prazo conclusão ação':firstValue(raw,['Prazo conclusão ação','Prazo conclusao acao'])
+  };
+  for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===wanted)return v??'';
   const f=(model?.fields||[]).find(x=>nucleoRoModelNormKey(x?.source)===wanted||nucleoRoModelNormKey(x?.label)===wanted);
   if(f){
     const fw=nucleoRoModelNormKey(f.source||f.label||'');
-    for(const [k,v] of Object.entries(semantic))if(nucleoRoModelNormKey(k)===fw)return v??'';
+    for(const [k,v] of Object.entries(values))if(nucleoRoModelNormKey(k)===fw)return v??'';
   }
   return '';
 }
-
 function nucleoRoModelEsc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function nucleoRoCellPersistMeta(cell){
   const raw=String(cell?.id||''),mark='~nmeta~',i=raw.indexOf(mark);
@@ -6362,49 +6314,11 @@ function nucleoRoCellPersistMeta(cell){
   return {source:dec(parts[0]),mask:/^[01]{4}$/.test(parts[1]||'')?parts[1]:'',fill:hasFill?parts[2]:'',label:dec(parts.slice(hasFill?3:2).join('~'))};
 }
 function nucleoRoModelRowUnits(row){const cells=row?.cells||[];if(!cells.length)return[];const total=cells.reduce((s,c)=>s+Math.max(.01,Number(c.width)||50),0)||100;let used=0;return cells.map((c,i)=>{if(i===cells.length-1)return Math.max(1,100-used);const rem=cells.length-i-1;let u=Math.max(1,Math.round((Math.max(.01,Number(c.width)||50)/total)*100));u=Math.min(u,Math.max(1,100-used-rem));used+=u;return u;});}
-
-function nucleoRoPdfCanonicalRowLabel_(v){
-  const n=nucleoRoModelNormKey(v);
-  const map={
-    'r o':'R.O.','ro':'RO','data':'Data','unidade':'Unidade','cliente':'Cliente',
-    'codigo do item':'Código do item','numero do pedido':'Número do pedido',
-    'nota fiscal de venda':'Nota fiscal de venda','ordem de producao':'Ordem de produção',
-    'tipo de ocorrencia':'Tipo de ocorrência','descricao':'Descrição',
-    'setor onde foi identificado':'Setor onde foi identificado',
-    'setor identificado':'Setor onde foi identificado',
-    'quantidade de pecas com desvio':'Quantidade de peças com desvio',
-    'peso do material descartado reaproveitado':'Peso do material descartado/reaproveitado',
-    'liberado pelo setor de qualidade':'Liberado pelo setor de qualidade?',
-    'liberado pelo setor da qualidade':'Liberado pelo setor de qualidade?',
-    'quem liberou':'Quem liberou','resultado':'Resultado',
-    'destinatario da triagem':'Destinatário da triagem',
-    'setor causa responsavel':'Setor causa / responsável',
-    'responsavel pelo registro':'Responsável pelo registro',
-    'matricula':'Matrícula'
-  };
-  return map[n]||'';
-}
-function nucleoRoPdfRowField_(row){
-  const cells=Array.isArray(row?.cells)?row.cells:[];
-  for(const c of cells){
-    const meta=nucleoRoCellPersistMeta(c);
-    const candidates=[
-      c?.labelText,c?.systemLabelText,meta?.label,
-      c?.text
-    ];
-    for(const candidate of candidates){
-      const canonical=nucleoRoPdfCanonicalRowLabel_(candidate);
-      if(canonical)return canonical;
-    }
-  }
-  return '';
-}
-
 function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
   const safeColor=(v,d)=>/^#[0-9a-f]{6}$/i.test(String(v||''))?v:d;
   const safeFill=(v,d='#ffffff')=>String(v||'').toLowerCase()==='transparent'?'transparent':safeColor(v,d);
   const rows=Array.isArray(grid)?grid:[];
-  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);const rowField=nucleoRoPdfRowField_(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
+  return rows.map(row=>{const units=nucleoRoModelRowUnits(row);return '<tr>'+((row.cells||[]).map((cell,ci)=>{
     const meta=nucleoRoCellPersistMeta(cell);
     // V62: alguns backends preservam o texto do placeholder, mas removem a origem
     // especial da célula. Nesse caso, recupere a origem pelo próprio placeholder
@@ -6420,37 +6334,8 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
       '[PÁGINA]':'#PAGE',
       '[PAGINA]':'#PAGE'
     };
-    let src=String(cell.source||meta.source||cell.systemSource||'');
+    let src=String(cell.systemSource||meta.source||cell.source||'');
     if(!src)src=placeholderSource[persistedText]||'';
-
-    // V43: em linhas padrão "rótulo | valor", o rótulo da própria linha é a
-    // fonte oficial do valor. Isso ignora source/systemSource antigas salvas no modelo.
-    if(rowField){
-      const thisCellCanonical=nucleoRoPdfCanonicalRowLabel_(
-        String(cell.labelText||cell.systemLabelText||meta.label||cell.text||'')
-      );
-      const isLabelCell=thisCellCanonical===rowField;
-      if(!isLabelCell && cell.type!=='image'){
-        src=rowField;
-      }
-    }
-
-    // V40: campos padrão da R.O. são resolvidos pelo rótulo visível quando ele
-    // identifica inequivocamente um campo do formulário. Isso impede que uma
-    // `source` antiga salva no modelo desloque todos os valores uma linha.
-    const visibleLabelForSource=String(cell.labelText||cell.systemLabelText||meta.label||'').trim();
-    const knownRoFieldLabels=new Set([
-      'R.O.','RO','Data','Unidade','Cliente','Código do item','Codigo do item',
-      'Número do pedido','Numero do pedido','Nota fiscal de venda','Ordem de produção','Ordem de producao',
-      'Tipo de ocorrência','Tipo de ocorrencia','Descrição','Descricao',
-      'Setor identificado','Setor onde foi identificado','Setor causa/responsável','Setor causa / responsável',
-      'Quantidade de peças com desvio','Peso do material descartado/reaproveitado',
-      'Liberado pelo setor de qualidade?','Liberado pelo setor da qualidade?','Quem liberou',
-      'Ação preventiva','Acao preventiva','Prazo conclusão ação','Prazo conclusao acao','Status'
-    ].map(nucleoRoModelNormKey));
-    if(visibleLabelForSource && knownRoFieldLabels.has(nucleoRoModelNormKey(visibleLabelForSource))){
-      src=visibleLabelForSource;
-    }
     const rawBw=Number(cell.borderWidth),bw=Math.max(0,Math.min(4,Number.isFinite(rawBw)?rawBw:.5)),bc=safeColor(cell.borderColor,'#999999');
     const sideIndex={Top:0,Right:1,Bottom:2,Left:3};
     const side=(name)=>{const explicit=meta.mask?meta.mask[sideIndex[name]]==='1':cell['border'+name]!==false;return explicit?`${bw}pt solid ${safeColor(cell['border'+name+'Color'],bc)}`:'0';};
@@ -6463,16 +6348,10 @@ function nucleoRoModelRowsHtml(grid,ro,model,images,pageNo=1,totalPages=1){
     }else content=nucleoRoModelEsc(cell.text||'').replace(/\n/g,'<br>');
     const visibleLabel=String(cell.labelText||cell.systemLabelText||meta.label||'');
     if(visibleLabel){content=`<div class="cell-stack"><span class="cell-label" style="font-size:${Math.max(5,Number(cell.labelFontSize)||7)}pt;font-weight:${cell.labelBold===false?'400':'700'}">${nucleoRoModelEsc(visibleLabel)}</span><span>${content||''}</span></div>`;}
-    const cellHeight=Math.max(3,Number(cell.height)||9);
-    const heightCss=cell.type==='image'?`height:${cellHeight}mm;`:`height:auto;`;
-    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="${heightCss}background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
+    return `<td colspan="${units[ci]||1}" ${Number(cell.rowSpan)>1?`rowspan="${Math.floor(Number(cell.rowSpan))}"`:''} style="height:${Math.max(3,Number(cell.height)||9)}mm;background:${cell.backgroundNone===true||meta.fill==='1'?'transparent':safeFill(cell.background,'#ffffff')};color:${safeColor(cell.textColor,'#222222')};border-top:${side('Top')};border-right:${side('Right')};border-bottom:${side('Bottom')};border-left:${side('Left')};padding:1.3mm;text-align:${['left','center','right'].includes(cell.align)?cell.align:'left'};vertical-align:${['top','middle','bottom'].includes(cell.verticalAlign)?cell.verticalAlign:'middle'};font-size:${Math.max(6,Number(cell.fontSize)||9)}pt;font-weight:${cell.bold?'700':'400'};font-style:${cell.italic?'italic':'normal'};overflow-wrap:anywhere;white-space:pre-wrap">${content||'&nbsp;'}</td>`;
    }).join(''))+'</tr>';}).join('');
 }
 function nucleoRoEvidenceUrls(ro){
-  const embedded=Array.isArray(ro?.__nucleoEvidenceDataUrls)
-    ? ro.__nucleoEvidenceDataUrls.map(x=>String(x||'').trim()).filter(Boolean)
-    : [];
-  if(embedded.length)return [...new Set(embedded)];
   const raw=ro?.raw||{};
   const evidence=String(ro?.evidencia||firstValue(raw,[
     'Insira imagens e/ou vídeos relacionado a ocorrência relatada.',
@@ -20681,8 +20560,8 @@ if(getSession()){
 }
 refreshAccessUI();enforceAdminVisibility();refreshRoRegistrationAccess();
 setTimeout(async()=>{
-  const token=getSession()?.authToken;
-  if(!token)return;
+  if(!getSession()?.authToken)return;
+  await showNucleoLoading('Confirmando dados com a base central...','Carregando NÚCLEO');
   try{
     const centralOk=await syncPortalBackend(false);
     if(!centralOk){
@@ -20692,18 +20571,13 @@ setTimeout(async()=>{
       }
       throw new Error('A base central não confirmou os dados.');
     }
-    if((!getSession()?.permissions||nucleoPersonCan('ros')) && getSession()?.authToken===token){
-      void refreshLegacyRoCacheFromApi(false).then(()=>{
-        if(getSession()?.authToken!==token)return;
-        try{render();refreshRoSummary();refreshMenuNotificationBadges();}catch(e){}
-      }).catch(e=>console.warn('Atualização de R.O.s em segundo plano:',e));
-    }
+    if(!getSession()?.permissions||nucleoPersonCan('ros'))await refreshLegacyRoCacheFromApi(true);
   }
   catch(e){
     console.warn('Falha ao confirmar dados da base central.',e);
     nucleoSetCentralSyncState('error','Não foi possível confirmar os dados com a base central: '+(e?.message||e));
   }
-  finally{try{hideNucleoLoading(true)}catch(e){}}
+  finally{hideNucleoLoading(true);}
 },80);
 try{if(getSession())renderCurrentOverview()}catch(e){console.warn('Falha ao carregar a Visão geral inicial.',e)}
 try{refreshNotificationBell();refreshMenuNotificationBadges()}catch(e){}
@@ -22406,3 +22280,555 @@ const NUCLEO_5S_AUDITOR_LINKS_KEY='nucleo-5s-auditor-links-v1';
 document.addEventListener('DOMContentLoaded',()=>{
   try{nucleo5sEnsureAuditorLinkCard()}catch(e){}
 });
+
+try{
+  if(typeof nucleoLoadAdminModule==='function' && typeof window.nucleoLoadAdminModule!=='function') window.nucleoLoadAdminModule=nucleoLoadAdminModule;
+  if(typeof finish==='function' && typeof window.finish!=='function') window.finish=finish;
+  if(typeof nucleoOpenLazyAdmin==='function' && typeof window.nucleoOpenLazyAdmin!=='function') window.nucleoOpenLazyAdmin=nucleoOpenLazyAdmin;
+  if(typeof parseResponsibleSectors==='function' && typeof window.parseResponsibleSectors!=='function') window.parseResponsibleSectors=parseResponsibleSectors;
+  if(typeof renderSectorCheckboxes==='function' && typeof window.renderSectorCheckboxes!=='function') window.renderSectorCheckboxes=renderSectorCheckboxes;
+  if(typeof collectSectorCheckboxes==='function' && typeof window.collectSectorCheckboxes!=='function') window.collectSectorCheckboxes=collectSectorCheckboxes;
+  if(typeof updateExtraActionResponsibleSectors==='function' && typeof window.updateExtraActionResponsibleSectors!=='function') window.updateExtraActionResponsibleSectors=updateExtraActionResponsibleSectors;
+  if(typeof renderGlobalSearch==='function' && typeof window.renderGlobalSearch!=='function') window.renderGlobalSearch=renderGlobalSearch;
+  if(typeof openGlobalSearchResult==='function' && typeof window.openGlobalSearchResult!=='function') window.openGlobalSearchResult=openGlobalSearchResult;
+  if(typeof pendingHubData==='function' && typeof window.pendingHubData!=='function') window.pendingHubData=pendingHubData;
+  if(typeof showPendingHub==='function' && typeof window.showPendingHub!=='function') window.showPendingHub=showPendingHub;
+  if(typeof pendingHubRoDeadline==='function' && typeof window.pendingHubRoDeadline!=='function') window.pendingHubRoDeadline=pendingHubRoDeadline;
+  if(typeof renderPendingHub==='function' && typeof window.renderPendingHub!=='function') window.renderPendingHub=renderPendingHub;
+  if(typeof refreshPendingHub==='function' && typeof window.refreshPendingHub!=='function') window.refreshPendingHub=refreshPendingHub;
+  if(typeof addDaysIso==='function' && typeof window.addDaysIso!=='function') window.addDaysIso=addDaysIso;
+  if(typeof audienceLabel==='function' && typeof window.audienceLabel!=='function') window.audienceLabel=audienceLabel;
+  if(typeof ensurePreviewSession==='function' && typeof window.ensurePreviewSession!=='function') window.ensurePreviewSession=ensurePreviewSession;
+  if(typeof findKnownUserByNameSector==='function' && typeof window.findKnownUserByNameSector!=='function') window.findKnownUserByNameSector=findKnownUserByNameSector;
+  if(typeof registerUser==='function' && typeof window.registerUser!=='function') window.registerUser=registerUser;
+  if(typeof showRegisterMessage==='function' && typeof window.showRegisterMessage!=='function') window.showRegisterMessage=showRegisterMessage;
+  if(typeof showProfile==='function' && typeof window.showProfile!=='function') window.showProfile=showProfile;
+  if(typeof saveOwnProfile==='function' && typeof window.saveOwnProfile!=='function') window.saveOwnProfile=saveOwnProfile;
+  if(typeof canRegisterExternalRo==='function' && typeof window.canRegisterExternalRo!=='function') window.canRegisterExternalRo=canRegisterExternalRo;
+  if(typeof applyExternalRoAccessClass==='function' && typeof window.applyExternalRoAccessClass!=='function') window.applyExternalRoAccessClass=applyExternalRoAccessClass;
+  if(typeof closePdfPreview==='function' && typeof window.closePdfPreview!=='function') window.closePdfPreview=closePdfPreview;
+  if(typeof downloadPreviewPdf==='function' && typeof window.downloadPreviewPdf!=='function') window.downloadPreviewPdf=downloadPreviewPdf;
+  if(typeof showPdfBlob==='function' && typeof window.showPdfBlob!=='function') window.showPdfBlob=showPdfBlob;
+  if(typeof safeStorageSet==='function' && typeof window.safeStorageSet!=='function') window.safeStorageSet=safeStorageSet;
+  if(typeof approvePortalUser==='function' && typeof window.approvePortalUser!=='function') window.approvePortalUser=approvePortalUser;
+  if(typeof rejectPortalUser==='function' && typeof window.rejectPortalUser!=='function') window.rejectPortalUser=rejectPortalUser;
+  if(typeof addPortalAuditEvent==='function' && typeof window.addPortalAuditEvent!=='function') window.addPortalAuditEvent=addPortalAuditEvent;
+  if(typeof closePresentationModal==='function' && typeof window.closePresentationModal!=='function') window.closePresentationModal=closePresentationModal;
+  if(typeof confirmPresentation==='function' && typeof window.confirmPresentation!=='function') window.confirmPresentation=confirmPresentation;
+  if(typeof sectorCompareKey==='function' && typeof window.sectorCompareKey!=='function') window.sectorCompareKey=sectorCompareKey;
+  if(typeof sectorStatusLike==='function' && typeof window.sectorStatusLike!=='function') window.sectorStatusLike=sectorStatusLike;
+  if(typeof answerLooksYes==='function' && typeof window.answerLooksYes!=='function') window.answerLooksYes=answerLooksYes;
+  if(typeof getUnifiedManualActions==='function' && typeof window.getUnifiedManualActions!=='function') window.getUnifiedManualActions=getUnifiedManualActions;
+  if(typeof saveUnifiedManualActions==='function' && typeof window.saveUnifiedManualActions!=='function') window.saveUnifiedManualActions=saveUnifiedManualActions;
+  if(typeof unifiedActionUserKey==='function' && typeof window.unifiedActionUserKey!=='function') window.unifiedActionUserKey=unifiedActionUserKey;
+  if(typeof unifiedCurrentUserKey==='function' && typeof window.unifiedCurrentUserKey!=='function') window.unifiedCurrentUserKey=unifiedCurrentUserKey;
+  if(typeof unifiedActionUserDisplay==='function' && typeof window.unifiedActionUserDisplay!=='function') window.unifiedActionUserDisplay=unifiedActionUserDisplay;
+  if(typeof unifiedActionUserSector==='function' && typeof window.unifiedActionUserSector!=='function') window.unifiedActionUserSector=unifiedActionUserSector;
+  if(typeof unifiedActionAssignableUsers==='function' && typeof window.unifiedActionAssignableUsers!=='function') window.unifiedActionAssignableUsers=unifiedActionAssignableUsers;
+  if(typeof unifiedActionCanCreateFor==='function' && typeof window.unifiedActionCanCreateFor!=='function') window.unifiedActionCanCreateFor=unifiedActionCanCreateFor;
+  if(typeof unifiedActionCanSee==='function' && typeof window.unifiedActionCanSee!=='function') window.unifiedActionCanSee=unifiedActionCanSee;
+  if(typeof unifiedActionDateLabel==='function' && typeof window.unifiedActionDateLabel!=='function') window.unifiedActionDateLabel=unifiedActionDateLabel;
+  if(typeof unifiedActionDateTimeLabel==='function' && typeof window.unifiedActionDateTimeLabel!=='function') window.unifiedActionDateTimeLabel=unifiedActionDateTimeLabel;
+  if(typeof unifiedActionUrgencyLabel==='function' && typeof window.unifiedActionUrgencyLabel!=='function') window.unifiedActionUrgencyLabel=unifiedActionUrgencyLabel;
+  if(typeof unifiedManualActionStatus==='function' && typeof window.unifiedManualActionStatus!=='function') window.unifiedManualActionStatus=unifiedManualActionStatus;
+  if(typeof unifiedManualActionDeadline==='function' && typeof window.unifiedManualActionDeadline!=='function') window.unifiedManualActionDeadline=unifiedManualActionDeadline;
+  if(typeof unifiedActionAllSectors==='function' && typeof window.unifiedActionAllSectors!=='function') window.unifiedActionAllSectors=unifiedActionAllSectors;
+  if(typeof populateUnifiedActionDependencySectors==='function' && typeof window.populateUnifiedActionDependencySectors!=='function') window.populateUnifiedActionDependencySectors=populateUnifiedActionDependencySectors;
+  if(typeof unifiedActionSelectedDependencies==='function' && typeof window.unifiedActionSelectedDependencies!=='function') window.unifiedActionSelectedDependencies=unifiedActionSelectedDependencies;
+  if(typeof unifiedActionDependencyText==='function' && typeof window.unifiedActionDependencyText!=='function') window.unifiedActionDependencyText=unifiedActionDependencyText;
+  if(typeof openUnifiedActionModal==='function' && typeof window.openUnifiedActionModal!=='function') window.openUnifiedActionModal=openUnifiedActionModal;
+  if(typeof closeUnifiedActionModal==='function' && typeof window.closeUnifiedActionModal!=='function') window.closeUnifiedActionModal=closeUnifiedActionModal;
+  if(typeof refreshUnifiedActionTargetUi==='function' && typeof window.refreshUnifiedActionTargetUi!=='function') window.refreshUnifiedActionTargetUi=refreshUnifiedActionTargetUi;
+  if(typeof refreshUnifiedActionPeopleBySector==='function' && typeof window.refreshUnifiedActionPeopleBySector!=='function') window.refreshUnifiedActionPeopleBySector=refreshUnifiedActionPeopleBySector;
+  if(typeof saveUnifiedAction==='function' && typeof window.saveUnifiedAction!=='function') window.saveUnifiedAction=saveUnifiedAction;
+  if(typeof unifiedManualActionCanComplete==='function' && typeof window.unifiedManualActionCanComplete!=='function') window.unifiedManualActionCanComplete=unifiedManualActionCanComplete;
+  if(typeof unifiedActionCanUpdate==='function' && typeof window.unifiedActionCanUpdate!=='function') window.unifiedActionCanUpdate=unifiedActionCanUpdate;
+  if(typeof openUnifiedActionHistory==='function' && typeof window.openUnifiedActionHistory!=='function') window.openUnifiedActionHistory=openUnifiedActionHistory;
+  if(typeof closeUnifiedActionHistory==='function' && typeof window.closeUnifiedActionHistory!=='function') window.closeUnifiedActionHistory=closeUnifiedActionHistory;
+  if(typeof renderUnifiedActionHistory==='function' && typeof window.renderUnifiedActionHistory!=='function') window.renderUnifiedActionHistory=renderUnifiedActionHistory;
+  if(typeof saveUnifiedActionUpdate==='function' && typeof window.saveUnifiedActionUpdate!=='function') window.saveUnifiedActionUpdate=saveUnifiedActionUpdate;
+  if(typeof completeUnifiedManualAction==='function' && typeof window.completeUnifiedManualAction!=='function') window.completeUnifiedManualAction=completeUnifiedManualAction;
+  if(typeof deleteUnifiedManualAction==='function' && typeof window.deleteUnifiedManualAction!=='function') window.deleteUnifiedManualAction=deleteUnifiedManualAction;
+  if(typeof inferActionStatus==='function' && typeof window.inferActionStatus!=='function') window.inferActionStatus=inferActionStatus;
+  if(typeof userSectorPendingActions==='function' && typeof window.userSectorPendingActions!=='function') window.userSectorPendingActions=userSectorPendingActions;
+  if(typeof refreshUserPendingActionAlert==='function' && typeof window.refreshUserPendingActionAlert!=='function') window.refreshUserPendingActionAlert=refreshUserPendingActionAlert;
+  if(typeof markActionCompleted==='function' && typeof window.markActionCompleted!=='function') window.markActionCompleted=markActionCompleted;
+  if(typeof actionDeadlineInfo==='function' && typeof window.actionDeadlineInfo!=='function') window.actionDeadlineInfo=actionDeadlineInfo;
+  if(typeof actionDashboardItems==='function' && typeof window.actionDashboardItems!=='function') window.actionDashboardItems=actionDashboardItems;
+  if(typeof registerActionEvidence==='function' && typeof window.registerActionEvidence!=='function') window.registerActionEvidence=registerActionEvidence;
+  if(typeof populateActionsSectorFilter==='function' && typeof window.populateActionsSectorFilter!=='function') window.populateActionsSectorFilter=populateActionsSectorFilter;
+  if(typeof unifiedActionRowButtons==='function' && typeof window.unifiedActionRowButtons!=='function') window.unifiedActionRowButtons=unifiedActionRowButtons;
+  if(typeof renderActionsDashboard==='function' && typeof window.renderActionsDashboard!=='function') window.renderActionsDashboard=renderActionsDashboard;
+  if(typeof showActionsDashboard==='function' && typeof window.showActionsDashboard!=='function') window.showActionsDashboard=showActionsDashboard;
+  if(typeof showPendingActions==='function' && typeof window.showPendingActions!=='function') window.showPendingActions=showPendingActions;
+  if(typeof renderPendingActions==='function' && typeof window.renderPendingActions!=='function') window.renderPendingActions=renderPendingActions;
+  if(typeof getRoById==='function' && typeof window.getRoById!=='function') window.getRoById=getRoById;
+  if(typeof roPdfAllowed==='function' && typeof window.roPdfAllowed!=='function') window.roPdfAllowed=roPdfAllowed;
+  if(typeof openRoReportHtml==='function' && typeof window.openRoReportHtml!=='function') window.openRoReportHtml=openRoReportHtml;
+  if(typeof roReportEsc==='function' && typeof window.roReportEsc!=='function') window.roReportEsc=roReportEsc;
+  if(typeof openRoReport==='function' && typeof window.openRoReport!=='function') window.openRoReport=openRoReport;
+  if(typeof updateRoSyncPeriodUi==='function' && typeof window.updateRoSyncPeriodUi!=='function') window.updateRoSyncPeriodUi=updateRoSyncPeriodUi;
+  if(typeof roSyncPeriodParams==='function' && typeof window.roSyncPeriodParams!=='function') window.roSyncPeriodParams=roSyncPeriodParams;
+  if(typeof appendIntegrationParams==='function' && typeof window.appendIntegrationParams!=='function') window.appendIntegrationParams=appendIntegrationParams;
+  if(typeof integrationPeriodLabel==='function' && typeof window.integrationPeriodLabel!=='function') window.integrationPeriodLabel=integrationPeriodLabel;
+  if(typeof getSavedIntegrationSettings==='function' && typeof window.getSavedIntegrationSettings!=='function') window.getSavedIntegrationSettings=getSavedIntegrationSettings;
+  if(typeof setRoPdfButtonState==='function' && typeof window.setRoPdfButtonState!=='function') window.setRoPdfButtonState=setRoPdfButtonState;
+  if(typeof base64PdfToDownload==='function' && typeof window.base64PdfToDownload!=='function') window.base64PdfToDownload=base64PdfToDownload;
+  if(typeof downloadCompleteRoPdf==='function' && typeof window.downloadCompleteRoPdf!=='function') window.downloadCompleteRoPdf=downloadCompleteRoPdf;
+  if(typeof closeRoReport==='function' && typeof window.closeRoReport!=='function') window.closeRoReport=closeRoReport;
+  if(typeof nucleoRoModelNormKey==='function' && typeof window.nucleoRoModelNormKey!=='function') window.nucleoRoModelNormKey=nucleoRoModelNormKey;
+  if(typeof nucleoRoModelValue==='function' && typeof window.nucleoRoModelValue!=='function') window.nucleoRoModelValue=nucleoRoModelValue;
+  if(typeof nucleoRoModelEsc==='function' && typeof window.nucleoRoModelEsc!=='function') window.nucleoRoModelEsc=nucleoRoModelEsc;
+  if(typeof nucleoRoCellPersistMeta==='function' && typeof window.nucleoRoCellPersistMeta!=='function') window.nucleoRoCellPersistMeta=nucleoRoCellPersistMeta;
+  if(typeof nucleoRoModelRowUnits==='function' && typeof window.nucleoRoModelRowUnits!=='function') window.nucleoRoModelRowUnits=nucleoRoModelRowUnits;
+  if(typeof nucleoRoModelRowsHtml==='function' && typeof window.nucleoRoModelRowsHtml!=='function') window.nucleoRoModelRowsHtml=nucleoRoModelRowsHtml;
+  if(typeof nucleoRoEvidenceUrls==='function' && typeof window.nucleoRoEvidenceUrls!=='function') window.nucleoRoEvidenceUrls=nucleoRoEvidenceUrls;
+  if(typeof nucleoRoEvidenceImageUrl==='function' && typeof window.nucleoRoEvidenceImageUrl!=='function') window.nucleoRoEvidenceImageUrl=nucleoRoEvidenceImageUrl;
+  if(typeof commercialExternalUsers==='function' && typeof window.commercialExternalUsers!=='function') window.commercialExternalUsers=commercialExternalUsers;
+  if(typeof populateCommercialExternalUserSelect==='function' && typeof window.populateCommercialExternalUserSelect!=='function') window.populateCommercialExternalUserSelect=populateCommercialExternalUserSelect;
+  if(typeof closeRepresentativePicker==='function' && typeof window.closeRepresentativePicker!=='function') window.closeRepresentativePicker=closeRepresentativePicker;
+  if(typeof saveRepresentativePicker==='function' && typeof window.saveRepresentativePicker!=='function') window.saveRepresentativePicker=saveRepresentativePicker;
+  if(typeof externalRoStatusLabel==='function' && typeof window.externalRoStatusLabel!=='function') window.externalRoStatusLabel=externalRoStatusLabel;
+  if(typeof externalRoPendingCount==='function' && typeof window.externalRoPendingCount!=='function') window.externalRoPendingCount=externalRoPendingCount;
+  if(typeof refreshExternalRoSidebarBadge==='function' && typeof window.refreshExternalRoSidebarBadge!=='function') window.refreshExternalRoSidebarBadge=refreshExternalRoSidebarBadge;
+  if(typeof currentRepresentativeName==='function' && typeof window.currentRepresentativeName!=='function') window.currentRepresentativeName=currentRepresentativeName;
+  if(typeof populateExternalRoSectorSelect==='function' && typeof window.populateExternalRoSectorSelect!=='function') window.populateExternalRoSectorSelect=populateExternalRoSectorSelect;
+  if(typeof refreshExternalDeadlineReason==='function' && typeof window.refreshExternalDeadlineReason!=='function') window.refreshExternalDeadlineReason=refreshExternalDeadlineReason;
+  if(typeof getHiddenAssignedKeys==='function' && typeof window.getHiddenAssignedKeys!=='function') window.getHiddenAssignedKeys=getHiddenAssignedKeys;
+  if(typeof saveHiddenAssignedKeys==='function' && typeof window.saveHiddenAssignedKeys!=='function') window.saveHiddenAssignedKeys=saveHiddenAssignedKeys;
+  if(typeof roNumbersSameLegacy==='function' && typeof window.roNumbersSameLegacy!=='function') window.roNumbersSameLegacy=roNumbersSameLegacy;
+  if(typeof findRoByAnyNumber==='function' && typeof window.findRoByAnyNumber!=='function') window.findRoByAnyNumber=findRoByAnyNumber;
+  if(typeof usersBySector==='function' && typeof window.usersBySector!=='function') window.usersBySector=usersBySector;
+  if(typeof userMatchesDirectedPerson==='function' && typeof window.userMatchesDirectedPerson!=='function') window.userMatchesDirectedPerson=userMatchesDirectedPerson;
+  if(typeof directedRecipientLabel==='function' && typeof window.directedRecipientLabel!=='function') window.directedRecipientLabel=directedRecipientLabel;
+  if(typeof updateRoUnitLocal==='function' && typeof window.updateRoUnitLocal!=='function') window.updateRoUnitLocal=updateRoUnitLocal;
+  if(typeof nextTuesdayIsoDate==='function' && typeof window.nextTuesdayIsoDate!=='function') window.nextTuesdayIsoDate=nextTuesdayIsoDate;
+  if(typeof tokenizeForSimilarity==='function' && typeof window.tokenizeForSimilarity!=='function') window.tokenizeForSimilarity=tokenizeForSimilarity;
+  if(typeof problemFeatures==='function' && typeof window.problemFeatures!=='function') window.problemFeatures=problemFeatures;
+  if(typeof jaccardSimilarity==='function' && typeof window.jaccardSimilarity!=='function') window.jaccardSimilarity=jaccardSimilarity;
+  if(typeof problemSimilarity==='function' && typeof window.problemSimilarity!=='function') window.problemSimilarity=problemSimilarity;
+  if(typeof roSimilarity==='function' && typeof window.roSimilarity!=='function') window.roSimilarity=roSimilarity;
+  if(typeof findSimilarRos==='function' && typeof window.findSimilarRos!=='function') window.findSimilarRos=findSimilarRos;
+  if(typeof summarizeOccurrence==='function' && typeof window.summarizeOccurrence!=='function') window.summarizeOccurrence=summarizeOccurrence;
+  if(typeof renderRoIntelligence==='function' && typeof window.renderRoIntelligence!=='function') window.renderRoIntelligence=renderRoIntelligence;
+  if(typeof similarityReasons==='function' && typeof window.similarityReasons!=='function') window.similarityReasons=similarityReasons;
+  if(typeof duplicateMeta==='function' && typeof window.duplicateMeta!=='function') window.duplicateMeta=duplicateMeta;
+  if(typeof getOfflineQueue==='function' && typeof window.getOfflineQueue!=='function') window.getOfflineQueue=getOfflineQueue;
+  if(typeof setOfflineQueue==='function' && typeof window.setOfflineQueue!=='function') window.setOfflineQueue=setOfflineQueue;
+  if(typeof queueOfflineOperation==='function' && typeof window.queueOfflineOperation!=='function') window.queueOfflineOperation=queueOfflineOperation;
+  if(typeof flushOfflineQueue==='function' && typeof window.flushOfflineQueue!=='function') window.flushOfflineQueue=flushOfflineQueue;
+  if(typeof updateNetworkState==='function' && typeof window.updateNetworkState!=='function') window.updateNetworkState=updateNetworkState;
+  if(typeof startNucleoCentralRefresh==='function' && typeof window.startNucleoCentralRefresh!=='function') window.startNucleoCentralRefresh=startNucleoCentralRefresh;
+  if(typeof getFavorites==='function' && typeof window.getFavorites!=='function') window.getFavorites=getFavorites;
+  if(typeof saveFavorites==='function' && typeof window.saveFavorites!=='function') window.saveFavorites=saveFavorites;
+  if(typeof isFavoriteRo==='function' && typeof window.isFavoriteRo!=='function') window.isFavoriteRo=isFavoriteRo;
+  if(typeof toggleFavoriteSelectedRo==='function' && typeof window.toggleFavoriteSelectedRo!=='function') window.toggleFavoriteSelectedRo=toggleFavoriteSelectedRo;
+  if(typeof refreshFavoriteButton==='function' && typeof window.refreshFavoriteButton!=='function') window.refreshFavoriteButton=refreshFavoriteButton;
+  if(typeof getArchivedRoIds==='function' && typeof window.getArchivedRoIds!=='function') window.getArchivedRoIds=getArchivedRoIds;
+  if(typeof saveArchivedRoIds==='function' && typeof window.saveArchivedRoIds!=='function') window.saveArchivedRoIds=saveArchivedRoIds;
+  if(typeof isArchivedRo==='function' && typeof window.isArchivedRo!=='function') window.isArchivedRo=isArchivedRo;
+  if(typeof archiveOldRos==='function' && typeof window.archiveOldRos!=='function') window.archiveOldRos=archiveOldRos;
+  if(typeof showArchivedRos==='function' && typeof window.showArchivedRos!=='function') window.showArchivedRos=showArchivedRos;
+  if(typeof managementDate==='function' && typeof window.managementDate!=='function') window.managementDate=managementDate;
+  if(typeof withinManagementPeriod==='function' && typeof window.withinManagementPeriod!=='function') window.withinManagementPeriod=withinManagementPeriod;
+  if(typeof effectiveRoSector==='function' && typeof window.effectiveRoSector!=='function') window.effectiveRoSector=effectiveRoSector;
+  if(typeof effectiveRoDeadline==='function' && typeof window.effectiveRoDeadline!=='function') window.effectiveRoDeadline=effectiveRoDeadline;
+  if(typeof effectiveRoCriticality==='function' && typeof window.effectiveRoCriticality!=='function') window.effectiveRoCriticality=effectiveRoCriticality;
+  if(typeof roResponseDays==='function' && typeof window.roResponseDays!=='function') window.roResponseDays=roResponseDays;
+  if(typeof normalizeRecurrenceText==='function' && typeof window.normalizeRecurrenceText!=='function') window.normalizeRecurrenceText=normalizeRecurrenceText;
+  if(typeof recurrenceSignature==='function' && typeof window.recurrenceSignature!=='function') window.recurrenceSignature=recurrenceSignature;
+  if(typeof recurrenceGroups==='function' && typeof window.recurrenceGroups!=='function') window.recurrenceGroups=recurrenceGroups;
+  if(typeof managementData==='function' && typeof window.managementData!=='function') window.managementData=managementData;
+  if(typeof renderManagementDashboard==='function' && typeof window.renderManagementDashboard!=='function') window.renderManagementDashboard=renderManagementDashboard;
+  if(typeof showManagementDashboard==='function' && typeof window.showManagementDashboard!=='function') window.showManagementDashboard=showManagementDashboard;
+  if(typeof canonicalUnitName==='function' && typeof window.canonicalUnitName!=='function') window.canonicalUnitName=canonicalUnitName;
+  if(typeof sameCanonicalUnit==='function' && typeof window.sameCanonicalUnit!=='function') window.sameCanonicalUnit=sameCanonicalUnit;
+  if(typeof renderSgqCharts==='function' && typeof window.renderSgqCharts!=='function') window.renderSgqCharts=renderSgqCharts;
+  if(typeof pendingActionItems==='function' && typeof window.pendingActionItems!=='function') window.pendingActionItems=pendingActionItems;
+  if(typeof populatePendingActionsSectorFilter==='function' && typeof window.populatePendingActionsSectorFilter!=='function') window.populatePendingActionsSectorFilter=populatePendingActionsSectorFilter;
+  if(typeof confirmActionCompletion==='function' && typeof window.confirmActionCompletion!=='function') window.confirmActionCompletion=confirmActionCompletion;
+  if(typeof refreshPresentationScreenState==='function' && typeof window.refreshPresentationScreenState!=='function') window.refreshPresentationScreenState=refreshPresentationScreenState;
+  if(typeof shortLabel==='function' && typeof window.shortLabel!=='function') window.shortLabel=shortLabel;
+  if(typeof pdfEsc==='function' && typeof window.pdfEsc!=='function') window.pdfEsc=pdfEsc;
+  if(typeof latin1Bytes==='function' && typeof window.latin1Bytes!=='function') window.latin1Bytes=latin1Bytes;
+  if(typeof wrapText==='function' && typeof window.wrapText!=='function') window.wrapText=wrapText;
+  if(typeof escapeHtml==='function' && typeof window.escapeHtml!=='function') window.escapeHtml=escapeHtml;
+  if(typeof refreshPdcaSidebarBadge==='function' && typeof window.refreshPdcaSidebarBadge!=='function') window.refreshPdcaSidebarBadge=refreshPdcaSidebarBadge;
+  if(typeof nucleoEnsureCentralPdcaSnapshot==='function' && typeof window.nucleoEnsureCentralPdcaSnapshot!=='function') window.nucleoEnsureCentralPdcaSnapshot=nucleoEnsureCentralPdcaSnapshot;
+  if(typeof nucleoUploadPendingPdcaPdf==='function' && typeof window.nucleoUploadPendingPdcaPdf!=='function') window.nucleoUploadPendingPdcaPdf=nucleoUploadPendingPdcaPdf;
+  if(typeof showSentPdcas==='function' && typeof window.showSentPdcas!=='function') window.showSentPdcas=showSentPdcas;
+  if(typeof renderSentPdcas==='function' && typeof window.renderSentPdcas!=='function') window.renderSentPdcas=renderSentPdcas;
+  if(typeof getAccessState==='function' && typeof window.getAccessState!=='function') window.getAccessState=getAccessState;
+  if(typeof saveAccessState==='function' && typeof window.saveAccessState!=='function') window.saveAccessState=saveAccessState;
+  if(typeof currentSector==='function' && typeof window.currentSector!=='function') window.currentSector=currentSector;
+  if(typeof sameSector==='function' && typeof window.sameSector!=='function') window.sameSector=sameSector;
+  if(typeof effectiveResponsibleSector==='function' && typeof window.effectiveResponsibleSector!=='function') window.effectiveResponsibleSector=effectiveResponsibleSector;
+  if(typeof getOperationalRoView==='function' && typeof window.getOperationalRoView!=='function') window.getOperationalRoView=getOperationalRoView;
+  if(typeof currentUserUnit==='function' && typeof window.currentUserUnit!=='function') window.currentUserUnit=currentUserUnit;
+  if(typeof roUnit==='function' && typeof window.roUnit!=='function') window.roUnit=roUnit;
+  if(typeof adminScopeUnit==='function' && typeof window.adminScopeUnit!=='function') window.adminScopeUnit=adminScopeUnit;
+  if(typeof isGeneralAdmin==='function' && typeof window.isGeneralAdmin!=='function') window.isGeneralAdmin=isGeneralAdmin;
+  if(typeof getUnifiedSectors==='function' && typeof window.getUnifiedSectors!=='function') window.getUnifiedSectors=getUnifiedSectors;
+  if(typeof isUnifiedSector==='function' && typeof window.isUnifiedSector!=='function') window.isUnifiedSector=isUnifiedSector;
+  if(typeof sameUnitAsCurrentUser==='function' && typeof window.sameUnitAsCurrentUser!=='function') window.sameUnitAsCurrentUser=sameUnitAsCurrentUser;
+  if(typeof canAdminSeeAllPortalRecords==='function' && typeof window.canAdminSeeAllPortalRecords!=='function') window.canAdminSeeAllPortalRecords=canAdminSeeAllPortalRecords;
+  if(typeof isManager==='function' && typeof window.isManager!=='function') window.isManager=isManager;
+  if(typeof managedSectorsForCurrentUser==='function' && typeof window.managedSectorsForCurrentUser!=='function') window.managedSectorsForCurrentUser=managedSectorsForCurrentUser;
+  if(typeof managesSector==='function' && typeof window.managesSector!=='function') window.managesSector=managesSector;
+  if(typeof managersForSector==='function' && typeof window.managersForSector!=='function') window.managersForSector=managersForSector;
+  if(typeof refreshNewUserManagerFields==='function' && typeof window.refreshNewUserManagerFields!=='function') window.refreshNewUserManagerFields=refreshNewUserManagerFields;
+  if(typeof notifyManagersOfDirectedRo==='function' && typeof window.notifyManagersOfDirectedRo!=='function') window.notifyManagersOfDirectedRo=notifyManagersOfDirectedRo;
+  if(typeof isAdmin==='function' && typeof window.isAdmin!=='function') window.isAdmin=isAdmin;
+  if(typeof adminCleanupEnsureTestBackend==='function' && typeof window.adminCleanupEnsureTestBackend!=='function') window.adminCleanupEnsureTestBackend=adminCleanupEnsureTestBackend;
+  if(typeof adminCleanupMutation==='function' && typeof window.adminCleanupMutation!=='function') window.adminCleanupMutation=adminCleanupMutation;
+  if(typeof adminCleanupDeleteRecord==='function' && typeof window.adminCleanupDeleteRecord!=='function') window.adminCleanupDeleteRecord=adminCleanupDeleteRecord;
+  if(typeof adminCleanupSaveSharedState==='function' && typeof window.adminCleanupSaveSharedState!=='function') window.adminCleanupSaveSharedState=adminCleanupSaveSharedState;
+  if(typeof cleanupRoKey==='function' && typeof window.cleanupRoKey!=='function') window.cleanupRoKey=cleanupRoKey;
+  if(typeof populateAdminCleanupRos==='function' && typeof window.populateAdminCleanupRos!=='function') window.populateAdminCleanupRos=populateAdminCleanupRos;
+  if(typeof refreshAdminCleanupPreview==='function' && typeof window.refreshAdminCleanupPreview!=='function') window.refreshAdminCleanupPreview=refreshAdminCleanupPreview;
+  if(typeof adminCorrectRoSend==='function' && typeof window.adminCorrectRoSend!=='function') window.adminCorrectRoSend=adminCorrectRoSend;
+  if(typeof adminDeleteTestDataForRo==='function' && typeof window.adminDeleteTestDataForRo!=='function') window.adminDeleteTestDataForRo=adminDeleteTestDataForRo;
+  if(typeof saveIntegrationSettingsConfirmed==='function' && typeof window.saveIntegrationSettingsConfirmed!=='function') window.saveIntegrationSettingsConfirmed=saveIntegrationSettingsConfirmed;
+  if(typeof saveIntegrationSettings==='function' && typeof window.saveIntegrationSettings!=='function') window.saveIntegrationSettings=saveIntegrationSettings;
+  if(typeof saveSettings==='function' && typeof window.saveSettings!=='function') window.saveSettings=saveSettings;
+  if(typeof firstValue==='function' && typeof window.firstValue!=='function') window.firstValue=firstValue;
+  if(typeof formatImportedDate==='function' && typeof window.formatImportedDate!=='function') window.formatImportedDate=formatImportedDate;
+  if(typeof roDigits==='function' && typeof window.roDigits!=='function') window.roDigits=roDigits;
+  if(typeof roOriginCode==='function' && typeof window.roOriginCode!=='function') window.roOriginCode=roOriginCode;
+  if(typeof appRoNumber==='function' && typeof window.appRoNumber!=='function') window.appRoNumber=appRoNumber;
+  if(typeof legacyRoNumber==='function' && typeof window.legacyRoNumber!=='function') window.legacyRoNumber=legacyRoNumber;
+  if(typeof roOriginFromNumber==='function' && typeof window.roOriginFromNumber!=='function') window.roOriginFromNumber=roOriginFromNumber;
+  if(typeof getRoOriginRegistry==='function' && typeof window.getRoOriginRegistry!=='function') window.getRoOriginRegistry=getRoOriginRegistry;
+  if(typeof saveRoOriginRegistry==='function' && typeof window.saveRoOriginRegistry!=='function') window.saveRoOriginRegistry=saveRoOriginRegistry;
+  if(typeof originRegistryKeys==='function' && typeof window.originRegistryKeys!=='function') window.originRegistryKeys=originRegistryKeys;
+  if(typeof rememberRoOrigin==='function' && typeof window.rememberRoOrigin!=='function') window.rememberRoOrigin=rememberRoOrigin;
+  if(typeof rememberedRoOrigin==='function' && typeof window.rememberedRoOrigin!=='function') window.rememberedRoOrigin=rememberedRoOrigin;
+  if(typeof rebuildRoOriginRegistry==='function' && typeof window.rebuildRoOriginRegistry!=='function') window.rebuildRoOriginRegistry=rebuildRoOriginRegistry;
+  if(typeof normalizeImportedRo==='function' && typeof window.normalizeImportedRo!=='function') window.normalizeImportedRo=normalizeImportedRo;
+  if(typeof notifyNewImportedRos==='function' && typeof window.notifyNewImportedRos!=='function') window.notifyNewImportedRos=notifyNewImportedRos;
+  if(typeof readImportedRosByOrigin==='function' && typeof window.readImportedRosByOrigin!=='function') window.readImportedRosByOrigin=readImportedRosByOrigin;
+  if(typeof withNucleoLoading==='function' && typeof window.withNucleoLoading!=='function') window.withNucleoLoading=withNucleoLoading;
+  if(typeof openNucleoRoDb==='function' && typeof window.openNucleoRoDb!=='function') window.openNucleoRoDb=openNucleoRoDb;
+  if(typeof currentRoSyncPeriodSignature==='function' && typeof window.currentRoSyncPeriodSignature!=='function') window.currentRoSyncPeriodSignature=currentRoSyncPeriodSignature;
+  if(typeof saveImportedRosDurable==='function' && typeof window.saveImportedRosDurable!=='function') window.saveImportedRosDurable=saveImportedRosDurable;
+  if(typeof readImportedRosDurable==='function' && typeof window.readImportedRosDurable!=='function') window.readImportedRosDurable=readImportedRosDurable;
+  if(typeof clearImportedRosDurable==='function' && typeof window.clearImportedRosDurable!=='function') window.clearImportedRosDurable=clearImportedRosDurable;
+  if(typeof restoreImportedRosDurable==='function' && typeof window.restoreImportedRosDurable!=='function') window.restoreImportedRosDurable=restoreImportedRosDurable;
+  if(typeof compactRoForStorage==='function' && typeof window.compactRoForStorage!=='function') window.compactRoForStorage=compactRoForStorage;
+  if(typeof saveImportedRosByOrigin==='function' && typeof window.saveImportedRosByOrigin!=='function') window.saveImportedRosByOrigin=saveImportedRosByOrigin;
+  if(typeof roOriginMemorySummary==='function' && typeof window.roOriginMemorySummary!=='function') window.roOriginMemorySummary=roOriginMemorySummary;
+  if(typeof importedRoPersistenceStatus==='function' && typeof window.importedRoPersistenceStatus!=='function') window.importedRoPersistenceStatus=importedRoPersistenceStatus;
+  if(typeof importedRoStorageCounts==='function' && typeof window.importedRoStorageCounts!=='function') window.importedRoStorageCounts=importedRoStorageCounts;
+  if(typeof applyImportedRos==='function' && typeof window.applyImportedRos!=='function') window.applyImportedRos=applyImportedRos;
+  if(typeof restoreImportedRos==='function' && typeof window.restoreImportedRos!=='function') window.restoreImportedRos=restoreImportedRos;
+  if(typeof bootstrapRoData==='function' && typeof window.bootstrapRoData!=='function') window.bootstrapRoData=bootstrapRoData;
+  if(typeof loadOfficialRosFullFallback==='function' && typeof window.loadOfficialRosFullFallback!=='function') window.loadOfficialRosFullFallback=loadOfficialRosFullFallback;
+  if(typeof loadOfficialRosPaged==='function' && typeof window.loadOfficialRosPaged!=='function') window.loadOfficialRosPaged=loadOfficialRosPaged;
+  if(typeof refreshLegacyRoCacheFromApi==='function' && typeof window.refreshLegacyRoCacheFromApi!=='function') window.refreshLegacyRoCacheFromApi=refreshLegacyRoCacheFromApi;
+  if(typeof refreshRosFromOfficialSheets==='function' && typeof window.refreshRosFromOfficialSheets!=='function') window.refreshRosFromOfficialSheets=refreshRosFromOfficialSheets;
+  if(typeof parseIntegrationPayload==='function' && typeof window.parseIntegrationPayload!=='function') window.parseIntegrationPayload=parseIntegrationPayload;
+  if(typeof importIntegrationJson==='function' && typeof window.importIntegrationJson!=='function') window.importIntegrationJson=importIntegrationJson;
+  if(typeof importIntegrationFile==='function' && typeof window.importIntegrationFile!=='function') window.importIntegrationFile=importIntegrationFile;
+  if(typeof clearImportedRos==='function' && typeof window.clearImportedRos!=='function') window.clearImportedRos=clearImportedRos;
+  if(typeof openIntegrationApi==='function' && typeof window.openIntegrationApi!=='function') window.openIntegrationApi=openIntegrationApi;
+  if(typeof jsonpRequest==='function' && typeof window.jsonpRequest!=='function') window.jsonpRequest=jsonpRequest;
+  if(typeof cleanup==='function' && typeof window.cleanup!=='function') window.cleanup=cleanup;
+  if(typeof testConnection==='function' && typeof window.testConnection!=='function') window.testConnection=testConnection;
+  if(typeof getAdminModuleRecordsRaw==='function' && typeof window.getAdminModuleRecordsRaw!=='function') window.getAdminModuleRecordsRaw=getAdminModuleRecordsRaw;
+  if(typeof adminModuleRecord==='function' && typeof window.adminModuleRecord!=='function') window.adminModuleRecord=adminModuleRecord;
+  if(typeof adminModuleStatusLabel==='function' && typeof window.adminModuleStatusLabel!=='function') window.adminModuleStatusLabel=adminModuleStatusLabel;
+  if(typeof adminModuleDate==='function' && typeof window.adminModuleDate!=='function') window.adminModuleDate=adminModuleDate;
+  if(typeof isAdminModulePending==='function' && typeof window.isAdminModulePending!=='function') window.isAdminModulePending=isAdminModulePending;
+  if(typeof filterAdminModuleRecords==='function' && typeof window.filterAdminModuleRecords!=='function') window.filterAdminModuleRecords=filterAdminModuleRecords;
+  if(typeof showAdminOperationalModule==='function' && typeof window.showAdminOperationalModule!=='function') window.showAdminOperationalModule=showAdminOperationalModule;
+  if(typeof openAdminOperationalWorkspace==='function' && typeof window.openAdminOperationalWorkspace!=='function') window.openAdminOperationalWorkspace=openAdminOperationalWorkspace;
+  if(typeof collectAdminModuleForm==='function' && typeof window.collectAdminModuleForm!=='function') window.collectAdminModuleForm=collectAdminModuleForm;
+  if(typeof saveAdminOperationalRecord==='function' && typeof window.saveAdminOperationalRecord!=='function') window.saveAdminOperationalRecord=saveAdminOperationalRecord;
+  if(typeof getTplJson==='function' && typeof window.getTplJson!=='function') window.getTplJson=getTplJson;
+  if(typeof setTplJson==='function' && typeof window.setTplJson!=='function') window.setTplJson=setTplJson;
+  if(typeof editAdminOperationalRecord==='function' && typeof window.editAdminOperationalRecord!=='function') window.editAdminOperationalRecord=editAdminOperationalRecord;
+  if(typeof deleteAdminOperationalRecord==='function' && typeof window.deleteAdminOperationalRecord!=='function') window.deleteAdminOperationalRecord=deleteAdminOperationalRecord;
+  if(typeof openAdmin==='function' && typeof window.openAdmin!=='function') window.openAdmin=openAdmin;
+  if(typeof renderAdminUsers==='function' && typeof window.renderAdminUsers!=='function') window.renderAdminUsers=renderAdminUsers;
+  if(typeof adminIndexByEmail==='function' && typeof window.adminIndexByEmail!=='function') window.adminIndexByEmail=adminIndexByEmail;
+  if(typeof editAdminAccountByEmail==='function' && typeof window.editAdminAccountByEmail!=='function') window.editAdminAccountByEmail=editAdminAccountByEmail;
+  if(typeof toggleAdminAccountByEmail==='function' && typeof window.toggleAdminAccountByEmail!=='function') window.toggleAdminAccountByEmail=toggleAdminAccountByEmail;
+  if(typeof deleteAdminAccountByEmail==='function' && typeof window.deleteAdminAccountByEmail!=='function') window.deleteAdminAccountByEmail=deleteAdminAccountByEmail;
+  if(typeof editAdminAccount==='function' && typeof window.editAdminAccount!=='function') window.editAdminAccount=editAdminAccount;
+  if(typeof toggleAdminAccount==='function' && typeof window.toggleAdminAccount!=='function') window.toggleAdminAccount=toggleAdminAccount;
+  if(typeof deleteAdminAccount==='function' && typeof window.deleteAdminAccount!=='function') window.deleteAdminAccount=deleteAdminAccount;
+  if(typeof addAdmin==='function' && typeof window.addAdmin!=='function') window.addAdmin=addAdmin;
+  if(typeof removeAdmin==='function' && typeof window.removeAdmin!=='function') window.removeAdmin=removeAdmin;
+  if(typeof refreshAccessUI==='function' && typeof window.refreshAccessUI!=='function') window.refreshAccessUI=refreshAccessUI;
+  if(typeof goStage==='function' && typeof window.goStage!=='function') window.goStage=goStage;
+  if(typeof assignedRoStatus==='function' && typeof window.assignedRoStatus!=='function') window.assignedRoStatus=assignedRoStatus;
+  if(typeof interpretarStatus==='function' && typeof window.interpretarStatus!=='function') window.interpretarStatus=interpretarStatus;
+  if(typeof assignedRoDeadline==='function' && typeof window.assignedRoDeadline!=='function') window.assignedRoDeadline=assignedRoDeadline;
+  if(typeof currentUserCanRespondAssignedRo==='function' && typeof window.currentUserCanRespondAssignedRo!=='function') window.currentUserCanRespondAssignedRo=currentUserCanRespondAssignedRo;
+  if(typeof nucleoAssignedSectorVisualKey==='function' && typeof window.nucleoAssignedSectorVisualKey!=='function') window.nucleoAssignedSectorVisualKey=nucleoAssignedSectorVisualKey;
+  if(typeof setAssignedLifecycle==='function' && typeof window.setAssignedLifecycle!=='function') window.setAssignedLifecycle=setAssignedLifecycle;
+  if(typeof assignedTerminalStatus==='function' && typeof window.assignedTerminalStatus!=='function') window.assignedTerminalStatus=assignedTerminalStatus;
+  if(typeof showMoreRos==='function' && typeof window.showMoreRos!=='function') window.showMoreRos=showMoreRos;
+  if(typeof badgeClass==='function' && typeof window.badgeClass!=='function') window.badgeClass=badgeClass;
+  if(typeof nucleoAssignedExportDataset==='function' && typeof window.nucleoAssignedExportDataset!=='function') window.nucleoAssignedExportDataset=nucleoAssignedExportDataset;
+  if(typeof nucleoAssignedExportDateValue==='function' && typeof window.nucleoAssignedExportDateValue!=='function') window.nucleoAssignedExportDateValue=nucleoAssignedExportDateValue;
+  if(typeof nucleoAssignedExportMeta==='function' && typeof window.nucleoAssignedExportMeta!=='function') window.nucleoAssignedExportMeta=nucleoAssignedExportMeta;
+  if(typeof nucleoCanonicalUnitLabel==='function' && typeof window.nucleoCanonicalUnitLabel!=='function') window.nucleoCanonicalUnitLabel=nucleoCanonicalUnitLabel;
+  if(typeof nucleoAssignedExportUnique==='function' && typeof window.nucleoAssignedExportUnique!=='function') window.nucleoAssignedExportUnique=nucleoAssignedExportUnique;
+  if(typeof nucleoAssignedExportOptions==='function' && typeof window.nucleoAssignedExportOptions!=='function') window.nucleoAssignedExportOptions=nucleoAssignedExportOptions;
+  if(typeof nucleoOpenAssignedExcelExport==='function' && typeof window.nucleoOpenAssignedExcelExport!=='function') window.nucleoOpenAssignedExcelExport=nucleoOpenAssignedExcelExport;
+  if(typeof nucleoAssignedExportFilters==='function' && typeof window.nucleoAssignedExportFilters!=='function') window.nucleoAssignedExportFilters=nucleoAssignedExportFilters;
+  if(typeof nucleoAssignedExportFiltered==='function' && typeof window.nucleoAssignedExportFiltered!=='function') window.nucleoAssignedExportFiltered=nucleoAssignedExportFiltered;
+  if(typeof nucleoAssignedExportUpdateCount==='function' && typeof window.nucleoAssignedExportUpdateCount!=='function') window.nucleoAssignedExportUpdateCount=nucleoAssignedExportUpdateCount;
+  if(typeof nucleoAssignedExportReset==='function' && typeof window.nucleoAssignedExportReset!=='function') window.nucleoAssignedExportReset=nucleoAssignedExportReset;
+  if(typeof nucleoExcelXmlEscape==='function' && typeof window.nucleoExcelXmlEscape!=='function') window.nucleoExcelXmlEscape=nucleoExcelXmlEscape;
+  if(typeof nucleoExcelCell==='function' && typeof window.nucleoExcelCell!=='function') window.nucleoExcelCell=nucleoExcelCell;
+  if(typeof nucleoExportAssignedExcel==='function' && typeof window.nucleoExportAssignedExcel!=='function') window.nucleoExportAssignedExcel=nucleoExportAssignedExcel;
+  if(typeof render==='function' && typeof window.render!=='function') window.render=render;
+  if(typeof nucleoRemovalClose==='function' && typeof window.nucleoRemovalClose!=='function') window.nucleoRemovalClose=nucleoRemovalClose;
+  if(typeof nucleoRemovalSetExtraFields==='function' && typeof window.nucleoRemovalSetExtraFields!=='function') window.nucleoRemovalSetExtraFields=nucleoRemovalSetExtraFields;
+  if(typeof openRoRemovalManager==='function' && typeof window.openRoRemovalManager!=='function') window.openRoRemovalManager=openRoRemovalManager;
+  if(typeof nucleoRemovalSaveVerified==='function' && typeof window.nucleoRemovalSaveVerified!=='function') window.nucleoRemovalSaveVerified=nucleoRemovalSaveVerified;
+  if(typeof nucleoPersistTriageRemovalRecord==='function' && typeof window.nucleoPersistTriageRemovalRecord!=='function') window.nucleoPersistTriageRemovalRecord=nucleoPersistTriageRemovalRecord;
+  if(typeof nucleoUnlinkPdcaFromAssignment==='function' && typeof window.nucleoUnlinkPdcaFromAssignment!=='function') window.nucleoUnlinkPdcaFromAssignment=nucleoUnlinkPdcaFromAssignment;
+  if(typeof nucleoRemoveSingleAssignment==='function' && typeof window.nucleoRemoveSingleAssignment!=='function') window.nucleoRemoveSingleAssignment=nucleoRemoveSingleAssignment;
+  if(typeof nucleoRemoveAssignedPerson==='function' && typeof window.nucleoRemoveAssignedPerson!=='function') window.nucleoRemoveAssignedPerson=nucleoRemoveAssignedPerson;
+  if(typeof nucleoSetAdministrativeRoDecision==='function' && typeof window.nucleoSetAdministrativeRoDecision!=='function') window.nucleoSetAdministrativeRoDecision=nucleoSetAdministrativeRoDecision;
+  if(typeof nucleoConfirmRoRemoval==='function' && typeof window.nucleoConfirmRoRemoval!=='function') window.nucleoConfirmRoRemoval=nucleoConfirmRoRemoval;
+  if(typeof deleteAssignedDirection==='function' && typeof window.deleteAssignedDirection!=='function') window.deleteAssignedDirection=deleteAssignedDirection;
+  if(typeof openAssignedSectorEdit==='function' && typeof window.openAssignedSectorEdit!=='function') window.openAssignedSectorEdit=openAssignedSectorEdit;
+  if(typeof selectRoForOperationalAction==='function' && typeof window.selectRoForOperationalAction!=='function') window.selectRoForOperationalAction=selectRoForOperationalAction;
+  if(typeof startPdcaFromList==='function' && typeof window.startPdcaFromList!=='function') window.startPdcaFromList=startPdcaFromList;
+  if(typeof contestRoFromList==='function' && typeof window.contestRoFromList!=='function') window.contestRoFromList=contestRoFromList;
+  if(typeof view==='function' && typeof window.view!=='function') window.view=view;
+  if(typeof roSummaryData==='function' && typeof window.roSummaryData!=='function') window.roSummaryData=roSummaryData;
+  if(typeof refreshRoSummary==='function' && typeof window.refreshRoSummary!=='function') window.refreshRoSummary=refreshRoSummary;
+  if(typeof refreshRoleNavigationLabels==='function' && typeof window.refreshRoleNavigationLabels!=='function') window.refreshRoleNavigationLabels=refreshRoleNavigationLabels;
+  if(typeof refreshMainRoTitle==='function' && typeof window.refreshMainRoTitle!=='function') window.refreshMainRoTitle=refreshMainRoTitle;
+  if(typeof normalizePersonName==='function' && typeof window.normalizePersonName!=='function') window.normalizePersonName=normalizePersonName;
+  if(typeof roRegistrantName==='function' && typeof window.roRegistrantName!=='function') window.roRegistrantName=roRegistrantName;
+  if(typeof splitPersonNameDescription==='function' && typeof window.splitPersonNameDescription!=='function') window.splitPersonNameDescription=splitPersonNameDescription;
+  if(typeof personDisplayName==='function' && typeof window.personDisplayName!=='function') window.personDisplayName=personDisplayName;
+  if(typeof personNameKey==='function' && typeof window.personNameKey!=='function') window.personNameKey=personNameKey;
+  if(typeof claimantRoKey==='function' && typeof window.claimantRoKey!=='function') window.claimantRoKey=claimantRoKey;
+  if(typeof claimantIdentityIndex==='function' && typeof window.claimantIdentityIndex!=='function') window.claimantIdentityIndex=claimantIdentityIndex;
+  if(typeof resolveRoClaimant==='function' && typeof window.resolveRoClaimant!=='function') window.resolveRoClaimant=resolveRoClaimant;
+  if(typeof wasRoSubmittedByCurrentUser==='function' && typeof window.wasRoSubmittedByCurrentUser!=='function') window.wasRoSubmittedByCurrentUser=wasRoSubmittedByCurrentUser;
+  if(typeof getPdcaReturnForRo==='function' && typeof window.getPdcaReturnForRo!=='function') window.getPdcaReturnForRo=getPdcaReturnForRo;
+  if(typeof complainantActionState==='function' && typeof window.complainantActionState!=='function') window.complainantActionState=complainantActionState;
+  if(typeof complainantReturnState==='function' && typeof window.complainantReturnState!=='function') window.complainantReturnState=complainantReturnState;
+  if(typeof refreshComplainantReturnPanel==='function' && typeof window.refreshComplainantReturnPanel!=='function') window.refreshComplainantReturnPanel=refreshComplainantReturnPanel;
+  if(typeof getSubmittedRoTrackingState==='function' && typeof window.getSubmittedRoTrackingState!=='function') window.getSubmittedRoTrackingState=getSubmittedRoTrackingState;
+  if(typeof getMySubmittedRos==='function' && typeof window.getMySubmittedRos!=='function') window.getMySubmittedRos=getMySubmittedRos;
+  if(typeof returnFromRoDetail==='function' && typeof window.returnFromRoDetail!=='function') window.returnFromRoDetail=returnFromRoDetail;
+  if(typeof showMySubmittedRos==='function' && typeof window.showMySubmittedRos!=='function') window.showMySubmittedRos=showMySubmittedRos;
+  if(typeof submittedRoRowClass==='function' && typeof window.submittedRoRowClass!=='function') window.submittedRoRowClass=submittedRoRowClass;
+  if(typeof renderMySubmittedRos==='function' && typeof window.renderMySubmittedRos!=='function') window.renderMySubmittedRos=renderMySubmittedRos;
+  if(typeof openComplainantPdcaReturn==='function' && typeof window.openComplainantPdcaReturn!=='function') window.openComplainantPdcaReturn=openComplainantPdcaReturn;
+  if(typeof openSubmittedRoTracking==='function' && typeof window.openSubmittedRoTracking!=='function') window.openSubmittedRoTracking=openSubmittedRoTracking;
+  if(typeof overviewSafe==='function' && typeof window.overviewSafe!=='function') window.overviewSafe=overviewSafe;
+  if(typeof overviewEsc==='function' && typeof window.overviewEsc!=='function') window.overviewEsc=overviewEsc;
+  if(typeof overviewKpi==='function' && typeof window.overviewKpi!=='function') window.overviewKpi=overviewKpi;
+  if(typeof overviewPriority==='function' && typeof window.overviewPriority!=='function') window.overviewPriority=overviewPriority;
+  if(typeof overviewQuick==='function' && typeof window.overviewQuick!=='function') window.overviewQuick=overviewQuick;
+  if(typeof overviewMySubmittedWaiting==='function' && typeof window.overviewMySubmittedWaiting!=='function') window.overviewMySubmittedWaiting=overviewMySubmittedWaiting;
+  if(typeof overviewOpenMyDocumentRequests==='function' && typeof window.overviewOpenMyDocumentRequests!=='function') window.overviewOpenMyDocumentRequests=overviewOpenMyDocumentRequests;
+  if(typeof overviewUserData==='function' && typeof window.overviewUserData!=='function') window.overviewUserData=overviewUserData;
+  if(typeof overviewAdminData==='function' && typeof window.overviewAdminData!=='function') window.overviewAdminData=overviewAdminData;
+  if(typeof overviewQuickUserKey==='function' && typeof window.overviewQuickUserKey!=='function') window.overviewQuickUserKey=overviewQuickUserKey;
+  if(typeof overviewQuickCatalog==='function' && typeof window.overviewQuickCatalog!=='function') window.overviewQuickCatalog=overviewQuickCatalog;
+  if(typeof defaultOverviewQuickLinkIds==='function' && typeof window.defaultOverviewQuickLinkIds!=='function') window.defaultOverviewQuickLinkIds=defaultOverviewQuickLinkIds;
+  if(typeof getOverviewQuickLinkIds==='function' && typeof window.getOverviewQuickLinkIds!=='function') window.getOverviewQuickLinkIds=getOverviewQuickLinkIds;
+  if(typeof setOverviewQuickLinkIds==='function' && typeof window.setOverviewQuickLinkIds!=='function') window.setOverviewQuickLinkIds=setOverviewQuickLinkIds;
+  if(typeof renderCustomOverviewQuickLinks==='function' && typeof window.renderCustomOverviewQuickLinks!=='function') window.renderCustomOverviewQuickLinks=renderCustomOverviewQuickLinks;
+  if(typeof openQuickLinksCustomizer==='function' && typeof window.openQuickLinksCustomizer!=='function') window.openQuickLinksCustomizer=openQuickLinksCustomizer;
+  if(typeof closeQuickLinksCustomizer==='function' && typeof window.closeQuickLinksCustomizer!=='function') window.closeQuickLinksCustomizer=closeQuickLinksCustomizer;
+  if(typeof renderQuickLinksCustomizer==='function' && typeof window.renderQuickLinksCustomizer!=='function') window.renderQuickLinksCustomizer=renderQuickLinksCustomizer;
+  if(typeof toggleQuickLinkDraft==='function' && typeof window.toggleQuickLinkDraft!=='function') window.toggleQuickLinkDraft=toggleQuickLinkDraft;
+  if(typeof moveQuickLinkDraft==='function' && typeof window.moveQuickLinkDraft!=='function') window.moveQuickLinkDraft=moveQuickLinkDraft;
+  if(typeof saveQuickLinksCustomizer==='function' && typeof window.saveQuickLinksCustomizer!=='function') window.saveQuickLinksCustomizer=saveQuickLinksCustomizer;
+  if(typeof resetQuickLinksCustomizer==='function' && typeof window.resetQuickLinksCustomizer!=='function') window.resetQuickLinksCustomizer=resetQuickLinksCustomizer;
+  if(typeof renderUserOverview==='function' && typeof window.renderUserOverview!=='function') window.renderUserOverview=renderUserOverview;
+  if(typeof renderAdminOverview==='function' && typeof window.renderAdminOverview!=='function') window.renderAdminOverview=renderAdminOverview;
+  if(typeof renderOverviewPriorities==='function' && typeof window.renderOverviewPriorities!=='function') window.renderOverviewPriorities=renderOverviewPriorities;
+  if(typeof renderCurrentOverview==='function' && typeof window.renderCurrentOverview!=='function') window.renderCurrentOverview=renderCurrentOverview;
+  if(typeof nucleo5sNormalizeUnit==='function' && typeof window.nucleo5sNormalizeUnit!=='function') window.nucleo5sNormalizeUnit=nucleo5sNormalizeUnit;
+  if(typeof nucleo5sSessionUnit==='function' && typeof window.nucleo5sSessionUnit!=='function') window.nucleo5sSessionUnit=nucleo5sSessionUnit;
+  if(typeof nucleo5sConfig==='function' && typeof window.nucleo5sConfig!=='function') window.nucleo5sConfig=nucleo5sConfig;
+  if(typeof nucleo5sUnitLabel==='function' && typeof window.nucleo5sUnitLabel!=='function') window.nucleo5sUnitLabel=nucleo5sUnitLabel;
+  if(typeof nucleo5sSetUnitButtons==='function' && typeof window.nucleo5sSetUnitButtons!=='function') window.nucleo5sSetUnitButtons=nucleo5sSetUnitButtons;
+  if(typeof nucleoOpen5SUnit==='function' && typeof window.nucleoOpen5SUnit!=='function') window.nucleoOpen5SUnit=nucleoOpen5SUnit;
+  if(typeof nucleo5sConfigReady==='function' && typeof window.nucleo5sConfigReady!=='function') window.nucleo5sConfigReady=nucleo5sConfigReady;
+  if(typeof nucleo5sSectorOptions==='function' && typeof window.nucleo5sSectorOptions!=='function') window.nucleo5sSectorOptions=nucleo5sSectorOptions;
+  if(typeof nucleo5sShowPanel==='function' && typeof window.nucleo5sShowPanel!=='function') window.nucleo5sShowPanel=nucleo5sShowPanel;
+  if(typeof nucleo5sRenderAudit==='function' && typeof window.nucleo5sRenderAudit!=='function') window.nucleo5sRenderAudit=nucleo5sRenderAudit;
+  if(typeof nucleo5sRenderTutorial==='function' && typeof window.nucleo5sRenderTutorial!=='function') window.nucleo5sRenderTutorial=nucleo5sRenderTutorial;
+  if(typeof nucleo5sFetchJson==='function' && typeof window.nucleo5sFetchJson!=='function') window.nucleo5sFetchJson=nucleo5sFetchJson;
+  if(typeof nucleo5sBackend==='function' && typeof window.nucleo5sBackend!=='function') window.nucleo5sBackend=nucleo5sBackend;
+  if(typeof nucleo5sRenderSchedule==='function' && typeof window.nucleo5sRenderSchedule!=='function') window.nucleo5sRenderSchedule=nucleo5sRenderSchedule;
+  if(typeof nucleo5sLoadSchedule==='function' && typeof window.nucleo5sLoadSchedule!=='function') window.nucleo5sLoadSchedule=nucleo5sLoadSchedule;
+  if(typeof nucleo5sRenderActions==='function' && typeof window.nucleo5sRenderActions!=='function') window.nucleo5sRenderActions=nucleo5sRenderActions;
+  if(typeof nucleo5sLoadActions==='function' && typeof window.nucleo5sLoadActions!=='function') window.nucleo5sLoadActions=nucleo5sLoadActions;
+  if(typeof nucleo5sRenderHistory==='function' && typeof window.nucleo5sRenderHistory!=='function') window.nucleo5sRenderHistory=nucleo5sRenderHistory;
+  if(typeof nucleo5sLoadHistory==='function' && typeof window.nucleo5sLoadHistory!=='function') window.nucleo5sLoadHistory=nucleo5sLoadHistory;
+  if(typeof nucleo5sRenderCycle==='function' && typeof window.nucleo5sRenderCycle!=='function') window.nucleo5sRenderCycle=nucleo5sRenderCycle;
+  if(typeof nucleo5sLoadCycle==='function' && typeof window.nucleo5sLoadCycle!=='function') window.nucleo5sLoadCycle=nucleo5sLoadCycle;
+  if(typeof nucleo5sPrintCycle==='function' && typeof window.nucleo5sPrintCycle!=='function') window.nucleo5sPrintCycle=nucleo5sPrintCycle;
+  if(typeof showAudit5S==='function' && typeof window.showAudit5S!=='function') window.showAudit5S=showAudit5S;
+  if(typeof showList==='function' && typeof window.showList!=='function') window.showList=showList;
+  if(typeof populateAssignedRoFilters==='function' && typeof window.populateAssignedRoFilters!=='function') window.populateAssignedRoFilters=populateAssignedRoFilters;
+  if(typeof showAssignedRos==='function' && typeof window.showAssignedRos!=='function') window.showAssignedRos=showAssignedRos;
+  if(typeof pdcaIssueForQuestion==='function' && typeof window.pdcaIssueForQuestion!=='function') window.pdcaIssueForQuestion=pdcaIssueForQuestion;
+  if(typeof pdcaIssueHtml==='function' && typeof window.pdcaIssueHtml!=='function') window.pdcaIssueHtml=pdcaIssueHtml;
+  if(typeof pdcaInlineAlertHtml==='function' && typeof window.pdcaInlineAlertHtml!=='function') window.pdcaInlineAlertHtml=pdcaInlineAlertHtml;
+  if(typeof refreshPdcaInlineAlerts==='function' && typeof window.refreshPdcaInlineAlerts!=='function') window.refreshPdcaInlineAlerts=refreshPdcaInlineAlerts;
+  if(typeof dictatePdcaAnswer==='function' && typeof window.dictatePdcaAnswer!=='function') window.dictatePdcaAnswer=dictatePdcaAnswer;
+  if(typeof pdcaMaxActionDate==='function' && typeof window.pdcaMaxActionDate!=='function') window.pdcaMaxActionDate=pdcaMaxActionDate;
+  if(typeof pdcaIsoDate==='function' && typeof window.pdcaIsoDate!=='function') window.pdcaIsoDate=pdcaIsoDate;
+  if(typeof pdcaActionDeadlineValid==='function' && typeof window.pdcaActionDeadlineValid!=='function') window.pdcaActionDeadlineValid=pdcaActionDeadlineValid;
+  if(typeof pdcaValidateActionDeadlines==='function' && typeof window.pdcaValidateActionDeadlines!=='function') window.pdcaValidateActionDeadlines=pdcaValidateActionDeadlines;
+  if(typeof pdcaInitialRequiredIds==='function' && typeof window.pdcaInitialRequiredIds!=='function') window.pdcaInitialRequiredIds=pdcaInitialRequiredIds;
+  if(typeof pdcaInitialPlanComplete==='function' && typeof window.pdcaInitialPlanComplete!=='function') window.pdcaInitialPlanComplete=pdcaInitialPlanComplete;
+  if(typeof pdcaAllActionsCompleted==='function' && typeof window.pdcaAllActionsCompleted!=='function') window.pdcaAllActionsCompleted=pdcaAllActionsCompleted;
+  if(typeof pdcaActionImpacts5S==='function' && typeof window.pdcaActionImpacts5S!=='function') window.pdcaActionImpacts5S=pdcaActionImpacts5S;
+  if(typeof pdcaExecutionCompleted==='function' && typeof window.pdcaExecutionCompleted!=='function') window.pdcaExecutionCompleted=pdcaExecutionCompleted;
+  if(typeof pdcaActionText==='function' && typeof window.pdcaActionText!=='function') window.pdcaActionText=pdcaActionText;
+  if(typeof pdcaActionIsTrainingRelated==='function' && typeof window.pdcaActionIsTrainingRelated!=='function') window.pdcaActionIsTrainingRelated=pdcaActionIsTrainingRelated;
+  if(typeof pdcaQuestionDependency==='function' && typeof window.pdcaQuestionDependency!=='function') window.pdcaQuestionDependency=pdcaQuestionDependency;
+  if(typeof pdcaQuestionLocked==='function' && typeof window.pdcaQuestionLocked!=='function') window.pdcaQuestionLocked=pdcaQuestionLocked;
+  if(typeof pdcaEditableQuestionIds==='function' && typeof window.pdcaEditableQuestionIds!=='function') window.pdcaEditableQuestionIds=pdcaEditableQuestionIds;
+  if(typeof pdcaStageLocked==='function' && typeof window.pdcaStageLocked!=='function') window.pdcaStageLocked=pdcaStageLocked;
+  if(typeof pdcaLockedStageMessage==='function' && typeof window.pdcaLockedStageMessage!=='function') window.pdcaLockedStageMessage=pdcaLockedStageMessage;
+  if(typeof pdcaHandleAnswerInput==='function' && typeof window.pdcaHandleAnswerInput!=='function') window.pdcaHandleAnswerInput=pdcaHandleAnswerInput;
+  if(typeof renderStage==='function' && typeof window.renderStage!=='function') window.renderStage=renderStage;
+  if(typeof updateCompletion==='function' && typeof window.updateCompletion!=='function') window.updateCompletion=updateCompletion;
+  if(typeof highlightMissing==='function' && typeof window.highlightMissing!=='function') window.highlightMissing=highlightMissing;
+  if(typeof getContestations==='function' && typeof window.getContestations!=='function') window.getContestations=getContestations;
+  if(typeof saveContestations==='function' && typeof window.saveContestations!=='function') window.saveContestations=saveContestations;
+  if(typeof getActionSectorContest==='function' && typeof window.getActionSectorContest!=='function') window.getActionSectorContest=getActionSectorContest;
+  if(typeof canContestActionSector==='function' && typeof window.canContestActionSector!=='function') window.canContestActionSector=canContestActionSector;
+  if(typeof contestActionSector==='function' && typeof window.contestActionSector!=='function') window.contestActionSector=contestActionSector;
+  if(typeof updateActionSectorAssignment==='function' && typeof window.updateActionSectorAssignment!=='function') window.updateActionSectorAssignment=updateActionSectorAssignment;
+  if(typeof getContestRecord==='function' && typeof window.getContestRecord!=='function') window.getContestRecord=getContestRecord;
+  if(typeof syncContestStateToRo==='function' && typeof window.syncContestStateToRo!=='function') window.syncContestStateToRo=syncContestStateToRo;
+  if(typeof contestStatusLabel==='function' && typeof window.contestStatusLabel!=='function') window.contestStatusLabel=contestStatusLabel;
+  if(typeof refreshContestUserStatus==='function' && typeof window.refreshContestUserStatus!=='function') window.refreshContestUserStatus=refreshContestUserStatus;
+  if(typeof showContestations==='function' && typeof window.showContestations!=='function') window.showContestations=showContestations;
+  if(typeof refreshContestPendingBadge==='function' && typeof window.refreshContestPendingBadge!=='function') window.refreshContestPendingBadge=refreshContestPendingBadge;
+  if(typeof renderContestations==='function' && typeof window.renderContestations!=='function') window.renderContestations=renderContestations;
+  if(typeof reviewContestation==='function' && typeof window.reviewContestation!=='function') window.reviewContestation=reviewContestation;
+  if(typeof globalQuestionNumber==='function' && typeof window.globalQuestionNumber!=='function') window.globalQuestionNumber=globalQuestionNumber;
+  if(typeof renderPdcaStageOverview==='function' && typeof window.renderPdcaStageOverview!=='function') window.renderPdcaStageOverview=renderPdcaStageOverview;
+  if(typeof goFirstMissingQuestion==='function' && typeof window.goFirstMissingQuestion!=='function') window.goFirstMissingQuestion=goFirstMissingQuestion;
+  if(typeof changeStage==='function' && typeof window.changeStage!=='function') window.changeStage=changeStage;
+  if(typeof finishPDCA==='function' && typeof window.finishPDCA!=='function') window.finishPDCA=finishPDCA;
+  if(typeof syncNow==='function' && typeof window.syncNow!=='function') window.syncNow=syncNow;
+  if(typeof refreshDocumentRequestAccess==='function' && typeof window.refreshDocumentRequestAccess!=='function') window.refreshDocumentRequestAccess=refreshDocumentRequestAccess;
+  if(typeof applyBodyRoleClass==='function' && typeof window.applyBodyRoleClass!=='function') window.applyBodyRoleClass=applyBodyRoleClass;
+  if(typeof enforceAdminVisibility==='function' && typeof window.enforceAdminVisibility!=='function') window.enforceAdminVisibility=enforceAdminVisibility;
+  if(typeof openPersonIdentityManager==='function' && typeof window.openPersonIdentityManager!=='function') window.openPersonIdentityManager=openPersonIdentityManager;
+  if(typeof draw==='function' && typeof window.draw!=='function') window.draw=draw;
+  if(typeof save==='function' && typeof window.save!=='function') window.save=save;
+  if(typeof loadFixedEmailCopies==='function' && typeof window.loadFixedEmailCopies!=='function') window.loadFixedEmailCopies=loadFixedEmailCopies;
+  if(typeof saveFixedEmailCopies==='function' && typeof window.saveFixedEmailCopies!=='function') window.saveFixedEmailCopies=saveFixedEmailCopies;
+  if(typeof ensureFixedEmailCopiesPanel==='function' && typeof window.ensureFixedEmailCopiesPanel!=='function') window.ensureFixedEmailCopiesPanel=ensureFixedEmailCopiesPanel;
+  if(typeof ensureUnitQualitySettings==='function' && typeof window.ensureUnitQualitySettings!=='function') window.ensureUnitQualitySettings=ensureUnitQualitySettings;
+  if(typeof loadUnitQualitySettings==='function' && typeof window.loadUnitQualitySettings!=='function') window.loadUnitQualitySettings=loadUnitQualitySettings;
+  if(typeof saveUnitQualitySettings==='function' && typeof window.saveUnitQualitySettings!=='function') window.saveUnitQualitySettings=saveUnitQualitySettings;
+  if(typeof userHasUnitSector==='function' && typeof window.userHasUnitSector!=='function') window.userHasUnitSector=userHasUnitSector;
+  if(typeof explicitPortalUnit==='function' && typeof window.explicitPortalUnit!=='function') window.explicitPortalUnit=explicitPortalUnit;
+  if(typeof explicitRecordUnit==='function' && typeof window.explicitRecordUnit!=='function') window.explicitRecordUnit=explicitRecordUnit;
+  if(typeof qualityRecordAllowed==='function' && typeof window.qualityRecordAllowed!=='function') window.qualityRecordAllowed=qualityRecordAllowed;
+  if(typeof applySettingsUnitSelection==='function' && typeof window.applySettingsUnitSelection!=='function') window.applySettingsUnitSelection=applySettingsUnitSelection;
+  if(typeof nucleoDriveLoad==='function' && typeof window.nucleoDriveLoad!=='function') window.nucleoDriveLoad=nucleoDriveLoad;
+  if(typeof nucleoDriveOpen==='function' && typeof window.nucleoDriveOpen!=='function') window.nucleoDriveOpen=nucleoDriveOpen;
+  if(typeof nucleoDriveSettingsShortcut==='function' && typeof window.nucleoDriveSettingsShortcut!=='function') window.nucleoDriveSettingsShortcut=nucleoDriveSettingsShortcut;
+  if(typeof nucleoDriveOpenExternalPdf==='function' && typeof window.nucleoDriveOpenExternalPdf!=='function') window.nucleoDriveOpenExternalPdf=nucleoDriveOpenExternalPdf;
+  if(typeof openUnitDriveSettings==='function' && typeof window.openUnitDriveSettings!=='function') window.openUnitDriveSettings=openUnitDriveSettings;
+  if(typeof openMyRoResponses==='function' && typeof window.openMyRoResponses!=='function') window.openMyRoResponses=openMyRoResponses;
+  if(typeof nucleoPersonUnits==='function' && typeof window.nucleoPersonUnits!=='function') window.nucleoPersonUnits=nucleoPersonUnits;
+  if(typeof nucleoApplyPersonAccess==='function' && typeof window.nucleoApplyPersonAccess!=='function') window.nucleoApplyPersonAccess=nucleoApplyPersonAccess;
+  if(typeof nucleoFeatureRequire==='function' && typeof window.nucleoFeatureRequire!=='function') window.nucleoFeatureRequire=nucleoFeatureRequire;
+  if(typeof nucleoFeatureEditor==='function' && typeof window.nucleoFeatureEditor!=='function') window.nucleoFeatureEditor=nucleoFeatureEditor;
+  if(typeof nucleoApplyFeatureAccess==='function' && typeof window.nucleoApplyFeatureAccess!=='function') window.nucleoApplyFeatureAccess=nucleoApplyFeatureAccess;
+  if(typeof nucleoWorkspaceFeature==='function' && typeof window.nucleoWorkspaceFeature!=='function') window.nucleoWorkspaceFeature=nucleoWorkspaceFeature;
+  if(typeof nucleoWorkspaceAllowed==='function' && typeof window.nucleoWorkspaceAllowed!=='function') window.nucleoWorkspaceAllowed=nucleoWorkspaceAllowed;
+  if(typeof nucleoApplyFeatureButtons==='function' && typeof window.nucleoApplyFeatureButtons!=='function') window.nucleoApplyFeatureButtons=nucleoApplyFeatureButtons;
+  if(typeof nucleoRoClassification==='function' && typeof window.nucleoRoClassification!=='function') window.nucleoRoClassification=nucleoRoClassification;
+  if(typeof nucleoClassificationOptions==='function' && typeof window.nucleoClassificationOptions!=='function') window.nucleoClassificationOptions=nucleoClassificationOptions;
+  if(typeof nucleoRefreshClassificationOptions==='function' && typeof window.nucleoRefreshClassificationOptions!=='function') window.nucleoRefreshClassificationOptions=nucleoRefreshClassificationOptions;
+  if(typeof nucleoDecisionRules==='function' && typeof window.nucleoDecisionRules!=='function') window.nucleoDecisionRules=nucleoDecisionRules;
+  if(typeof nucleoDecisionForRecord==='function' && typeof window.nucleoDecisionForRecord!=='function') window.nucleoDecisionForRecord=nucleoDecisionForRecord;
+  if(typeof nucleoPopulateDecisions==='function' && typeof window.nucleoPopulateDecisions!=='function') window.nucleoPopulateDecisions=nucleoPopulateDecisions;
+  if(typeof nucleoSelectedDecision==='function' && typeof window.nucleoSelectedDecision!=='function') window.nucleoSelectedDecision=nucleoSelectedDecision;
+  if(typeof nucleoDecisionDeadline==='function' && typeof window.nucleoDecisionDeadline!=='function') window.nucleoDecisionDeadline=nucleoDecisionDeadline;
+  if(typeof nucleoRenderDecisionSettings==='function' && typeof window.nucleoRenderDecisionSettings!=='function') window.nucleoRenderDecisionSettings=nucleoRenderDecisionSettings;
+  if(typeof nucleoAddDecisionRow==='function' && typeof window.nucleoAddDecisionRow!=='function') window.nucleoAddDecisionRow=nucleoAddDecisionRow;
+  if(typeof nucleoCollectDecisionRules==='function' && typeof window.nucleoCollectDecisionRules!=='function') window.nucleoCollectDecisionRules=nucleoCollectDecisionRules;
+  if(typeof nucleoSaveDecisionRules==='function' && typeof window.nucleoSaveDecisionRules!=='function') window.nucleoSaveDecisionRules=nucleoSaveDecisionRules;
+  if(typeof nucleoRoClassifications==='function' && typeof window.nucleoRoClassifications!=='function') window.nucleoRoClassifications=nucleoRoClassifications;
+  if(typeof nucleoToggleClassificationOther==='function' && typeof window.nucleoToggleClassificationOther!=='function') window.nucleoToggleClassificationOther=nucleoToggleClassificationOther;
+  if(typeof nucleoLoadClassification==='function' && typeof window.nucleoLoadClassification!=='function') window.nucleoLoadClassification=nucleoLoadClassification;
+  if(typeof nucleoReadClassification==='function' && typeof window.nucleoReadClassification!=='function') window.nucleoReadClassification=nucleoReadClassification;
+  if(typeof nucleoScheduleRoSearch==='function' && typeof window.nucleoScheduleRoSearch!=='function') window.nucleoScheduleRoSearch=nucleoScheduleRoSearch;
+  if(typeof nucleoRunRoSearch==='function' && typeof window.nucleoRunRoSearch!=='function') window.nucleoRunRoSearch=nucleoRunRoSearch;
+  if(typeof nucleoRoSearchMatches==='function' && typeof window.nucleoRoSearchMatches!=='function') window.nucleoRoSearchMatches=nucleoRoSearchMatches;
+  if(typeof nucleoAssignedDecisionLabel==='function' && typeof window.nucleoAssignedDecisionLabel!=='function') window.nucleoAssignedDecisionLabel=nucleoAssignedDecisionLabel;
+  if(typeof nucleoManagerScopeState==='function' && typeof window.nucleoManagerScopeState!=='function') window.nucleoManagerScopeState=nucleoManagerScopeState;
+  if(typeof nucleoManagerRecordMatches==='function' && typeof window.nucleoManagerRecordMatches!=='function') window.nucleoManagerRecordMatches=nucleoManagerRecordMatches;
+  if(typeof nucleoManagerQuery==='function' && typeof window.nucleoManagerQuery!=='function') window.nucleoManagerQuery=nucleoManagerQuery;
+  if(typeof nucleoManagerMatchQuery==='function' && typeof window.nucleoManagerMatchQuery!=='function') window.nucleoManagerMatchQuery=nucleoManagerMatchQuery;
+  if(typeof nucleoManagerScopeAllows==='function' && typeof window.nucleoManagerScopeAllows!=='function') window.nucleoManagerScopeAllows=nucleoManagerScopeAllows;
+  if(typeof nucleoManagerFilterRows==='function' && typeof window.nucleoManagerFilterRows!=='function') window.nucleoManagerFilterRows=nucleoManagerFilterRows;
+  if(typeof nucleoManagerInstallReadScopes==='function' && typeof window.nucleoManagerInstallReadScopes!=='function') window.nucleoManagerInstallReadScopes=nucleoManagerInstallReadScopes;
+  if(typeof nucleoManagerInstallRenderScopes==='function' && typeof window.nucleoManagerInstallRenderScopes!=='function') window.nucleoManagerInstallRenderScopes=nucleoManagerInstallRenderScopes;
+  if(typeof nucleoManagerScopeControl==='function' && typeof window.nucleoManagerScopeControl!=='function') window.nucleoManagerScopeControl=nucleoManagerScopeControl;
+  if(typeof nucleoManagerChangeScope==='function' && typeof window.nucleoManagerChangeScope!=='function') window.nucleoManagerChangeScope=nucleoManagerChangeScope;
+  if(typeof nucleoHasManagedScope==='function' && typeof window.nucleoHasManagedScope!=='function') window.nucleoHasManagedScope=nucleoHasManagedScope;
+  if(typeof nucleoKpiCatalog==='function' && typeof window.nucleoKpiCatalog!=='function') window.nucleoKpiCatalog=nucleoKpiCatalog;
+  if(typeof nucleoKpiOrder==='function' && typeof window.nucleoKpiOrder!=='function') window.nucleoKpiOrder=nucleoKpiOrder;
+  if(typeof nucleoRenderKpiChoices==='function' && typeof window.nucleoRenderKpiChoices!=='function') window.nucleoRenderKpiChoices=nucleoRenderKpiChoices;
+  if(typeof nucleoOpenKpiEditor==='function' && typeof window.nucleoOpenKpiEditor!=='function') window.nucleoOpenKpiEditor=nucleoOpenKpiEditor;
+  if(typeof nucleoRenderKpiEditor==='function' && typeof window.nucleoRenderKpiEditor!=='function') window.nucleoRenderKpiEditor=nucleoRenderKpiEditor;
+  if(typeof nucleoToggleKpi==='function' && typeof window.nucleoToggleKpi!=='function') window.nucleoToggleKpi=nucleoToggleKpi;
+  if(typeof nucleoMoveKpi==='function' && typeof window.nucleoMoveKpi!=='function') window.nucleoMoveKpi=nucleoMoveKpi;
+  if(typeof nucleoSaveKpis==='function' && typeof window.nucleoSaveKpis!=='function') window.nucleoSaveKpis=nucleoSaveKpis;
+  if(typeof nucleoOpenManagerEmails==='function' && typeof window.nucleoOpenManagerEmails!=='function') window.nucleoOpenManagerEmails=nucleoOpenManagerEmails;
+  if(typeof nucleoSaveManagerEmails==='function' && typeof window.nucleoSaveManagerEmails!=='function') window.nucleoSaveManagerEmails=nucleoSaveManagerEmails;
+  if(typeof nucleoOpenMyTeam==='function' && typeof window.nucleoOpenMyTeam!=='function') window.nucleoOpenMyTeam=nucleoOpenMyTeam;
+  if(typeof nucleoRenderMyTeam==='function' && typeof window.nucleoRenderMyTeam!=='function') window.nucleoRenderMyTeam=nucleoRenderMyTeam;
+  if(typeof nucleoAiPanel==='function' && typeof window.nucleoAiPanel!=='function') window.nucleoAiPanel=nucleoAiPanel;
+  if(typeof nucleoAiSuggest==='function' && typeof window.nucleoAiSuggest!=='function') window.nucleoAiSuggest=nucleoAiSuggest;
+  if(typeof nucleoAiRenderAssessment==='function' && typeof window.nucleoAiRenderAssessment!=='function') window.nucleoAiRenderAssessment=nucleoAiRenderAssessment;
+  if(typeof nucleoAiCalculate==='function' && typeof window.nucleoAiCalculate!=='function') window.nucleoAiCalculate=nucleoAiCalculate;
+  if(typeof nucleoAiReadScores==='function' && typeof window.nucleoAiReadScores!=='function') window.nucleoAiReadScores=nucleoAiReadScores;
+  if(typeof nucleoAiUpdateSummary==='function' && typeof window.nucleoAiUpdateSummary!=='function') window.nucleoAiUpdateSummary=nucleoAiUpdateSummary;
+  if(typeof nucleoAiInvalidateConfirmation==='function' && typeof window.nucleoAiInvalidateConfirmation!=='function') window.nucleoAiInvalidateConfirmation=nucleoAiInvalidateConfirmation;
+  if(typeof nucleoAiConfirmScores==='function' && typeof window.nucleoAiConfirmScores!=='function') window.nucleoAiConfirmScores=nucleoAiConfirmScores;
+  if(typeof nucleoAiRulesEditor==='function' && typeof window.nucleoAiRulesEditor!=='function') window.nucleoAiRulesEditor=nucleoAiRulesEditor;
+  if(typeof nucleoAiSaveRules==='function' && typeof window.nucleoAiSaveRules!=='function') window.nucleoAiSaveRules=nucleoAiSaveRules;
+  if(typeof nucleoKpiExtraCatalog==='function' && typeof window.nucleoKpiExtraCatalog!=='function') window.nucleoKpiExtraCatalog=nucleoKpiExtraCatalog;
+  if(typeof nucleoKpiClassificationNames==='function' && typeof window.nucleoKpiClassificationNames!=='function') window.nucleoKpiClassificationNames=nucleoKpiClassificationNames;
+  if(typeof nucleoKpiDefaultIds==='function' && typeof window.nucleoKpiDefaultIds!=='function') window.nucleoKpiDefaultIds=nucleoKpiDefaultIds;
+  if(typeof nucleoKpiExtraCounts==='function' && typeof window.nucleoKpiExtraCounts!=='function') window.nucleoKpiExtraCounts=nucleoKpiExtraCounts;
+  if(typeof nucleoAiRulesTable==='function' && typeof window.nucleoAiRulesTable!=='function') window.nucleoAiRulesTable=nucleoAiRulesTable;
+  if(typeof nucleoAiManual==='function' && typeof window.nucleoAiManual!=='function') window.nucleoAiManual=nucleoAiManual;
+  if(typeof nucleoAiOpenRoTab==='function' && typeof window.nucleoAiOpenRoTab!=='function') window.nucleoAiOpenRoTab=nucleoAiOpenRoTab;
+  if(typeof nucleoAvatarHtml==='function' && typeof window.nucleoAvatarHtml!=='function') window.nucleoAvatarHtml=nucleoAvatarHtml;
+  if(typeof nucleoAvatarPreview==='function' && typeof window.nucleoAvatarPreview!=='function') window.nucleoAvatarPreview=nucleoAvatarPreview;
+  if(typeof nucleoLoadAvatar==='function' && typeof window.nucleoLoadAvatar!=='function') window.nucleoLoadAvatar=nucleoLoadAvatar;
+  if(typeof nucleoAvatarPhoto==='function' && typeof window.nucleoAvatarPhoto!=='function') window.nucleoAvatarPhoto=nucleoAvatarPhoto;
+  if(typeof nucleoSaveAvatar==='function' && typeof window.nucleoSaveAvatar!=='function') window.nucleoSaveAvatar=nucleoSaveAvatar;
+  if(typeof nucleoLoadAvatarGallery==='function' && typeof window.nucleoLoadAvatarGallery!=='function') window.nucleoLoadAvatarGallery=nucleoLoadAvatarGallery;
+  if(typeof nucleoConfigureAvatarGallery==='function' && typeof window.nucleoConfigureAvatarGallery!=='function') window.nucleoConfigureAvatarGallery=nucleoConfigureAvatarGallery;
+  if(typeof nucleoReadAvatarGalleryConfig==='function' && typeof window.nucleoReadAvatarGalleryConfig!=='function') window.nucleoReadAvatarGalleryConfig=nucleoReadAvatarGalleryConfig;
+  if(typeof nucleoOpenAvatarGalleryConfig==='function' && typeof window.nucleoOpenAvatarGalleryConfig!=='function') window.nucleoOpenAvatarGalleryConfig=nucleoOpenAvatarGalleryConfig;
+  if(typeof nucleoEnsureInlineTeam==='function' && typeof window.nucleoEnsureInlineTeam!=='function') window.nucleoEnsureInlineTeam=nucleoEnsureInlineTeam;
+  if(typeof nucleoUniqueTeamPeople==='function' && typeof window.nucleoUniqueTeamPeople!=='function') window.nucleoUniqueTeamPeople=nucleoUniqueTeamPeople;
+  if(typeof nucleoRenderInlineTeam==='function' && typeof window.nucleoRenderInlineTeam!=='function') window.nucleoRenderInlineTeam=nucleoRenderInlineTeam;
+  if(typeof nucleoSaveProfessionalProfile==='function' && typeof window.nucleoSaveProfessionalProfile!=='function') window.nucleoSaveProfessionalProfile=nucleoSaveProfessionalProfile;
+  if(typeof nucleoSystemFormat==='function' && typeof window.nucleoSystemFormat!=='function') window.nucleoSystemFormat=nucleoSystemFormat;
+  if(typeof nucleoApplySystemModelHtml==='function' && typeof window.nucleoApplySystemModelHtml!=='function') window.nucleoApplySystemModelHtml=nucleoApplySystemModelHtml;
+  if(typeof nucleoRoDisplayRows==='function' && typeof window.nucleoRoDisplayRows!=='function') window.nucleoRoDisplayRows=nucleoRoDisplayRows;
+}catch(e){console.warn("NÚCLEO runtime compat export",e);}
+})();
