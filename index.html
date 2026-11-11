@@ -1,9 +1,12 @@
 <!doctype html>
 <!-- NUCLEO_PRODUCAO_2026-10-20_CORRECOES_OPERACIONAIS -->
 <html lang="pt-BR"><head>
+<link rel="manifest" href="./manifest.webmanifest?v=3">
+<link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/nucleo-180.png">
+<meta name="theme-color" content="#173b67">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta name="nucleo-build" content="20261106-clean-startup-v1">
+<meta name="nucleo-build" content="20261109-mobile-sync-v53">
 <meta http-equiv="Expires" content="0"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Núcleo SGQ</title><style>
 :root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#667085;--line:#e5e7eb;--blue:#244f86;--blue2:#173b67;--soft:#edf4fb;--danger:#b42318;--warn:#b54708;--ok:#087443}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}header{background:linear-gradient(135deg,var(--blue2),var(--blue));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}header h1{font-size:19px;margin:0}.head-actions{display:flex;gap:8px;align-items:center}.user{font-size:12px;opacity:.9}main{max-width:1180px;margin:22px auto;padding:0 18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px rgba(16,24,40,.05);padding:18px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}input,select,textarea{width:100%;border:1px solid #cfd5df;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolbar input{flex:1;min-width:240px}.toolbar select{width:auto}table{width:100%;border-collapse:collapse}th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}th{font-size:12px;color:var(--muted);text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f8fafc}.badge{display:inline-flex;align-items:center;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:700;background:var(--soft);color:var(--blue2)}.badge.warn{background:#fff4e5;color:var(--warn)}.badge.off{background:#f2f4f7;color:#475467}.badge.danger{background:#fee4e2;color:var(--danger)}.badge.ok{background:#ecfdf3;color:var(--ok)}.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#eef2f6;color:#344054}.danger{background:#fff1f0;color:var(--danger);border:1px solid #fecdca}.btn:disabled{opacity:.45}.iconbtn{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.full{grid-column:1/-1}.label{font-size:12px;color:var(--muted);margin-bottom:5px}.value{font-weight:600}.back{background:none;border:0;color:var(--blue);font-weight:700;cursor:pointer;padding:0;margin-bottom:14px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px 14px;border-radius:10px;background:#fff7ed;color:#9a3412;margin-top:14px;font-size:14px}.hidden{display:none!important}.small{font-size:12px;color:var(--muted)}.section-title{margin:0 0 10px;font-size:18px}.stage-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.stage-tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;cursor:pointer;font-weight:700}.stage-tab.active{background:var(--blue);color:white;border-color:var(--blue)}.question{border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}.question h4{margin:0 0 5px;font-size:15px}.question p{margin:0 0 10px;color:var(--muted);font-size:13px}textarea{min-height:78px;resize:vertical}.meta-box{background:#f8fafc;border:1px solid var(--line);padding:14px;border-radius:13px;margin:14px 0}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.settings-block{border:1px solid var(--line);border-radius:14px;padding:15px;margin-top:14px}.settings-block h3{margin:0 0 5px;font-size:16px}.help{font-size:12px;color:var(--muted);margin:0 0 12px}.statusline{font-size:13px;margin:10px 0;padding:10px 12px;border-radius:10px;background:#f8fafc}.okline{background:#ecfdf3;color:#087443}.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal-box{width:min(620px,100%);background:#fff;border-radius:16px;padding:20px}.modal-box h3{margin-top:0}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .settings-side-tab{
@@ -246,7 +249,7 @@ main{max-width:1180px;margin:0 auto;padding:54px 54px 36px}
 
 /* Login / profile / PDF preview */
 .login-overlay{
-  position:fixed;inset:0;z-index:9999;background:#f4f5f0;
+  position:fixed;inset:0;z-index:2147482500;background:#f4f5f0;
   display:flex;align-items:center;justify-content:center;padding:24px
 }
 .login-card{
@@ -1332,6 +1335,7 @@ body.external-ro-denied #navNewExternalRo{
 </style>
 
 <style id="v96-20-unified-notification-badges">
+.sidebar .side-pending-badge.hidden{display:none!important}
 .side-item{position:relative!important}
 .menu-notification-badge{
   position:absolute!important;
@@ -2183,7 +2187,8 @@ body.external-ro-denied #navNewExternalRo{
   .login-card{
     width:100% !important;
     max-width:480px !important;
-    margin:18px auto 40vh !important;
+    margin:auto !important;
+    flex:none;
     padding:20px !important;
     border-radius:16px !important;
     box-sizing:border-box !important;
@@ -2928,8 +2933,293 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   gap:6px!important;
   flex-wrap:nowrap!important;
 }
+#roListView #rows td:nth-child(8) > .assigned-response-actions{
+  display:flex!important;
+  flex-wrap:wrap!important;
+  min-width:0;
+  max-width:100%;
+  white-space:normal!important;
+}
+#roListView #rows .assigned-response-actions > .btn{
+  min-width:0;
+  max-width:100%;
+  white-space:normal!important;
+  overflow-wrap:anywhere;
+}
 </style>
 
+
+<style id="nucleo-mobile-global-v52">
+/* NÚCLEO V52 — responsividade global do sistema */
+@media (max-width: 760px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden}
+  body{font-size:14px}
+  .app-shell{display:block!important;min-height:100vh;width:100%!important}
+
+  /* Sidebar vira menu lateral sobreposto, sem roubar largura da tela */
+  .sidebar,
+  .sidebar.collapsed{
+    width:min(86vw,320px)!important;
+    max-width:320px!important;
+    transform:translateX(-105%)!important;
+    transition:transform .22s ease!important;
+    z-index:2147482000!important;
+    box-shadow:0 18px 45px rgba(15,23,42,.24)!important;
+  }
+  .sidebar.mobile-open{transform:translateX(0)!important}
+  .sidebar .brand-name,.sidebar .brand-sub,.sidebar .brand-text-wrap,
+  .sidebar .side-kicker,.sidebar .side-title,.sidebar .side-copy,
+  .sidebar .side-item span:last-child:not(.side-pending-badge),.sidebar .side-module-head span:last-child:not(.side-pending-badge),
+  .sidebar .side-independent-module span:last-child:not(.side-pending-badge){display:block!important}
+  .sidebar .side-item,.sidebar .side-module-head,.sidebar .side-independent-module{justify-content:flex-start!important}
+  .sidebar-collapse-btn{display:none!important}
+  .mobile-nav-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:2147481900}
+  .mobile-nav-backdrop.open{display:block}
+
+  .workspace,
+  .sidebar.collapsed + .workspace{
+    margin-left:0!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+  }
+
+  /* Barra superior compacta e sem sobreposição */
+  .topbar{
+    position:sticky!important;top:0!important;z-index:1200!important;
+    height:auto!important;min-height:56px!important;
+    padding:8px 10px!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr)!important;
+    gap:7px 8px!important;
+    align-items:center!important;
+    background:#fbfaf6!important;
+  }
+  .mobile-nav-btn{
+    display:grid!important;place-items:center!important;
+    width:42px!important;height:42px!important;border-radius:10px!important;
+    border:1px solid #d5dcd9!important;background:#fff!important;color:#0d5a5b!important;
+    font-size:22px!important;font-weight:800!important;cursor:pointer!important;
+  }
+  .crumbs{min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:12px!important}
+  .crumbs span{padding:0 6px!important}
+  .top-actions{
+    grid-column:1/-1!important;
+    width:100%!important;min-width:0!important;
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto auto auto!important;
+    gap:7px!important;align-items:center!important;
+  }
+  .global-search-wrap{grid-column:1/-1!important;width:100%!important;min-width:0!important}
+  .global-search-input{width:100%!important;min-width:0!important;height:44px!important;font-size:16px!important}
+  .global-search-panel{left:0!important;right:0!important;width:auto!important;max-width:100%!important}
+  .notification-bell,.top-btn{min-width:44px!important;min-height:42px!important;padding:8px 10px!important}
+  .save-state,.top-actions>.primary-top,#syncMsg{display:none!important}
+  #networkStatePill{max-width:120px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:10px!important}
+
+  main{
+    width:100%!important;max-width:none!important;
+    margin:0!important;padding:12px 10px 28px!important;
+    min-width:0!important;
+  }
+  main>*{max-width:100%!important;min-width:0!important}
+  .card{width:100%!important;max-width:100%!important;padding:14px!important;border-radius:14px!important;overflow:visible!important}
+
+  /* Grids e cabeçalhos */
+  .grid,.settings-grid,.overview-grid,.profile-grid,.permission-grid,
+  .action-detail-summary,.pdca-action-details,.action-controls{
+    grid-template-columns:1fr!important;
+  }
+  .overview-head,.overview-panel-head,.report-toolbar,.ro-report-toolbar,
+  .completion-box,.admin-user-row{
+    gap:10px!important;
+  }
+  .overview-head{align-items:stretch!important}
+  .overview-head>.btn{align-self:flex-start!important}
+  #overviewKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;margin:14px 0!important}
+  #overviewKpis .overview-kpi{min-width:0;min-height:0!important;padding:11px 13px!important;overflow-wrap:anywhere}
+  #overviewKpis .overview-kpi b{font-size:22px!important}
+  .overview-grid{gap:10px!important}
+  .overview-panel{padding:14px!important}
+
+  /* Filtros e formulários */
+  .toolbar,.assigned-filter-row,.action-controls,.admin-config-nav,
+  .actions,.report-toolbar-actions,.unified-action-buttons{
+    display:grid!important;grid-template-columns:1fr!important;width:100%!important;gap:8px!important;
+  }
+  .toolbar input,.toolbar select,.assigned-filter-row input,.assigned-filter-row select,
+  input,select,textarea{width:100%!important;max-width:100%!important;min-width:0!important;font-size:16px!important}
+  .btn,.top-btn,button{touch-action:manipulation}
+  .btn{min-height:42px}
+
+  /* Tabelas permanecem usáveis sem destruir a estrutura */
+  .ro-control-table-wrap,#actionsDashboardView .card>div[style*="overflow"],
+  .table-wrap,.table-scroll,.admin-table-wrap{
+    width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;
+  }
+  table{display:table!important;width:100%!important}
+  .ro-control-table{min-width:1040px!important}
+  #actionsDashboardView .action-table{min-width:1450px!important}
+  th,td{font-size:12px!important;padding:10px 8px!important}
+
+  /* Modais, relatórios e PDFs */
+  .modal,.ro-report-overlay,.pdf-preview-modal{padding:8px!important;align-items:flex-start!important}
+  .modal-box,.ro-report-sheet,.pdf-preview-card{width:100%!important;max-width:100%!important;border-radius:12px!important}
+  .modal-box{max-height:calc(100vh - 16px)!important;overflow:auto!important}
+  .ro-report-body{padding:16px!important}
+  .ro-report-table td:first-child{width:38%!important;min-width:120px!important}
+  .pdf-preview-card{height:calc(100vh - 16px)!important}
+  .pdf-preview-head{flex-wrap:wrap!important}
+  .pdca-report,.pdca-sheet{width:100%!important;max-width:100%!important;padding:16px!important;box-shadow:none!important}
+  .report-header,.pdca-doc-head{flex-direction:column!important;gap:12px!important}
+  .report-header h1{font-size:30px!important}
+  .report-id-box{width:100%!important;min-width:0!important;text-align:left!important}
+  .report-meta-grid,.pdca-top-fields{grid-template-columns:1fr!important}
+  .report-question{grid-template-columns:1fr!important;gap:6px!important}
+  .pdca-quadrants{grid-template-columns:1fr!important;grid-template-rows:none!important}
+
+  /* Notificações e painéis flutuantes */
+  .notification-panel{position:fixed!important;left:8px!important;right:8px!important;top:116px!important;width:auto!important;max-width:none!important;max-height:70vh!important;overflow:auto!important}
+  .notification-panel-head{flex-direction:column!important;align-items:stretch!important}
+
+  /* Administração e configurações */
+  .config-row,.config-row.two,.config-row.three{grid-template-columns:1fr!important}
+  .admin-user-row{flex-direction:column!important;align-items:stretch!important}
+  .admin-user-info{width:100%!important}
+
+  /* Evita elementos largos escapando da viewport */
+  img,svg,canvas,iframe{max-width:100%}
+  pre,code{overflow-wrap:anywhere}
+}
+
+@media (min-width:761px){
+  .mobile-nav-btn,.mobile-nav-backdrop{display:none!important}
+}
+</style>
+
+
+<style id="nucleo-mobile-layout-v53">
+/* NÚCLEO V53 — refinamento mobile + equipe */
+@media (max-width:760px){
+
+  /* NAVBAR */
+  .topbar{
+    grid-template-columns:44px minmax(0,1fr)!important;
+    grid-template-areas:
+      "menu crumbs"
+      "actions actions"!important;
+    row-gap:8px!important;
+  }
+  #nucleoMobileMenuBtn{grid-area:menu!important}
+  .topbar>.crumbs{
+    grid-area:crumbs!important;
+    align-self:center!important;
+    font-size:13px!important;
+    font-weight:600!important;
+  }
+  .top-actions{
+    grid-area:actions!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) auto!important;
+    grid-template-areas:
+      "bell state sync"
+      "search search search"!important;
+    gap:8px!important;
+    align-items:center!important;
+  }
+  .top-actions .global-search-wrap{grid-area:search!important}
+  #notificationBellBtn{
+    grid-area:bell!important;
+    width:44px!important;
+    min-width:44px!important;
+    height:42px!important;
+    min-height:42px!important;
+    padding:0!important;
+    display:grid!important;
+    place-items:center!important;
+    border-radius:10px!important;
+    font-size:20px!important;
+  }
+  #networkStatePill{
+    grid-area:state!important;
+    justify-self:start!important;
+    max-width:100%!important;
+    min-width:0!important;
+    padding:7px 10px!important;
+    font-size:10px!important;
+  }
+  .global-search-input{
+    height:44px!important;
+    border-radius:11px!important;
+  }
+
+  /* MINHA EQUIPE */
+  #overviewTeam .inline-team-grid{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  #overviewTeam .inline-team-person{
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:center!important;
+    justify-content:flex-start!important;
+    text-align:center!important;
+    gap:5px!important;
+    padding:14px 10px!important;
+    min-width:0!important;
+    border-radius:13px!important;
+  }
+  #overviewTeam .inline-team-person>img,
+  #overviewTeam .inline-team-person>span:first-child{
+    width:64px!important;
+    height:64px!important;
+    max-width:64px!important;
+    max-height:64px!important;
+    object-fit:cover!important;
+    border-radius:50%!important;
+    margin:0 auto 5px!important;
+    flex:0 0 64px!important;
+  }
+  #overviewTeam .inline-team-person>div{
+    width:100%!important;
+    min-width:0!important;
+  }
+  #overviewTeam .inline-team-person strong{
+    display:block!important;
+    font-size:14px!important;
+    line-height:1.2!important;
+    margin-bottom:3px!important;
+  }
+  #overviewTeam .inline-team-person .small{
+    display:block!important;
+    font-size:11px!important;
+    line-height:1.25!important;
+    margin-top:2px!important;
+  }
+  #overviewTeamFilters{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:8px!important;
+  }
+  #overviewTeamFilters label{
+    width:100%!important;
+    margin:0!important;
+  }
+
+  /* melhora cards pequenos */
+  #overviewTeam{padding:14px!important}
+}
+
+@media (max-width:420px){
+  #overviewTeam .inline-team-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  #overviewTeam .inline-team-person{
+    padding:12px 7px!important;
+  }
+}
+</style>
 
 </head><body>
 
@@ -3080,19 +3370,15 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   <header class="topbar">
     <div class="crumbs">Núcleo <span>/</span> <b id="crumbCurrent">Minhas R.O.s</b></div>
     <div class="top-actions">
-      <div class="global-search-wrap">
-        <input id="globalSearchInput" class="global-search-input" placeholder="Buscar R.O., PDCA, ação..." oninput="renderGlobalSearch()" onfocus="renderGlobalSearch()">
-        <div id="globalSearchPanel" class="global-search-panel hidden"></div>
-      </div>
       <button id="notificationBellBtn" class="notification-bell" type="button" onclick="toggleNotificationPanel(event)" aria-label="Notificações">
         🔔
         <span id="notificationCountBadge" class="notification-count hidden">0</span>
       </button>
-      <span id="networkStatePill" class="offline-pill">● Online</span>
-      <span class="save-state">Salvo</span>
-      <button class="top-btn" onclick="syncNow()">↻ Sincronizar</button>
+      <div class="top-sync-controls">
+        <button class="top-btn" type="button" onclick="syncNow()">↻ Sincronizar</button>
+        <button class="top-btn top-kpi-button" type="button" onclick="nucleoOpenKpiEditor()" title="Personalizar indicadores" aria-label="Personalizar indicadores">⚙</button>
+      </div>
       <span id="syncMsg" role="status" title="Clique para ler a mensagem completa" onclick="if(this.textContent)alert(this.textContent)" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;cursor:pointer"></span>
-      <button class="top-btn primary-top" onclick="alert('Rascunho salvo nesta demonstração.')">Salvar</button>
     </div>
   </header>
   <div id="notificationPanel" class="notification-panel hidden">
@@ -3114,7 +3400,6 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <h2 id="overviewTitle" style="margin:4px 0 0">Sua situação agora</h2>
       <p id="overviewSubtitle" class="small" style="margin:6px 0 0">O que precisa da sua atenção neste momento.</p>
     </div>
-    <button class="btn secondary" type="button" id="overviewRefreshButton" onclick="renderCurrentOverview()">↻ Atualizar</button>
   </div>
 
   <div id="overviewKpis" class="overview-kpis"></div>
@@ -3131,7 +3416,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <div id="overviewPriorities"></div>
     </div>
 
-    <div class="overview-panel">
+    <div class="overview-panel" id="overviewQuickAccess">
       <div class="overview-panel-head">
         <div>
           <div class="overview-panel-kicker">ACESSOS RÁPIDOS</div>
@@ -3151,7 +3436,10 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <h2 style="margin:4px 0 0">R.O.s atribuídas</h2>
       <p class="small" style="margin:6px 0 0">Consulte as ocorrências disponíveis para sua atuação.</p>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span id="nucleoAssignedQuotaBadge">✉ E-mail hoje: —</span><button class="btn secondary" type="button" onclick="nucleoOpenAssignedExcelExport()">Exportar Excel</button></div>
+    <div id="assignedAdminTools" class="hidden" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="nucleoAssignedQuotaBadge">✉ E-mail hoje: —</span>
+      <button class="btn secondary" type="button" onclick="if(isAdmin())nucleoOpenAssignedExcelExport()">Exportar Excel</button>
+    </div>
   </div>
   <div id="sectorAccessNote" class="small" style="margin:12px 0;color:#667085"></div>
   <div id="assignedLifecycleTabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 12px">
@@ -3160,12 +3448,23 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   </div>
   <div class="assigned-filter-row">
     <input id="search" placeholder="Buscar por número ou cliente" oninput="nucleoScheduleRoSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();nucleoRunRoSearch()}">
+    <button id="assignedFilterButton" class="btn secondary" type="button" aria-haspopup="dialog" onclick="openAssignedFilters()">Filtros</button>
     <select id="assignedSectorFilter" aria-label="Setor responsável" onchange="render()"><option value="all">Todos os setores</option></select>
     <select id="assignedOriginFilter" onchange="render()"><option value="all">Todas as origens</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select>
     <select id="assignedUnitFilter" onchange="render()"><option value="all">Todas as unidades</option></select>
     <select id="filter" onchange="render()"><option value="todas">Todas as situações</option><option value="precisa_resposta">Precisa de resposta</option><option value="ja_respondeu">Já tem resposta</option><option value="cancelada">Cancelada</option><option value="registro">Registro</option><option value="obsoleto">Obsoleto</option></select>
   </div>
-  <div class="ro-control-table-wrap"><table class="ro-control-table"><thead><tr>
+  <dialog id="assignedFilterDialog" aria-labelledby="assignedFilterTitle">
+    <form onsubmit="applyAssignedFilters(event)">
+      <h3 id="assignedFilterTitle">Filtros das R.O.s</h3>
+      <div id="assignedFilterFields"></div>
+      <div class="assigned-filter-dialog-actions">
+        <button class="btn secondary" type="button" onclick="this.closest('dialog').close()">Cancelar</button>
+        <button class="btn primary" type="submit">Aplicar</button>
+      </div>
+    </form>
+  </dialog>
+  <div class="ro-control-table-wrap"><table class="mobile-code-actions ro-control-table"><thead><tr>
 <th>R.O.</th>
 <th>Unidade</th>
 <th>Setor responsável</th>
@@ -3294,7 +3593,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   </div>
 
   <div style="overflow:auto;margin-top:12px">
-    <table>
+    <table class="mobile-code-actions">
       <thead>
         <tr>
           <th>R.O.</th>
@@ -3467,16 +3766,27 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <h2 style="margin-top:0;margin-bottom:4px">PDCAs recebidos</h2>
       <p class="small" style="margin:0">Histórico dos PDCAs já enviados. Administradores visualizam todos; usuários operacionais visualizam apenas os PDCAs permitidos para seu usuário.</p>
     </div>
-    <button id="pdcaPrioritiesButton" class="btn secondary" type="button" onclick="nucleoOpenPdcaPriorities()">
-      Abrir prioridades
-    </button>
   </div>
 
   <div id="pdcaPdfSummary" style="margin:14px 0 16px"></div>
 
   <div class="toolbar">
-    <input id="sentSearch" placeholder="Buscar por R.O., cliente, responsável, reclamante ou setor" oninput="renderSentPdcas()">
-    <div id="sentLifecycleTabs" class="actions" role="tablist" aria-label="Etapas das respostas"><button id="sentActiveTab" class="btn primary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('active')">Pendências e confirmações</button><button id="sentHistoryTab" class="btn secondary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('history')">Histórico — encerradas</button></div><input id="sentLifecycleFilter" type="hidden" value="active"><p id="sentLifecycleDescription" class="small" role="status"></p>
+    <div class="sent-search-row">
+      <button id="pdcaPrioritiesButton" class="btn secondary" type="button" onclick="nucleoOpenPdcaPriorities()">
+        Abrir prioridades
+      </button>
+      <input id="sentSearch" type="search" aria-label="Buscar PDCAs recebidos" placeholder="Buscar PDCAs..." oninput="renderSentPdcas()">
+    </div>
+    <div id="sentLifecycleTabs" class="actions" role="tablist" aria-label="Etapas das respostas">
+      <button id="sentActiveTab" class="btn primary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('active')">
+        <span>Pendências e confirmações</span> <strong class="sent-lifecycle-count"></strong>
+      </button>
+      <button id="sentHistoryTab" class="btn secondary" type="button" role="tab" onclick="nucleoSetPdcaLifecycle('history')">
+        <span>Histórico — encerradas</span> <strong class="sent-lifecycle-count"></strong>
+      </button>
+    </div>
+    <input id="sentLifecycleFilter" type="hidden" value="active">
+    <p id="sentLifecycleDescription" class="small" role="status"></p>
     <select id="sentStatusFilter" onchange="renderSentPdcas()">
       <option value="todos">Todos os status</option>
       <option value="Enviado">Enviado</option>
@@ -3485,7 +3795,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
       <option value="Devolvido">Devolvido</option>
     </select>
   </div>
-  <table>
+  <table class="mobile-code-actions">
     <thead><tr><th>PDCA</th><th>R.O.</th><th>Responsável pela resposta</th><th>Reclamante identificado</th><th>Unidade</th><th>Recebimento</th><th>Status</th><th></th></tr></thead>
     <tbody id="sentRows"></tbody>
   </table>
@@ -3645,7 +3955,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   </div>
 
   <div style="overflow:auto">
-    <table class="action-table">
+    <table class="mobile-code-actions action-table">
       <thead>
         <tr>
           <th>ID</th>
@@ -3894,7 +4204,7 @@ Diretoria"></textarea>
   </div>
 
   <div style="overflow:auto">
-    <table class="action-table">
+    <table class="mobile-code-actions action-table">
       <thead>
         <tr>
           <th>R.O.</th>
@@ -4290,7 +4600,7 @@ Diretoria"></textarea>
     <div><div class="label">Busca</div><input id="contestSearch" placeholder="R.O., setor, usuário ou motivo" oninput="renderContestations()"></div>
   </div>
   <div style="overflow:auto">
-    <table class="action-table">
+    <table class="mobile-code-actions action-table">
       <thead><tr><th>R.O.</th><th>Setor</th><th>Contestada por</th><th>Motivo da contestação</th><th>Data</th><th>Situação</th><th>Ações SGQ</th></tr></thead>
       <tbody id="contestationsBody"></tbody>
     </table>
@@ -4466,7 +4776,7 @@ Diretoria"></textarea>
   </div>
 
   <div style="overflow:auto">
-    <table class="action-table">
+    <table class="mobile-code-actions action-table">
       <thead>
         <tr>
           <th>R.O. / PDCA</th>
@@ -4942,14 +5252,14 @@ Cancelada</textarea></label>
         <label><div class="label">URL do Web App / API</div><input id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec"></label>
         <label><div class="label">Chave de integração</div><input id="apiKey" placeholder="Chave definida no Apps Script"></label>
         <label><div class="label">Sincronização automática</div><select id="autoSync"><option value="5">A cada 5 minutos</option><option value="15">A cada 15 minutos</option><option value="30">A cada 30 minutos</option><option value="0">Somente manual</option></select></label>
-        <label><div class="label">Período buscado na planilha</div><select id="roSyncPeriod" onchange="updateRoSyncPeriodUi()"><option value="all">Todo o período</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="180">Últimos 180 dias</option><option value="365">Últimos 12 meses</option><option value="custom">Período personalizado</option></select></label>
-        <label id="roSyncDateFromWrap" class="hidden"><div class="label">Buscar de</div><input id="roSyncDateFrom" type="date"></label>
+        <label><div class="label">Período buscado na planilha</div><select id="roSyncPeriod" onchange="editRoSyncPeriod()"><option value="all">Todo o período</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="180">Últimos 180 dias</option><option value="365">Últimos 12 meses</option><option value="custom">Período personalizado</option></select></label>
+        <label id="roSyncDateFromWrap" class="hidden"><div class="label">Buscar de</div><input id="roSyncDateFrom" type="date" oninput="editRoSyncPeriod()"></label>
         <label><div class="label">Sincronizar ao enviar PDCA</div><select><option>Sim</option><option>Não</option></select></label>
       </div>
       <div class="actions">
         <button class="btn secondary" type="button" onclick="openIntegrationApi()">Abrir API</button>
         <button class="btn secondary" type="button" onclick="testConnection()">Testar conexão</button>
-        <button class="btn primary" type="button" onclick="saveIntegrationSettingsConfirmed()">Salvar integração</button>
+        <button class="btn primary" type="button" id="saveIntegrationButton" onclick="saveIntegrationSettingsConfirmed()">Salvar integração</button>
       </div>
       <div id="testResult" class="statusline hidden"></div>
 
@@ -5837,10 +6147,9 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/nc/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/indicators/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
-<!-- runtime monolítico removido: funções exclusivas incorporadas em assets/nucleo-app.js -->
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app.js?v=20261103-status-review-source-v26"></script>
-<script src="assets/api-source-lock-v20.js?v=20261107-filial-replica-v36"></script>
+<script src="assets/nucleo-app.js?v=20261111-indicadores-tablet-v81"></script>
+<script src="assets/api-source-lock-v20.js?v=20261110-periodo-central-v72"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
 (function(){
@@ -5950,90 +6259,6 @@ function renderSupplierIndicatorsWorkspace(){
   };
 })();
 </script>
-
-
-<!-- R.O.s atribuídas liberadas: manutenção desativada -->
-<script id="nucleoAssignedMaintenanceGuardV1">
-(function(){
-  const ASSIGNED_MAINTENANCE_MODE = false;
-  const ASSIGNED_TEST_USERS = [
-    'gabrielly.silva@setaembalagens.com.br'
-  ];
-
-  function currentEmail(){
-    try{
-      return String((typeof getSession==='function' ? getSession()?.email : '') || '')
-        .trim()
-        .toLowerCase();
-    }catch(e){
-      return '';
-    }
-  }
-
-  function canSeeAssignedTestVersion(){
-    if(!ASSIGNED_MAINTENANCE_MODE)return true;
-    return ASSIGNED_TEST_USERS.includes(currentEmail());
-  }
-
-  function installGuard(){
-    const original = window.showAssignedRos;
-    if(typeof original !== 'function' || original.__maintenanceGuardInstalled)return false;
-
-    const wrapped = function(){
-      if(canSeeAssignedTestVersion()){
-        const maint=document.getElementById('assignedMaintenanceView');
-        if(maint){maint.classList.add('hidden');maint.style.display='';}
-        return original.apply(this, arguments);
-      }
-
-      try{ roListMode='assigned'; }catch(e){}
-
-      // A view de módulos administrativos é dinâmica e não é escondida por view().
-      const adminModule=document.getElementById('adminModuleView');
-      if(adminModule){
-        adminModule.classList.add('hidden');
-        adminModule.style.display='none';
-      }
-
-      // Administração geral (settingsView) também precisa sair da tela.
-      // Ela não é escondida de forma confiável pelo view() quando já estava aberta.
-      const settings=document.getElementById('settingsView');
-      if(settings){
-        settings.classList.add('hidden');
-        settings.style.display='none';
-      }
-
-      if(typeof view==='function')view('assignedMaintenanceView');
-
-      const maint=document.getElementById('assignedMaintenanceView');
-      if(maint){
-        maint.classList.remove('hidden');
-        maint.style.display='';
-      }
-
-      if(typeof setNav==='function')setNav('assigned');
-    };
-
-    wrapped.__maintenanceGuardInstalled = true;
-    wrapped.__original = original;
-    window.showAssignedRos = wrapped;
-    return true;
-  }
-
-  if(!installGuard()){
-    let tries=0;
-    const timer=setInterval(function(){
-      if(installGuard() || ++tries>80)clearInterval(timer);
-    },100);
-  }
-
-  window.nucleoAssignedMaintenance = {
-    enabled: ASSIGNED_MAINTENANCE_MODE,
-    allowed: ASSIGNED_TEST_USERS.slice()
-  };
-})();
-</script>
-
 <script src="assets/modules-v2/ro-extension.js?v=20261028-ro-extension-v3-email-async"></script>
 <script src="assets/modules-v2/ro-resend-email.js?v=20261103-email-error-filter-v28"></script>
 <script src="assets/modules-v2/ro-resend-email-guard-v12.js?v=20261103-single-envelope-v12"></script>
@@ -6239,4 +6464,1224 @@ function renderSupplierIndicatorsWorkspace(){
 </script>
 
 <script src="assets/assigned-ro-move-actions-v13.js?v=20261103-move-actions-only-v13"></script>
+
+<script id="nucleo-mobile-global-v52-script">
+(function(){
+  function isMobile(){return window.matchMedia('(max-width:760px)').matches}
+  function closeMenu(){
+    document.querySelector('.sidebar')?.classList.remove('mobile-open');
+    document.getElementById('nucleoMobileBackdrop')?.classList.remove('open');
+    document.body.style.overflow='';
+  }
+  function openMenu(){
+    if(!isMobile())return;
+    document.querySelector('.sidebar')?.classList.add('mobile-open');
+    document.getElementById('nucleoMobileBackdrop')?.classList.add('open');
+    document.body.style.overflow='hidden';
+  }
+  function install(){
+    const top=document.querySelector('.topbar');
+    const side=document.querySelector('.sidebar');
+    if(!top||!side)return false;
+    if(!document.getElementById('nucleoMobileMenuBtn')){
+      const btn=document.createElement('button');
+      btn.id='nucleoMobileMenuBtn';btn.type='button';btn.className='mobile-nav-btn';
+      btn.setAttribute('aria-label','Abrir menu');btn.textContent='☰';btn.onclick=openMenu;
+      top.insertBefore(btn,top.firstChild);
+    }
+    if(!document.getElementById('nucleoMobileBackdrop')){
+      const bg=document.createElement('div');
+      bg.id='nucleoMobileBackdrop';bg.className='mobile-nav-backdrop';bg.onclick=closeMenu;
+      document.body.appendChild(bg);
+    }
+    side.addEventListener('click',function(e){
+      if(!isMobile())return;
+      if(e.target.closest('button,.side-item,.side-module-head,.side-independent-module'))setTimeout(closeMenu,80);
+    });
+    return true;
+  }
+  function normalize(){
+    if(!isMobile())closeMenu();
+  }
+  if(!install()){
+    let n=0,t=setInterval(()=>{if(install()||++n>80)clearInterval(t)},100);
+  }
+  window.addEventListener('load',()=>{ normalize(); },{once:true});
+
+  window.addEventListener('resize',normalize);
+  window.nucleoOpenMobileMenu=openMenu;
+  window.nucleoCloseMobileMenu=closeMenu;
+})();
+</script>
+
+
+<script id="nucleo-sync-v53">
+(function(){
+  'use strict';
+  if(window.__nucleoSyncV53)return;
+  window.__nucleoSyncV53=true;
+
+  let centralPromise=null;
+
+  function apiUrl(){
+    try{
+      const v=String(typeof window.portalApiBase==='function'?window.portalApiBase():'').trim();
+      return v;
+    }catch(_){return '';}
+  }
+
+  async function ensureApi(){
+    try{
+      if(window.nucleoGlobalApiReady&&typeof window.nucleoGlobalApiReady.then==='function'){
+        await window.nucleoGlobalApiReady;
+      }else if(typeof window.nucleoResolveGlobalApiUrl==='function'){
+        await window.nucleoResolveGlobalApiUrl(true);
+      }
+    }catch(e){
+      console.warn('[NÚCLEO V53] Falha ao resolver API global:',e);
+    }
+    const url=apiUrl();
+    if(!url)throw new Error('A URL global da API do Núcleo não foi localizada.');
+    return url;
+  }
+
+  /*
+    Substitui o sincronizador central antigo.
+    Não usa portalBackendSyncInProgress, que podia ficar travado depois do login.
+  */
+  window.syncPortalBackend=async function(showMessage=false,options={}){
+    const appSync=window.__nucleoAppChunkedSync || window.syncPortalBackend.__appOriginal;
+    if(typeof appSync==='function')return appSync(showMessage,options);
+    throw new Error('Sincronizador em partes não foi carregado.');
+  };
+
+  /*
+    Corrige a origem da URL para todas as rotinas antigas de planilha.
+    Preferências locais continuam locais, mas apiUrl SEMPRE vem da fonte global.
+  */
+  const oldGetSaved=window.getSavedIntegrationSettings;
+  window.getSavedIntegrationSettings=function(){
+    let settings={};
+    try{
+      settings=typeof oldGetSaved==='function'?(oldGetSaved()||{}):{};
+    }catch(_){}
+    return {...settings,apiUrl:apiUrl()};
+  };
+
+  /*
+    Sincronização manual completa:
+    1) lê as R.O.s/SACs;
+    2) aplica os registros;
+    3) confirma portal_load;
+    4) atualiza as telas.
+  */
+  window.syncNow=async function(){
+    if(window.syncNow.inProgress)return;
+    window.syncNow.inProgress=true;
+
+    const btn=[...document.querySelectorAll('.top-actions .top-btn')]
+      .find(b=>/Sincronizar/i.test(b.textContent||''));
+    const originalText=btn?.textContent||'↻ Sincronizar';
+
+    try{
+      if(btn){
+        btn.disabled=true;
+        btn.textContent='↻ Sincronizando';
+      }
+
+      const runner=window.nucleoRunFullSync;
+      if(typeof runner!=='function'){
+        throw new Error('A rotina completa de sincronização não foi carregada.');
+      }
+
+      const ok=await runner({
+        source:'manual',
+        foreground:true,
+        forceRos:true
+      });
+
+      if(!ok){
+        const detail=document.getElementById('syncMsg')?.textContent||'';
+        alert(detail.startsWith('Sincronização não concluída:')?detail:'Não foi possível concluir a sincronização. Confira se sua sessão ainda está ativa.');
+        return;
+      }
+      try{window.nucleoEnsureInlineTeam?.()}catch(_){}
+
+    }catch(e){
+      alert('Não foi possível sincronizar: '+(e?.message||e));
+    }finally{
+      if(btn){
+        btn.disabled=false;
+        btn.textContent=originalText;
+      }
+      window.syncNow.inProgress=false;
+    }
+  };
+
+  console.info('[NÚCLEO] V53 — sync central destravado + ajustes mobile ativos.');
+})();
+</script>
+
+
+<style id="nucleo-v54-final-fixes">
+/* NÚCLEO V54 — correções finais de layout, equipe e barra superior */
+
+/* EQUIPE: foto em cima, nome e cargo abaixo em qualquer tela */
+#overviewTeam .inline-team-grid{
+  display:grid!important;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;
+  gap:12px!important;
+}
+#overviewTeam .inline-team-person{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  text-align:center!important;
+  gap:5px!important;
+  min-width:0!important;
+  padding:14px 10px!important;
+}
+#overviewTeam .inline-team-person>img,
+#overviewTeam .inline-team-person>span:first-child{
+  width:68px!important;
+  height:68px!important;
+  min-width:68px!important;
+  max-width:68px!important;
+  min-height:68px!important;
+  max-height:68px!important;
+  object-fit:cover!important;
+  border-radius:50%!important;
+  margin:0 auto 5px!important;
+}
+#overviewTeam .inline-team-person>div{
+  width:100%!important;
+  min-width:0!important;
+}
+#overviewTeam .inline-team-person strong{
+  display:block!important;
+  width:100%!important;
+  margin:0 0 3px!important;
+  line-height:1.2!important;
+  overflow-wrap:anywhere!important;
+}
+#overviewTeam .inline-team-person .small{
+  display:block!important;
+  width:100%!important;
+  margin:0!important;
+  line-height:1.25!important;
+  overflow-wrap:anywhere!important;
+}
+
+/* Segurança geral contra estouro de largura */
+.workspace, main, main>section, .card, .overview-panel,
+.modal-box, .ro-report-sheet, .pdf-preview-card{
+  min-width:0;
+}
+img,svg,canvas,video,iframe{max-width:100%}
+
+@media (max-width:760px){
+  html,body,.app-shell,.workspace,main{
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:hidden!important;
+  }
+
+  main{
+    margin:0!important;
+    padding:10px 9px 24px!important;
+  }
+
+  /* NAVBAR MOBILE: menu/título, depois controles, depois busca */
+  .topbar{
+    position:sticky!important;
+    top:0!important;
+    z-index:2147481800!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr)!important;
+    grid-template-areas:
+      "menu crumbs"
+      "actions actions"!important;
+    gap:8px!important;
+    width:100%!important;
+    min-height:0!important;
+    height:auto!important;
+    padding:8px 9px!important;
+    box-sizing:border-box!important;
+  }
+  #nucleoMobileMenuBtn{
+    grid-area:menu!important;
+    display:grid!important;
+    width:42px!important;
+    height:42px!important;
+    min-width:42px!important;
+  }
+  .topbar>.crumbs{
+    grid-area:crumbs!important;
+    min-width:0!important;
+    overflow:hidden!important;
+    white-space:nowrap!important;
+    text-overflow:ellipsis!important;
+    align-self:center!important;
+  }
+  .top-actions{
+    grid-area:actions!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) auto!important;
+    grid-template-areas:
+      "bell state sync"
+      "search search search"!important;
+    gap:7px!important;
+    width:100%!important;
+    min-width:0!important;
+    align-items:center!important;
+  }
+  .top-actions .global-search-wrap{
+    grid-area:search!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  #notificationBellBtn{
+    grid-area:bell!important;
+    width:44px!important;
+    min-width:44px!important;
+    height:42px!important;
+    padding:0!important;
+  }
+  #networkStatePill{
+    grid-area:state!important;
+    display:block!important;
+    min-width:0!important;
+    max-width:100%!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+  }
+  .top-actions>.primary-top,
+  .top-actions>.save-state,
+  #syncMsg{
+    display:none!important;
+  }
+  .global-search-input{
+    width:100%!important;
+    min-width:0!important;
+    height:43px!important;
+    font-size:16px!important;
+  }
+
+  .sidebar,
+  .sidebar.collapsed{
+    width:min(86vw,320px)!important;
+    max-width:320px!important;
+  }
+
+  /* Sistema inteiro responsivo */
+  .grid,.settings-grid,.overview-grid,.profile-grid,.permission-grid,
+  .config-row,.config-row.two,.config-row.three,
+  .report-meta-grid,.pdca-top-fields,.pdca-quadrants{
+    grid-template-columns:1fr!important;
+  }
+  .toolbar,.assigned-filter-row,.action-controls,.admin-config-nav,
+  .actions,.report-toolbar-actions,.unified-action-buttons{
+    width:100%!important;
+    max-width:100%!important;
+  }
+  input,select,textarea{
+    max-width:100%!important;
+    min-width:0!important;
+  }
+  .table-wrap,.table-scroll,.admin-table-wrap,
+  .ro-control-table-wrap,[style*="overflow:auto"],[style*="overflow: auto"]{
+    max-width:100%!important;
+  }
+
+  #overviewTeam .inline-team-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  #overviewTeam .inline-team-person{
+    padding:12px 7px!important;
+  }
+}
+
+@media (max-width:360px){
+  .top-actions{
+    grid-template-columns:42px minmax(0,1fr) 104px!important;
+  }
+}
+</style>
+
+<script id="nucleo-v54-final-fixes-js">
+(function(){
+  'use strict';
+  if(window.__nucleoV54FinalFixes)return;
+  window.__nucleoV54FinalFixes=true;
+
+  function isVisible(el){
+    if(!el)return false;
+    const s=getComputedStyle(el);
+    return s.display!=='none' && s.visibility!=='hidden';
+  }
+
+  function normalizeTeam(){
+    const host=document.getElementById('overviewTeam');
+    if(!host)return;
+    host.querySelectorAll('.inline-team-person').forEach(card=>{
+      const info=[...card.children].find(el=>el.tagName==='DIV');
+      if(info){
+        const name=info.querySelector('strong,b');
+        const role=info.querySelector('.small,small');
+        if(name)name.style.display='block';
+        if(role)role.style.display='block';
+      }
+    });
+  }
+
+  function normalizeMobileNav(){
+    if(innerWidth>760)return;
+    const top=document.querySelector('.topbar');
+    const side=document.querySelector('.sidebar');
+    if(!top||!side)return;
+
+    if(!document.getElementById('nucleoMobileMenuBtn')){
+      const btn=document.createElement('button');
+      btn.id='nucleoMobileMenuBtn';
+      btn.type='button';
+      btn.className='mobile-nav-btn';
+      btn.setAttribute('aria-label','Abrir menu');
+      btn.textContent='☰';
+      btn.addEventListener('click',()=>{
+        side.classList.add('mobile-open');
+        document.getElementById('nucleoMobileBackdrop')?.classList.add('open');
+        document.body.style.overflow='hidden';
+      });
+      top.insertBefore(btn,top.firstChild);
+    }
+  }
+
+  function refreshVisibleScreens(){
+    const calls=[
+      'refreshSectorSelectors',
+      'populateTriageSectors',
+      'populateTriageUnits',
+      'refreshExternalRoSidebarBadge',
+      'refreshNotificationBell',
+      'refreshMenuNotificationBadges',
+      'refreshContestPendingBadge',
+      'refreshPdcaSidebarBadge',
+      'refreshRoSummary'
+    ];
+    calls.forEach(name=>{try{window[name]?.()}catch(_){}});
+
+    try{
+      if(isVisible(document.getElementById('listView')))window.renderCurrentOverview?.();
+    }catch(_){}
+    try{
+      if(isVisible(document.getElementById('roListView')))window.render?.();
+    }catch(_){}
+    try{
+      if(isVisible(document.getElementById('triageView')))window.renderTriage?.();
+    }catch(_){}
+    try{window.nucleoEnsureInlineTeam?.()}catch(_){}
+
+    setTimeout(normalizeTeam,0);
+  }
+
+  /* Sincronização convergente para celular e computador */
+  let autoSyncPromise=null;
+  async function v54SyncAll({officialRos=false,foreground=false}={}){
+    if(autoSyncPromise)return autoSyncPromise;
+
+    autoSyncPromise=(async()=>{
+      try{
+        if(!navigator.onLine)return false;
+        if(typeof window.getSession==='function' && !window.getSession()?.authToken)return false;
+
+        if(typeof window.nucleoGlobalApiReady?.then==='function'){
+          try{await window.nucleoGlobalApiReady}catch(_){}
+        }else if(typeof window.nucleoResolveGlobalApiUrl==='function'){
+          try{await window.nucleoResolveGlobalApiUrl(true)}catch(_){}
+        }
+
+        if(officialRos && typeof window.loadOfficialRosPaged==='function' &&
+           typeof window.applyImportedRos==='function'){
+          const settings=typeof window.getSavedIntegrationSettings==='function'
+            ? window.getSavedIntegrationSettings()
+            : {};
+          if(settings?.apiUrl){
+            const data=await window.loadOfficialRosPaged(settings);
+            if(data?.sucesso!==false && Array.isArray(data?.dados)){
+              window.applyImportedRos(data.dados,data);
+              data.dados=null;
+            }
+          }
+        }
+
+        let ok=true;
+        if(typeof window.syncPortalBackend==='function'){
+          ok=await window.syncPortalBackend(false,{foreground});
+        }else if(typeof window.portalJsonp==='function'){
+          const res=await window.portalJsonp({acao:'portal_load'},180000);
+          if(!res || res.sucesso===false)throw new Error(res?.erro||'Falha ao carregar a base central.');
+          if(typeof window.applyPortalBackendSnapshot==='function'){
+            window.applyPortalBackendSnapshot(res);
+          }
+        }
+
+        refreshVisibleScreens();
+        return ok!==false;
+      }catch(e){
+        console.warn('[NÚCLEO V54] sincronização automática não concluída:',e);
+        return false;
+      }finally{
+        autoSyncPromise=null;
+      }
+    })();
+
+    return autoSyncPromise;
+  }
+
+  window.nucleoSyncAllDevices=v54SyncAll;
+
+  function normalize(){
+    normalizeTeam();
+    normalizeMobileNav();
+  }
+
+  let normalizeTimer=null;
+  const observer=new MutationObserver(()=>{
+    clearTimeout(normalizeTimer);
+    normalizeTimer=setTimeout(normalize,40);
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true});
+
+  
+
+  
+
+  
+
+  
+
+  window.addEventListener('resize',normalize);
+
+  
+
+  normalize();
+  console.info('[NÚCLEO] V54 — equipe, navbar, responsividade e sincronização entre dispositivos ativas.');
+})();
+</script>
+
+
+<style id="nucleo-mobile-sidebar-team-fix">
+/* Ajustes solicitados: equipe sem filtros, cards proporcionais e sidebar mobile completa */
+#overviewTeamFilters{
+  display:none!important;
+}
+
+/* Desktop: cartões da equipe não esticam para preencher toda a largura */
+@media (min-width:761px){
+  #overviewTeam .inline-team-grid{
+    display:grid!important;
+    grid-template-columns:repeat(auto-fit,minmax(220px,280px))!important;
+    justify-content:start!important;
+    align-items:stretch!important;
+    gap:12px!important;
+  }
+  #overviewTeam .inline-team-person{
+    width:100%!important;
+    max-width:280px!important;
+    min-height:142px!important;
+    box-sizing:border-box!important;
+  }
+}
+
+@media (max-width:760px){
+  /* Menu aberto: textos e submódulos ficam disponíveis */
+  .sidebar.mobile-open .brand-text-wrap,
+  .sidebar.mobile-open .sidebar-intro,
+  .sidebar.mobile-open .side-item > span:nth-child(2),
+  .sidebar.mobile-open .side-module-head > span:nth-child(2),
+  .sidebar.mobile-open .side-independent-module > span:nth-child(2),
+  .sidebar.mobile-open .side-chevron,
+  .sidebar.mobile-open .side-module-arrow{
+    display:block!important;
+  }
+  .sidebar.mobile-open .side-item,
+  .sidebar.mobile-open .side-module-head,
+  .sidebar.mobile-open .side-independent-module{
+    justify-content:flex-start!important;
+  }
+  .sidebar.mobile-open .side-module-body{
+    display:block!important;
+    padding:2px 0 4px 12px!important;
+  }
+  .sidebar.mobile-open .side-module-arrow{
+    transform:rotate(90deg)!important;
+  }
+
+  /* Botão fechar exclusivo do menu mobile */
+  #nucleoMobileSidebarClose{
+    display:grid!important;
+    place-items:center!important;
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+    padding:0!important;
+    margin-left:auto!important;
+    border:1px solid #c7e4f1!important;
+    border-radius:9px!important;
+    background:#e5f4fb!important;
+    color:#0b4f8a!important;
+    font-size:20px!important;
+    line-height:1!important;
+    cursor:pointer!important;
+  }
+
+  #overviewTeam .inline-team-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    justify-content:stretch!important;
+  }
+  #overviewTeam .inline-team-person{
+    max-width:none!important;
+  }
+}
+
+@media (min-width:761px){
+  #nucleoMobileSidebarClose{display:none!important}
+}
+</style>
+<script id="nucleo-mobile-sidebar-team-fix-js">
+(function(){
+  'use strict';
+  if(window.__nucleoMobileSidebarTeamFix)return;
+  window.__nucleoMobileSidebarTeamFix=true;
+
+  function closeMobileSidebar(){
+    document.querySelector('.sidebar')?.classList.remove('mobile-open');
+    document.getElementById('nucleoMobileBackdrop')?.classList.remove('open');
+    document.body.style.overflow='';
+  }
+
+  function ensureCloseButton(){
+    const brand=document.querySelector('.sidebar .brand');
+    if(!brand || document.getElementById('nucleoMobileSidebarClose'))return;
+    const btn=document.createElement('button');
+    btn.id='nucleoMobileSidebarClose';
+    btn.type='button';
+    btn.setAttribute('aria-label','Fechar menu');
+    btn.setAttribute('title','Fechar menu');
+    btn.textContent='×';
+    btn.addEventListener('click',closeMobileSidebar);
+    brand.appendChild(btn);
+  }
+
+  function openAllMobileModules(){
+    if(innerWidth>760)return;
+    document.querySelectorAll('.sidebar .side-module').forEach(m=>m.classList.add('open'));
+  }
+
+  function normalize(){
+    ensureCloseButton();
+    openAllMobileModules();
+  }
+
+  window.nucleoCloseMobileSidebar=closeMobileSidebar;
+  window.addEventListener('resize',normalize);
+  window.addEventListener('load',normalize,{once:true});
+  setTimeout(normalize,0);
+})();
+</script>
+
+
+<style id="nucleo-v55-mobile-assigned-sac-session">
+/* NÚCLEO — ajustes solicitados em 09/11 */
+
+/* Indicadores de SAC sem acesso ao cadastro não aparecem. */
+body.nucleo-hide-sac-indicators [data-nucleo-sac-indicator="1"]{
+  display:none!important;
+}
+</style>
+
+<script id="nucleo-v55-mobile-assigned-sac-session-js">
+(function(){
+  'use strict';
+  if(window.__nucleoV55RequestedFixes)return;
+  window.__nucleoV55RequestedFixes=true;
+
+  function isActuallyVisible(el){
+    if(!el || el.hidden || el.classList.contains('hidden'))return false;
+    const s=getComputedStyle(el);
+    return s.display!=='none' && s.visibility!=='hidden';
+  }
+
+  /* Quem não tem acesso ao cadastro R.O. Externa/SAC não precisa do indicador SAC. */
+  function refreshSacIndicatorAccess(){
+    const register=document.getElementById('navNewExternalRo');
+    const canRegister=!!register && isActuallyVisible(register);
+    document.body.classList.toggle('nucleo-hide-sac-indicators',!canRegister);
+
+    const roots=[
+      document.getElementById('overviewKpis'),
+      document.getElementById('listView')
+    ].filter(Boolean);
+
+    roots.forEach(root=>{
+      root.querySelectorAll(
+        '.overview-kpi,.overview-card,.kpi-card,.indicator-card,.stat-card,.dashboard-card,.card'
+      ).forEach(card=>{
+        const txt=String(card.textContent||'').replace(/\s+/g,' ').trim();
+        if(/\bSAC\b/i.test(txt) && !/Minha equipe/i.test(txt)){
+          if(card.dataset.nucleoSacIndicator!=='1')card.dataset.nucleoSacIndicator='1';
+        }
+      });
+    });
+  }
+
+  function refresh(){
+    refreshSacIndicatorAccess();
+  }
+
+  let timer=null;
+  const observer=new MutationObserver(()=>{
+    clearTimeout(timer);
+    timer=setTimeout(refresh,60);
+  });
+  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+
+  document.addEventListener('DOMContentLoaded',refresh);
+  window.addEventListener('load',refresh,{once:true});
+  window.addEventListener('resize',refresh);
+
+  /* Não fazemos nenhuma chamada de sincronização/login aqui.
+     A sessão permanece sob responsabilidade do fluxo original do Núcleo. */
+  refresh();
+})();
+</script>
+
+
+
+<style id="nucleo-v62-topbar">
+.topbar .top-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  min-width:0;
+}
+.topbar .top-sync-controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+.topbar .top-sync-controls .top-btn{
+  white-space:nowrap;
+}
+.topbar .top-sync-controls .top-kpi-button{
+  display:inline-grid;
+  place-items:center;
+  width:34px;
+  min-height:34px;
+  padding:0;
+  flex:0 0 auto;
+  font-size:16px;
+}
+.topbar #syncMsg:not(:empty){
+  display:block!important;
+  min-width:0;
+  max-width:none!important;
+}
+@media (max-width:760px){
+  .topbar .top-actions{
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) auto!important;
+    grid-template-areas:"bell . sync" "syncmsg syncmsg syncmsg"!important;
+  }
+  .topbar .top-sync-controls{
+    grid-area:sync;
+    justify-self:end;
+  }
+  .topbar .top-sync-controls .top-kpi-button{
+    min-width:44px;
+    min-height:44px;
+    padding:0!important;
+  }
+  .topbar #syncMsg{
+    grid-area:syncmsg!important;
+    font-size:11px;
+    white-space:normal!important;
+    overflow:visible!important;
+    text-align:left;
+    overflow-wrap:anywhere;
+  }
+}
+</style>
+
+<style id="assigned-mobile-filters">
+#assignedFilterButton{display:none}
+#assignedFilterDialog{
+  width:min(360px,calc(100% - 32px));
+  max-height:calc(100dvh - 32px);
+  overflow:auto;
+  border:1px solid #dfe7e4;
+  border-radius:16px;
+  padding:16px;
+  color:#172033;
+}
+#assignedFilterDialog::backdrop{background:rgba(15,23,42,.45)}
+#assignedFilterTitle{margin:0 0 12px}
+#assignedFilterFields{display:grid;gap:8px}
+#assignedFilterFields label{display:grid;gap:4px;font-size:13px;font-weight:600}
+.assigned-filter-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+@media (max-width:760px){
+  #roListView .assigned-filter-row{grid-template-columns:minmax(0,1fr) auto!important}
+  #roListView .assigned-filter-row #search{grid-column:auto}
+  #roListView .assigned-filter-row>select{display:none}
+  #assignedFilterButton{display:inline-flex;align-items:center;justify-content:center}
+}
+</style>
+
+<style id="sent-pdca-controls">
+#sentView .sent-search-row{
+  display:flex;
+  flex:1 0 100%;
+  gap:8px;
+  min-width:0;
+}
+#sentView .sent-search-row #sentSearch{
+  min-width:0;
+  width:auto;
+  flex:1 1 0;
+}
+#sentView #pdcaPrioritiesButton{
+  flex:0 0 auto;
+}
+#sentLifecycleTabs .sent-lifecycle-count:not(:empty)::before{content:"("}
+#sentLifecycleTabs .sent-lifecycle-count:not(:empty)::after{content:")"}
+@media (max-width:760px){
+  #sentView #sentLifecycleTabs{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:10px!important;
+    width:100%;
+    margin:2px 0 0;
+  }
+  #sentLifecycleTabs .btn{
+    display:flex;
+    flex-direction:column-reverse;
+    align-items:flex-start;
+    justify-content:flex-end;
+    gap:5px;
+    min-width:0;
+    padding:10px 12px;
+    background:#fff;
+    border:1px solid #dfe7e4;
+    border-radius:13px;
+    color:#475467;
+    text-align:left;
+    font-size:12px;
+    overflow-wrap:anywhere;
+  }
+  #sentLifecycleTabs .btn[aria-selected="true"]{
+    border-color:#8aabc8;
+    background:#edf4fb;
+  }
+  #sentLifecycleTabs .sent-lifecycle-count{
+    color:#173f42;
+    font-size:22px;
+    line-height:1;
+  }
+  #sentLifecycleTabs #sentActiveTab .sent-lifecycle-count{color:#9a6500}
+  #sentLifecycleTabs .sent-lifecycle-count:not(:empty)::before,
+  #sentLifecycleTabs .sent-lifecycle-count:not(:empty)::after{content:none}
+  #sentView #pdcaPrioritiesButton{
+    width:auto;
+    max-width:46%;
+    padding-inline:9px;
+    white-space:normal;
+  }
+}
+</style>
+
+<style id="nucleo-mobile-code-actions">
+@media screen and (max-width:760px), screen and (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  #overviewQuickAccess{display:none!important}
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table){
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > :is(thead,tbody){
+    display:block;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > :is(thead,tbody) > tr{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1.65fr);
+    align-items:start;
+    padding:4px 0;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > :is(thead,tbody) > tr > :is(th,td){
+    display:none!important;
+    min-width:0!important;
+    width:auto!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > :is(thead,tbody) > tr > :is(th,td):first-child{
+    display:block!important;
+    grid-column:1;
+    grid-row:1;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > thead > tr > th:last-child{
+    display:block!important;
+    grid-column:2;
+    text-align:right;
+    font-size:0!important;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > thead > tr > th:last-child::after{
+    content:"Ações";
+    font-size:12px;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > tbody > tr > td:not(:first-child):is(:last-child,:has(button,a[href])){
+    display:block!important;
+    grid-column:2;
+    text-align:right;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > tbody > tr > td:only-child[colspan]{
+    display:block!important;
+    grid-column:1/-1;
+  }
+  main :is(table.mobile-code-actions,#ncTreatmentList > div > table) > tbody > tr > td :is(button,a.btn){
+    max-width:100%;
+    min-height:36px;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+  }
+  #roListView .ro-control-table-wrap{min-width:0}
+  #roListView .ro-control-table td.operational-action-col > div{
+    min-width:0!important;
+    flex-wrap:wrap!important;
+    justify-content:flex-end;
+  }
+  #roListView .ro-control-table .pdca-source-control .badge,
+  #ncTreatmentList > div > table > tbody > tr > td:first-child > .small{
+    display:none!important;
+  }
+  /* The received list may show a filename in column one. Use the RO code. */
+  main #sentView table.mobile-code-actions > :is(thead,tbody) > tr > :is(th,td):first-child:not(:only-child){
+    display:none!important;
+  }
+  main #sentView table.mobile-code-actions > :is(thead,tbody) > tr > :is(th,td):nth-child(2){
+    display:block!important;
+    grid-column:1;
+    grid-row:1;
+    font-weight:700;
+  }
+  #sentRows > tr > td:nth-child(4){
+    font-size:0;
+  }
+  #sentRows > tr > td:nth-child(4) > .small{
+    display:none;
+  }
+  #sentRows > tr > td:nth-child(4) > .btn{
+    font-size:12px;
+  }
+}
+</style>
+
+<style id="mobile-tablet-sac-admin">
+@media screen and (max-width:760px), screen and (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  #externalRoControlView > div:has(> table > #externalRoControlBody){
+    display:none!important;
+  }
+  #externalRoControlCards{
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:8px!important;
+  }
+  #externalRoControlCards > .card{
+    padding:12px!important;
+    overflow-wrap:anywhere;
+  }
+  #externalRoControlCards .btn{
+    min-height:40px;
+    max-width:100%;
+    white-space:normal;
+  }
+  #triageView #triageBody .triage-actions{
+    justify-content:flex-end;
+  }
+  #triageView .action-table th:last-child,
+  #triageView .action-table td:last-child{
+    text-align:right;
+  }
+  #settingsView{
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+  }
+  #settingsView .admin-config-nav,
+  #operationalUsersList .admin-user-row > .actions,
+  #cfgOperationalCorrections > .actions{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  #settingsView .admin-config-nav > button,
+  #operationalUsersList .admin-user-row > .actions > button,
+  #cfgOperationalCorrections > .actions > button{
+    min-width:0;
+    min-height:42px;
+    padding:7px 8px;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  #operationalUsersList .admin-user-row{
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
+  }
+  #operationalUsersList .admin-user-row > .actions{
+    margin-top:4px;
+  }
+  #cfgOperationalCorrections .settings-grid,
+  #cfgIntegration .settings-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+}
+</style>
+
+<style id="mobile-assigned-actions-contestation">
+@media screen and (max-width:760px), screen and (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  #roListView .ro-control-table > :is(thead,tbody) > tr{
+    grid-template-columns:minmax(88px,1fr) minmax(0,2fr);
+    align-items:center;
+  }
+  #roListView #rows > tr > td{
+    padding:6px 4px;
+    border-bottom:0;
+  }
+  #roListView #rows > tr{
+    border-bottom:1px solid #e5e7eb;
+  }
+  #roListView #rows > tr > td:nth-child(8){
+    grid-column:2;
+    grid-row:1;
+  }
+  #roListView #rows > tr > td:nth-child(6):has(.pdca-source-control > button){
+    grid-column:2;
+    grid-row:2;
+    padding-top:0;
+  }
+  #roListView #rows td:nth-child(8) > .assigned-operational-icons,
+  #roListView #rows .pdca-source-control{
+    justify-content:flex-end!important;
+    flex-wrap:wrap!important;
+    gap:5px!important;
+  }
+  #roListView #rows .assigned-response-actions > .btn{
+    padding:6px 8px;
+    font-size:12px;
+  }
+
+  #adminModuleContent table:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]){
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  #adminModuleContent table:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) thead{
+    display:none;
+  }
+  #adminModuleContent table:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) tbody{
+    display:block;
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]){
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:4px 8px;
+    padding:8px 0;
+    border-bottom:1px solid #e5e7eb;
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) > td{
+    padding:4px;
+    border:0;
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) > td:not(:first-child,:nth-child(5),:last-child){
+    display:none;
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) > td:last-child{
+    grid-column:1/-1;
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) > td:last-child > div{
+    display:grid!important;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  #adminModuleContent tr:has(button[onclick^="nucleoEquipmentOpenCalibrationRecord("]) .btn{
+    padding:7px 8px;
+    min-height:42px;
+    white-space:normal;
+    overflow-wrap:normal;
+  }
+
+  #contestModal{
+    z-index:2147482400;
+    padding:12px;
+    overflow:auto;
+  }
+  #contestModal > .modal-box{
+    max-height:calc(100dvh - 24px)!important;
+    overflow:auto;
+  }
+  #contestModal .modal-actions{
+    flex-wrap:wrap;
+  }
+}
+</style>
+
+<style id="indicator-breakdown-responsive">
+.indicator-breakdown-wrap{overflow:auto}
+.indicator-breakdown{width:100%}
+#sgqBySector .indicator-breakdown{min-width:850px}
+@media screen and (max-width:760px), screen and (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  #sgqIndicatorsView .sgq-grid{grid-template-columns:minmax(0,1fr)}
+  #sgqIndicatorsView .indicator-breakdown-wrap{overflow:visible}
+  #sgqIndicatorsView .indicator-breakdown{
+    display:block!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  #sgqIndicatorsView .indicator-breakdown thead{
+    position:absolute;
+    width:1px;
+    height:1px;
+    overflow:hidden;
+    clip-path:inset(50%);
+    white-space:nowrap;
+  }
+  #sgqIndicatorsView .indicator-breakdown tbody{display:block}
+  #sgqIndicatorsView .indicator-breakdown tbody > tr{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,86px),1fr));
+    gap:6px;
+    margin:0 0 10px;
+    padding:10px;
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    background:#fff;
+  }
+  #sgqIndicatorsView .indicator-breakdown tbody td{
+    min-width:0;
+    border:0;
+    padding:6px 8px;
+    border-radius:8px;
+    background:#f5f8fb;
+    color:#172033;
+    font-weight:700;
+    overflow-wrap:break-word!important;
+  }
+  #sgqIndicatorsView .indicator-breakdown tbody td[data-label]::before{
+    content:attr(data-label);
+    display:block;
+    margin-bottom:4px;
+    color:#475467;
+    font-size:11px;
+    font-weight:400;
+  }
+  #sgqIndicatorsView .indicator-breakdown tbody td:first-child,
+  #sgqIndicatorsView .indicator-breakdown-decisions{grid-column:1/-1}
+  #sgqIndicatorsView .indicator-breakdown tbody td:first-child{
+    background:transparent;
+    font-size:15px;
+  }
+  #sgqIndicatorsView .indicator-breakdown tbody td:first-child::before{content:none}
+  #sgqIndicatorsView .indicator-breakdown-decisions{font-size:12px}
+}
+</style>
+
+<style id="nucleo-mobile-fit">
+@media screen and (max-width:760px), screen and (max-width:1024px) and (orientation:portrait) and (pointer:coarse){
+  .workspace main :is(table.mobile-code-actions,#ncTreatmentList > div > table),
+  #actionsDashboardView table.action-table.mobile-code-actions,
+  #triageView table.action-table.mobile-code-actions{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+  }
+  main div:has(> table.mobile-code-actions),
+  #ncTreatmentList > div:has(> table),
+  #triageView > div:has(> table.mobile-code-actions){
+    min-width:0!important;
+    max-width:100%!important;
+    overflow-x:visible!important;
+  }
+  #roListView #rows td:nth-child(8) > .assigned-operational-icons,
+  #roListView #rows .ro-row-actions,
+  #roListView .assigned-pdca-control,
+  #roListView td.operational-action-col > div:not(.assigned-operational-icons),
+  #triageView .triage-actions{
+    max-width:100%;
+    min-width:0!important;
+    flex-wrap:wrap!important;
+    white-space:normal!important;
+  }
+  .workspace main table.mobile-code-actions :is(th,td),
+  #triageView table.action-table.mobile-code-actions :is(th,td):first-child,
+  #roListView #rows td:nth-child(n){
+    overflow-wrap:anywhere!important;
+    white-space:normal!important;
+  }
+  main table:not(.mobile-code-actions){
+    min-width:0!important;
+    max-width:100%;
+    table-layout:fixed;
+  }
+  main table:not(.mobile-code-actions) :is(th,td),
+  .ro-report-table :is(th,td){
+    min-width:0!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+  }
+  #mySacsCards,
+  #pendingHubDetails > div[style*="grid-template-columns"],
+  #adminModuleContent div[style*="minmax(320px"]{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  #pdcaView .question-answer-tools{
+    display:flex;
+    justify-content:flex-start;
+  }
+  #pdcaView .mic-answer-btn{
+    min-height:44px;
+  }
+  #pdcaView .stage-tabs{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    white-space:normal;
+    overflow:visible;
+  }
+  #pdcaView .stage-tab{
+    min-width:0;
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  .pdca-presentation-document,
+  .pdca-screen-page{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+  .pdca-screen-page .pdca-meta-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .pdca-screen-page .pdca-quadrants{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-areas:"plan" "do" "check" "act";
+  }
+  .pdca-screen-page :is(.pdca-annex-grid,.pdca-annex-card){
+    grid-template-columns:minmax(0,1fr);
+  }
+  .pdca-screen-page .pdca-annex-imgbox{
+    max-width:100%;
+  }
+}
+</style>
 </body></html>
