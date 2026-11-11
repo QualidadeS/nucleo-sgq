@@ -163,7 +163,17 @@
   if(typeof originalPortalJsonp==='function'){
     window.portalJsonp=function(params,timeoutMs=60000,baseOverride=''){
       if(baseOverride)return originalPortalJsonp.call(this,params,timeoutMs,baseOverride);
-      return resolveGlobalApiUrl(false).then(base=>originalPortalJsonp.call(this,params,timeoutMs,base));
+      const action=String(params?.acao||'').toLowerCase();
+      const publicAction=['portal_public_config','portal_login','portal_login_jsonp','portal_auth_v2','portal_register_user'].includes(action);
+      const token=publicAction?'':(params?.token||window.getSession?.()?.authToken||'');
+      const sessionBase=token&&window.nucleoSessionApiBase?.(token);
+      if(sessionBase)return originalPortalJsonp.call(this,params,timeoutMs,sessionBase);
+      return resolveGlobalApiUrl(false).then(base=>{
+        if(token&&window.getSession?.()?.authToken!==token){
+          throw new Error('A sessão mudou durante a conexão com a API.');
+        }
+        return originalPortalJsonp.call(this,params,timeoutMs,base);
+      });
     };
   }
 
@@ -173,20 +183,6 @@
     try{previous=typeof originalGetSaved==='function'?(originalGetSaved()||{}):{};}catch(_){}
     return {...previous,apiUrl:window.portalApiBase()};
   };
-
-  function readLocalDeviceSettings(){
-    let previous={};
-    try{previous=typeof originalGetSaved==='function'?(originalGetSaved()||{}):{};}catch(_){}
-    if(previous&&typeof previous==='object')delete previous.apiUrl;
-    return previous||{};
-  }
-
-  function saveLocalDeviceSettings(settings){
-    const copy={...(settings||{})};
-    delete copy.apiUrl;
-    try{localStorage.setItem('nucleo-integration-settings-v1',JSON.stringify(copy));}catch(_){}
-    try{localStorage.setItem('ro-sync-settings',JSON.stringify(copy));}catch(_){}
-  }
 
   window.nucleoEnsureApiConfigured=async function(candidateUrl){
     if(candidateUrl){
@@ -200,26 +196,24 @@
     return {url,result};
   };
 
-  // Mantém preferências realmente locais, mas a URL nunca é persistida localmente.
+  // Lê o formulário para prévia. Só uma confirmação central altera a configuração.
   window.saveIntegrationSettings=function(silent=false){
     if(typeof window.requireIntegrationUnlock==='function'&&!window.requireIntegrationUnlock())return false;
-    const current=readLocalDeviceSettings();
+    const current=window.getSavedIntegrationSettings();
     const next={
-      ...current,
-      apiKey:String(document.getElementById('apiKey')?.value||current.apiKey||'').trim(),
+      apiUrl:window.portalApiBase(),
+      apiKey:String(document.getElementById('apiKey')?.value??current.apiKey??'').trim(),
       autoSync:document.getElementById('autoSync')?.value||current.autoSync||'0',
       roSyncPeriod:document.getElementById('roSyncPeriod')?.value||current.roSyncPeriod||'all',
-      roSyncDateFrom:document.getElementById('roSyncDateFrom')?.value||current.roSyncDateFrom||'',
-      roSyncDateTo:'',
-      savedAt:new Date().toISOString()
+      roSyncDateFrom:document.getElementById('roSyncDateFrom')?.value??current.roSyncDateFrom??'',
+      roSyncDateTo:''
     };
     if(next.roSyncPeriod==='custom'&&!next.roSyncDateFrom){
       if(!silent)alert('Informe a data inicial da busca.');
       return false;
     }
-    saveLocalDeviceSettings(next);
-    if(!silent)alert('Preferências deste dispositivo salvas. A URL da API continua sendo global.');
-    return {...next,apiUrl:window.portalApiBase()};
+    if(next.roSyncPeriod!=='custom')next.roSyncDateFrom='';
+    return next;
   };
 
   window.saveIntegrationSettingsConfirmed=async function(){
@@ -237,36 +231,76 @@
       return false;
     }
 
+    const session=window.getSession?.();
+    const token=session?.authToken;
+    if(!token){
+      alert('Entre com o login do SGQ para salvar a integração.');
+      return false;
+    }
+    const draft=window.saveIntegrationSettings();
+    if(!draft)return false;
+    const saveButton=document.getElementById('saveIntegrationButton');
+    if(saveButton?.disabled)return false;
+    if(saveButton)saveButton.disabled=true;
+    if(st){
+      st.classList.remove('hidden');
+      st.textContent='Confirmando a integração na base central…';
+    }
     try{
       await probeApi(candidate);
       const currentBase=await resolveGlobalApiUrl(true);
       if(typeof originalPortalJsonp!=='function')throw new Error('Conexão central indisponível.');
 
       // Busca a configuração CENTRAL atual. localStorage não participa da decisão.
-      const loaded=await originalPortalJsonp({acao:'portal_load'},60000,currentBase);
-      if(!loaded?.sucesso)throw new Error(loaded?.erro||'Não foi possível ler a configuração central atual.');
-      const centralConfig={...(loaded?.dados?.config||{})};
+      const request=params=>{
+        if(window.getSession?.()?.authToken!==token)throw new Error('A sessão mudou. Entre novamente para salvar a integração.');
+        return originalPortalJsonp({...params,token},60000,currentBase);
+      };
+      let centralConfig=await window.readNucleoSavedIntegration(request);
+      if(!centralConfig){
+        const loaded=await request({acao:'portal_load'});
+        if(!loaded?.sucesso)throw new Error(loaded?.erro||'A base central não respondeu à leitura autenticada da configuração.');
+        centralConfig=loaded.dados?.config;
+      }
+      if(!centralConfig||typeof centralConfig!=='object'||Array.isArray(centralConfig)){
+        throw new Error('A API respondeu sem a configuração administrativa. Entre novamente com o login do SGQ e tente salvar.');
+      }
 
-      const device=window.saveIntegrationSettings(true)||{};
       const nextConfig={
         ...centralConfig,
+        ...draft,
+        // A gravação usa esta chave física e a releitura procura o mesmo ID no JSON.
+        id:'config-central',
         apiUrl:candidate,
-        apiKey:device.apiKey||centralConfig.apiKey||'',
-        autoSync:device.autoSync??centralConfig.autoSync??'0',
-        roSyncPeriod:device.roSyncPeriod||centralConfig.roSyncPeriod||'all',
-        roSyncDateFrom:device.roSyncDateFrom||centralConfig.roSyncDateFrom||'',
-        roSyncDateTo:'',
         __savedAt:new Date().toISOString()
       };
 
       // Salva no backend global ATUAL. Assim a cadeia bootstrap -> atual -> nova
       // é comum a todos os dispositivos e não depende de estado local.
+      if(window.getSession?.()?.authToken!==token)throw new Error('A sessão mudou antes do salvamento da integração.');
       const saved=await originalPortalJsonp({
         acao:'portal_save_config',
+        token,
         dados:JSON.stringify(nextConfig),
-        ator:(typeof getSession==='function'?getSession()?.name:'')||'SGQ'
-      },60000,currentBase);
-      if(!saved?.sucesso)throw new Error(saved?.erro||'A base central não confirmou a URL global.');
+        ator:session.name||'SGQ'
+      },60000,currentBase,{integrationReadToken:token});
+      if(window.getSession?.()?.authToken!==token)throw new Error('A sessão mudou durante o salvamento da integração.');
+      if(!saved?.sucesso)throw new Error(saved?.erro||'A base central não confirmou a integração.');
+
+      if(currentBase===candidate){
+        const confirmed=await window.readNucleoSavedIntegration(request);
+        if(window.getSession?.()?.authToken!==token)throw new Error('A sessão mudou antes da confirmação da integração.');
+        if(String(confirmed?.roSyncPeriod??'')!==draft.roSyncPeriod
+          || (draft.roSyncPeriod==='custom'&&String(confirmed?.roSyncDateFrom??'')!==draft.roSyncDateFrom)){
+          throw new Error('A API aceitou a gravação, mas a releitura do registro config-central não confirmou o período escolhido.');
+        }
+        window.applyNucleoCentralConfig(confirmed);
+        const formPeriod=document.getElementById('roSyncPeriod')?.value;
+        const formFrom=document.getElementById('roSyncDateFrom')?.value;
+        if(formPeriod===draft.roSyncPeriod&&(formPeriod!=='custom'||formFrom===draft.roSyncDateFrom)){
+          nucleoRoSyncPeriodDirty=false;
+        }
+      }
 
       globalApiUrl=candidate;
       try{window.nucleoConfirmedApiUrl=candidate;}catch(_){}
@@ -293,15 +327,18 @@
         return true;
       }
 
-      alert('URL global confirmada na base central.');
+      if(st)st.textContent='Período salvo na base central. Clique em Sincronizar para atualizar as R.O.s.';
+      alert('Período salvo. Clique em Sincronizar para buscar as R.O.s no intervalo escolhido.');
       return true;
     }catch(e){
       if(st){
         st.classList.remove('hidden');
-        st.textContent='Não foi possível salvar a URL global.';
+        st.textContent='O salvamento da integração não foi confirmado.';
       }
-      alert('Não foi possível salvar a URL global: '+(e?.message||e));
+      alert('Não foi possível confirmar a integração: '+(e?.message||e));
       return false;
+    }finally{
+      if(saveButton)saveButton.disabled=false;
     }
   };
 
@@ -756,6 +793,12 @@
       const key=unitKey(unit||(
         typeof adminScopeUnit==='function'?adminScopeUnit():'matriz'
       ));
+      // V44: para a Filial, a lista central é a autoridade.
+      // Não mistura setores antigos/locais, pois isso reintroduzia managedSectors
+      // globais do Leonardo e outros resíduos de cache/configuração.
+      if(key==='filial' && Array.isArray(central.filial) && central.filial.length){
+        return central.filial.slice();
+      }
       let own=[];
       try{own=originalConfigured.apply(this,arguments)||[]}catch(_){}
       return merge(own,central[key]||[]);
@@ -766,6 +809,9 @@
   if(typeof originalPublic==='function'){
     window.nucleoPublicLoginSectors=function(unit){
       const key=unitKey(unit);
+      if(key==='filial' && Array.isArray(central.filial) && central.filial.length){
+        return central.filial.slice();
+      }
       let own=[];
       try{own=originalPublic.apply(this,arguments)||[]}catch(_){}
       return merge(own,central[key]||[]);
@@ -778,6 +824,9 @@
         const fn=window.nucleoPublicLoginSectors;
         const wrapped=function(unit){
           const key=unitKey(unit);
+          if(key==='filial' && Array.isArray(central.filial) && central.filial.length){
+            return central.filial.slice();
+          }
           let own=[];
           try{own=fn.apply(this,arguments)||[]}catch(_){}
           return merge(own,central[key]||[]);
@@ -817,7 +866,593 @@
 
   window.nucleoReloadSharedSectorNamesV41=load;
 
+  // V44: proteção final contra qualquer função antiga que volte a acrescentar
+  // setores de gestão global na Filial. A lista central é a única fonte válida.
+  function filialSession(){
+    try{
+      const s=typeof getSession==='function'?(getSession()||{}):{};
+      return String(s.role||'').toLowerCase()==='quality' || unitKey(s.unit||'')==='filial';
+    }catch(_){return false}
+  }
+  function installTriageGuard(){
+    if(typeof window.getConfiguredSectorsForTriage!=='function')return false;
+    if(window.getConfiguredSectorsForTriage.__nucleoV44)return true;
+    const old=window.getConfiguredSectorsForTriage;
+    const wrapped=function(){
+      if(filialSession() && central.filial.length)return central.filial.slice();
+      return old.apply(this,arguments);
+    };
+    wrapped.__nucleoV44=true;
+    window.getConfiguredSectorsForTriage=wrapped;
+    return true;
+  }
+  function cleanFilialSectorSelects(){
+    if(!filialSession()||!central.filial.length)return;
+    const allowed=new Set(central.filial.map(norm));
+    ['operationalUserSector','triageSectorPicker','newUserSector','registerSector','loginSector','userRegistrationEditSector'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(!el||el.tagName!=='SELECT')return;
+      [...el.options].forEach(opt=>{
+        const v=String(opt.value||'').trim();
+        if(v && !allowed.has(norm(v)))opt.remove();
+      });
+    });
+  }
+  const guardTimer=setInterval(()=>{
+    installTriageGuard();
+    cleanFilialSectorSelects();
+  },250);
+  setTimeout(()=>clearInterval(guardTimer),15000);
+  const v44Observer=new MutationObserver(()=>cleanFilialSectorSelects());
+  v44Observer.observe(document.documentElement,{childList:true,subtree:true});
+
   setTimeout(load,200);
   window.addEventListener('load',()=>setTimeout(load,0),{once:true});
   console.info('[NÚCLEO] Setores compartilhados centrais V41 ativos.');
 })();
+
+
+/* NÚCLEO | LÍDER PDCAs + SETORES FILIAL SEM LEONARDO V46
+   1) Gestor enxerga os PDCAs das R.O.s que ele realmente pode consultar.
+   2) A lista de setores da Filial não usa managedSectors do Leonardo como fonte.
+*/
+(function(){
+  'use strict';
+  if(window.__nucleoLeaderPdcaAndFilialSectorV46)return;
+  window.__nucleoLeaderPdcaAndFilialSectorV46=true;
+
+  const LEONARDO_EMAIL='leonardo@setaembalagens.com.br';
+  const LEONARDO_PERSON='69d13e9d-bc82-476c-8e33-10404aa21582';
+
+  function norm(v){
+    try{return typeof normalizeAnswer==='function'?normalizeAnswer(v):String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
+    catch(_){return String(v||'').toLowerCase().trim();}
+  }
+  function unitKey(v){
+    try{
+      if(typeof normalizePortalUnit==='function'){
+        const n=normalizePortalUnit(v);
+        if(n==='filial'||n==='matriz')return n;
+      }
+    }catch(_){}
+    return /filial|linhares|seta es/i.test(String(v||''))?'filial':'matriz';
+  }
+  function uniq(list){
+    const out=[];
+    (list||[]).forEach(v=>{
+      v=String(v||'').trim();
+      if(v&&!out.some(x=>norm(x)===norm(v)))out.push(v);
+    });
+    return out.sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  }
+  function isLeonardo(u){
+    return String(u?.email||'').trim().toLowerCase()===LEONARDO_EMAIL ||
+      String(u?.personId||'').trim().toLowerCase()===LEONARDO_PERSON;
+  }
+  function userHasFilialEvidence(u,sector){
+    if(!u||isLeonardo(u))return false;
+    const wanted=norm(sector);
+    const own=norm(u.sector||u.setor||'');
+    let units=[];
+    if(Array.isArray(u.accessUnits))units=u.accessUnits.map(unitKey);
+    if(!units.length)units=[unitKey(u.unit||u.unidade||'')];
+    if(own===wanted&&units.includes('filial'))return true;
+    return (Array.isArray(u.sectorMemberships)?u.sectorMemberships:[]).some(m=>
+      unitKey(m?.unit||'')==='filial' && norm(m?.sector||'')===wanted
+    );
+  }
+  function filialSectorList(){
+    let central=[];
+    try{
+      central=Array.isArray(window.__nucleoCentralSectorNamesV41?.filial)
+        ? window.__nucleoCentralSectorNamesV41.filial.slice()
+        : [];
+    }catch(_){}
+
+    let users=[];
+    try{users=typeof getOperationalUsers==='function'?(getOperationalUsers()||[]):[]}catch(_){}
+
+    // Complementa apenas com vínculos REAIS da Filial. managedSectors nunca entra aqui.
+    users.forEach(u=>{
+      if(!u||isLeonardo(u))return;
+      const sector=String(u.sector||u.setor||'').trim();
+      if(sector&&userHasFilialEvidence(u,sector))central.push(sector);
+      (Array.isArray(u.sectorMemberships)?u.sectorMemberships:[]).forEach(m=>{
+        if(unitKey(m?.unit||'')==='filial')central.push(m?.sector||'');
+      });
+    });
+
+    // Se algum setor contaminado ainda vier do cadastro antigo da Filial,
+    // remove-o quando ele só é sustentado pelos managedSectors do Leonardo.
+    const leonardo=users.find(isLeonardo);
+    const leoManaged=uniq([...(leonardo?.managedSectors||[])]);
+    central=uniq(central).filter(sec=>{
+      const fromLeonardo=leoManaged.some(x=>norm(x)===norm(sec));
+      if(!fromLeonardo)return true;
+      return users.some(u=>userHasFilialEvidence(u,sec));
+    });
+
+    return uniq(central);
+  }
+
+  const originalGetConfigured=window.getConfiguredSectors;
+  window.getConfiguredSectors=function(unit){
+    const target=unitKey(unit||(
+      typeof adminScopeUnit==='function'?adminScopeUnit():(getSession?.()?.unit||'')
+    ));
+    if(target==='filial')return filialSectorList();
+    try{return typeof originalGetConfigured==='function'?(originalGetConfigured.apply(this,arguments)||[]):[]}
+    catch(_){return []}
+  };
+
+  const originalTriage=window.getConfiguredSectorsForTriage;
+  window.getConfiguredSectorsForTriage=function(){
+    const session=typeof getSession==='function'?(getSession()||{}):{};
+    if(String(session.role||'').toLowerCase()==='quality' || unitKey(session.unit||'')==='filial'){
+      return filialSectorList();
+    }
+    try{return typeof originalTriage==='function'?(originalTriage.apply(this,arguments)||[]):window.getConfiguredSectors()}
+    catch(_){return window.getConfiguredSectors()}
+  };
+
+  const originalPublic=window.nucleoPublicLoginSectors;
+  if(typeof originalPublic==='function'){
+    window.nucleoPublicLoginSectors=function(unit){
+      if(unitKey(unit)==='filial')return filialSectorList();
+      return originalPublic.apply(this,arguments)||[];
+    };
+  }
+
+  function roForPdca(p){
+    const key=String(p?.ro||p?.roId||p?.numeroRo||'').trim();
+    if(!key)return p?.__sourceRo||null;
+    let all=[];
+    try{all=typeof getAllRoRecords==='function'?(getAllRoRecords()||[]):[]}catch(_){}
+    return p?.__sourceRo || all.find(r=>String(r?.numero||r?.id||r?.codigo||'').trim()===key) || null;
+  }
+
+  // Regra única: quem pode consultar a R.O. pode consultar o PDCA vinculado.
+  window.canViewPdca=function(p){
+    if(!p)return false;
+    try{
+      if(typeof isAdmin==='function'&&isAdmin())return true;
+    }catch(_){}
+
+    const ro=roForPdca(p);
+    if(ro){
+      try{
+        const map=typeof getSavedTriageMap==='function'?getSavedTriageMap():null;
+        if(typeof canViewRO==='function'&&canViewRO(ro,map))return true;
+      }catch(_){}
+    }
+
+    // Compatibilidade: próprio setor ou R.O. aberta pelo usuário.
+    try{if(typeof sameSector==='function'&&sameSector(p.setor))return true}catch(_){}
+    try{if(ro&&typeof wasRoSubmittedByCurrentUser==='function'&&wasRoSubmittedByCurrentUser(ro))return true}catch(_){}
+    return false;
+  };
+
+  function claimantFor(p,ro){
+    try{
+      const u=ro&&typeof resolveRoClaimant==='function'?resolveRoClaimant(ro):null;
+      if(u&&typeof personDisplayName==='function')return personDisplayName(u)||'—';
+      if(u)return String(u.name||u.nome||u.email||'—');
+    }catch(_){}
+    return String(
+      p?.reclamante||p?.claimantName||ro?.reclamante||ro?.solicitante||
+      (typeof roRegistrantName==='function'&&ro?roRegistrantName(ro):'')||'—'
+    ).trim()||'—';
+  }
+  function companyFor(p,ro){
+    return String(
+      p?.cliente||p?.empresa||p?.company||
+      ro?.cliente||ro?.empresa||ro?.razaoSocial||
+      ro?.raw?.Cliente||ro?.raw?.['Razão social']||ro?.raw?.['Razao social']||'—'
+    ).trim()||'—';
+  }
+  function receivedWhen(p){
+    const raw=p?.sentAt||p?.envio||'';
+    if(!raw)return '—';
+    const d=new Date(raw);
+    return Number.isNaN(d.getTime())?String(raw):d.toLocaleString('pt-BR');
+  }
+  function pdcaStatus(p){
+    try{
+      if(typeof nucleoPdcaDelivery==='function'&&nucleoPdcaDelivery(p))return 'Encerrada';
+    }catch(_){}
+    return String(p?.status||p?.__displayStatus||'Respondido').trim()||'Respondido';
+  }
+
+  window.nucleoLeaderOpenPdcaPdfV46=async function(id){
+    let p=null;
+    try{p=typeof findSentPdcaById==='function'?findSentPdcaById(id):null}catch(_){}
+    if(!p){alert('PDCA não encontrado.');return}
+    if(!window.canViewPdca(p)){alert('PDCA não encontrado ou indisponível.');return}
+
+    // PDF/modelo oficial quando disponível.
+    try{
+      if(typeof nucleoSystemFormat==='function' &&
+         nucleoSystemFormat('pdca',typeof explicitRecordUnit==='function'?explicitRecordUnit(p):'')?.design &&
+         typeof nucleoPdcaDownloadModelPdf==='function'){
+        return await nucleoPdcaDownloadModelPdf(p,true);
+      }
+    }catch(_){}
+
+    // PDF anexado/Drive.
+    const direct=String(p.pdfUrl||p.fileUrl||p.driveUrl||p.webViewLink||'').trim();
+    if(/^https?:\/\//i.test(direct)){
+      window.open(direct,'_blank','noopener');
+      return;
+    }
+
+    // Fallback: abre o PDCA e usa o gerador existente.
+    try{
+      window.currentReportPdca=p;
+      window.currentPrintPdca=p;
+      if(typeof downloadCurrentPdcaPdf==='function')return await downloadCurrentPdcaPdf();
+    }catch(e){
+      console.error('[NÚCLEO V46 PDF]',e);
+    }
+    if(typeof openPdcaReport==='function')openPdcaReport(id);
+  };
+
+  window.renderSentPdcas=function(){
+    try{if(typeof refreshPdcaSidebarBadge==='function')refreshPdcaSidebarBadge()}catch(_){}
+
+    const q=String(document.getElementById('sentSearch')?.value||'').toLowerCase().trim();
+    const sf=document.getElementById('sentStatusFilter')?.value||'todos';
+
+    let data=[];
+    try{
+      data=typeof nucleoReceivedPdcaDisplayData==='function'
+        ? (nucleoReceivedPdcaDisplayData()||[])
+        : (typeof getSentPdcas==='function'?(getSentPdcas()||[]):[]);
+    }catch(_){data=[]}
+
+    // SGQ/Qualidade seguem o escopo normal; líder/operacional usa a mesma autorização da R.O.
+    if(!(typeof isAdmin==='function'&&isAdmin())){
+      data=data.filter(p=>window.canViewPdca(p));
+    }
+
+    let rows=data.map(p=>{
+      const ro=roForPdca(p);
+      return {
+        p,ro,
+        claimant:claimantFor(p,ro),
+        company:companyFor(p,ro)
+      };
+    }).filter(x=>{
+      const hay=[
+        x.p?.id,x.p?.ro,x.p?.responsavel,x.p?.setor,
+        x.claimant,x.company
+      ].join(' ').toLowerCase();
+      return (!q||hay.includes(q))&&(sf==='todos'||String(x.p?.status||'')===sf);
+    });
+
+    // Histórico/pêndencias continua valendo para SGQ. Para líder mostra todos os PDCAs permitidos.
+    let lifecycle='all';
+    try{
+      lifecycle=(typeof isAdmin==='function'&&isAdmin())
+        ? (document.getElementById('sentLifecycleFilter')?.value||'active')
+        : 'all';
+      if(typeof nucleoRenderPdcaLifecycle==='function')nucleoRenderPdcaLifecycle(data,lifecycle);
+    }catch(_){}
+    if(lifecycle!=='all'&&typeof nucleoPdcaDelivery==='function'){
+      rows=rows.filter(({p})=>(lifecycle==='history')===!!nucleoPdcaDelivery(p));
+    }
+
+    const body=document.getElementById('sentRows');
+    if(!body)return;
+
+    // Ajusta cabeçalho da tela para a informação que o líder precisa.
+    const table=body.closest('table');
+    const head=table?.querySelector('thead tr');
+    if(head){
+      head.innerHTML='<th>PDCA</th><th>R.O.</th><th>Responsável pela resposta</th><th>Reclamante</th><th>Empresa / cliente</th><th>Unidade</th><th>Recebimento</th><th>Status</th><th></th>';
+    }
+
+    body.innerHTML=rows.length?rows.map(({p,ro,claimant,company})=>{
+      const id=String(p?.id||'');
+      const name=String(
+        p?.externalPdf&&p?.fileName?p.fileName.replace(/\.pdf$/i,''):
+        (p?.__virtualReceived?'PDCA recebido':(p?.id||'PDCA'))
+      );
+      const unit=typeof canonicalUnitName==='function'
+        ? canonicalUnitName(p?.unidade||p?.unit||ro?.unidade||'')
+        : String(p?.unidade||p?.unit||ro?.unidade||'—');
+      const status=pdcaStatus(p);
+      const pdfButton=p?.__virtualReceived
+        ? '<button class="btn secondary" type="button" onclick="event.stopPropagation();openRO(\''+
+          (typeof escapeHtml==='function'?escapeHtml(p?.ro||''):String(p?.ro||''))+'\')">Ver R.O.</button>'
+        : '<button class="btn primary" type="button" onclick="event.stopPropagation();nucleoLeaderOpenPdcaPdfV46(\''+
+          (typeof escapeHtml==='function'?escapeHtml(id):id)+'\')">Abrir PDF</button>';
+      const esc=typeof escapeHtml==='function'?escapeHtml:(v=>String(v??''));
+      return '<tr class="click" onclick="'+(p?.__virtualReceived
+        ? "openRO('"+esc(p?.ro||'')+"')"
+        : "openPdcaReport('"+esc(id)+"')")+'">'+
+        '<td><b>'+esc(name)+'</b><div class="small">'+esc(p?.setor||'')+'</div></td>'+
+        '<td><b>'+esc(p?.ro||'—')+'</b></td>'+
+        '<td>'+esc(p?.responsavel||'—')+'</td>'+
+        '<td>'+esc(claimant)+'</td>'+
+        '<td>'+esc(company)+'</td>'+
+        '<td>'+esc(unit||'—')+'</td>'+
+        '<td>'+esc(receivedWhen(p))+'</td>'+
+        '<td><span class="badge">'+esc(status)+'</span></td>'+
+        '<td class="sent-action">'+pdfButton+'</td>'+
+      '</tr>';
+    }).join(''):'<tr><td colspan="9" class="small">Nenhum PDCA encontrado.</td></tr>';
+  };
+
+  // Reaplica opções de setor após o snapshot da Filial.
+  function refreshFilialSectorUi(){
+    try{
+      const s=typeof getSession==='function'?(getSession()||{}):{};
+      if(String(s.role||'').toLowerCase()!=='quality'&&unitKey(s.unit||'')!=='filial')return;
+      if(typeof populateTriageSectors==='function')populateTriageSectors();
+      if(typeof refreshSectorSelectors==='function')refreshSectorSelectors();
+    }catch(_){}
+  }
+  setTimeout(refreshFilialSectorUi,600);
+  window.addEventListener('load',()=>setTimeout(refreshFilialSectorUi,300),{once:true});
+
+  console.info('[NÚCLEO] V46 — líder vê PDCAs pelas R.O.s autorizadas; Filial sem managedSectors do Leonardo.');
+})();
+
+
+/* NÚCLEO | RESPOSTAS PDF + AÇÃO SOMENTE INTERNA + MOTIVO DECISÃO V47 */
+(function(){
+  'use strict';
+  if(window.__nucleoSubmittedResponsesV47)return;
+  window.__nucleoSubmittedResponsesV47=true;
+
+  const esc=v=>typeof escapeHtml==='function'?escapeHtml(String(v??'')):String(v??'');
+
+  function isMeaningful(v){
+    const s=String(v??'').trim();
+    return !!s && !['-','—','nao informado','não informado','n/a'].includes(s.toLowerCase());
+  }
+
+  function isInternalPdca(p){
+    if(!p)return false;
+    if(p.externalPdf===true)return false;
+    if(p.fileId||p.pdcaFileId||p.pdfUrl||p.driveFileId||p.fileUrl||p.webViewLink){
+      const a=p.answers||p.respostas||{};
+      return Object.values(a).some(isMeaningful);
+    }
+    const a=p.answers||p.respostas||{};
+    return Object.values(a).some(isMeaningful);
+  }
+
+  async function findResponsePdf(roNumber){
+    try{
+      const result=await portalJsonp({acao:'nucleo_drive_my_responses',ro:roNumber},60000);
+      if(!result?.sucesso)return null;
+      const items=Array.isArray(result.items)?result.items:[];
+      if(!items.length)return null;
+      return items.slice().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null;
+    }catch(_){
+      return null;
+    }
+  }
+
+  window.nucleoOpenSubmittedReturnV47=async function(numero){
+    const ro=(typeof getAllRoRecords==='function'?getAllRoRecords():[])
+      .find(r=>String(r.numero||r.id||r.codigo)===String(numero));
+    if(!ro || (typeof wasRoSubmittedByCurrentUser==='function'&&!wasRoSubmittedByCurrentUser(ro))){
+      alert('R.O. não encontrada ou indisponível.');
+      return;
+    }
+
+    const p=typeof getPdcaReturnForRo==='function'?getPdcaReturnForRo(ro):null;
+
+    // PDF anexado tem prioridade: consulta o arquivo real em vez de montar PLAN/DO/CHECK/ACT vazio.
+    const file=await findResponsePdf(numero);
+    if(file){
+      return nucleoDriveOpenExternalPdf({
+        ...file,
+        id:file.id||p?.id||'',
+        ro:numero,
+        setor:file.sector||p?.setor||'',
+        externalPdf:true
+      });
+    }
+
+    if(p && isInternalPdca(p)){
+      return openPdcaReport(p.id);
+    }
+
+    if(typeof openMyRoResponses==='function'){
+      return openMyRoResponses(numero);
+    }
+
+    alert('Nenhum PDF ou PDCA interno foi disponibilizado para esta R.O.');
+  };
+
+  window.openComplainantPdcaReturn=function(numero){
+    return window.nucleoOpenSubmittedReturnV47(numero);
+  };
+
+  window.nucleoShowDecisionReasonV47=function(numero){
+    const ro=(typeof getAllRoRecords==='function'?getAllRoRecords():[])
+      .find(r=>String(r.numero||r.id||r.codigo)===String(numero));
+    if(!ro){
+      alert('R.O. não encontrada.');
+      return;
+    }
+    const tri=typeof getRoTriageRecord==='function'?(getRoTriageRecord(ro)||{}):{};
+    const decision=String(tri.decision||'');
+    const labels={
+      record:'Somente para registro',
+      cancelled:'Cancelada pelo SGQ',
+      obsolete:'Obsoleta'
+    };
+    const reason=String(
+      tri.note||tri.reason||tri.motivo||tri.decisionReason||
+      tri.justification||tri.observacao||tri.observation||''
+    ).trim();
+
+    let overlay=document.getElementById('nucleoDecisionReasonV47');
+    if(overlay)overlay.remove();
+    overlay=document.createElement('div');
+    overlay.id='nucleoDecisionReasonV47';
+    overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML=
+      '<div style="background:#fff;border-radius:14px;padding:22px;width:min(680px,95vw);max-height:90vh;overflow:auto">'+
+        '<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">'+
+          '<div><div class="small">R.O. '+esc(numero)+'</div><h3 style="margin:4px 0 0">'+esc(labels[decision]||'Decisão do SGQ')+'</h3></div>'+
+          '<button class="btn secondary" type="button" id="nucleoDecisionReasonCloseV47">Fechar</button>'+
+        '</div>'+
+        '<div class="card" style="margin-top:16px;padding:16px">'+
+          '<div class="label">Motivo da decisão</div>'+
+          '<p style="white-space:pre-wrap;margin:8px 0 0">'+esc(reason||'Motivo não registrado nesta ocorrência.')+'</p>'+
+        '</div>'+
+        (tri.triagedBy?'<p class="small">Decisão registrada por '+esc(tri.triagedBy)+(tri.triagedAt?' · '+esc(typeof formatDateTimeBR==='function'?formatDateTimeBR(tri.triagedAt):tri.triagedAt):'')+'</p>':'')+
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#nucleoDecisionReasonCloseV47').onclick=()=>overlay.remove();
+    overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  };
+
+  window.renderMySubmittedRos=function(){
+    if(typeof isAdmin==='function'&&isAdmin())return;
+
+    const q=typeof normalizeAnswer==='function'
+      ? normalizeAnswer(document.getElementById('mySubmittedSearch')?.value||'')
+      : String(document.getElementById('mySubmittedSearch')?.value||'').toLowerCase();
+    const filter=document.getElementById('mySubmittedStatusFilter')?.value||'all';
+    const all=typeof getMySubmittedRos==='function'?getMySubmittedRos():[];
+
+    const counts={
+      total:all.length,
+      waiting:all.filter(x=>x.state.code==='triage').length,
+      directed:all.filter(x=>x.state.code==='directed'||x.state.code==='contest').length,
+      done:all.filter(x=>x.state.code==='done').length
+    };
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v};
+    set('mySubmittedTotal',counts.total);
+    set('mySubmittedWaiting',counts.waiting);
+    set('mySubmittedDirected',counts.directed);
+    set('mySubmittedDone',counts.done);
+
+    const rowsData=all.filter(x=>{
+      if(filter!=='all'&&x.state.code!==filter)return false;
+      if(q){
+        const r=x.ro;
+        const hay=typeof normalizeAnswer==='function'
+          ? normalizeAnswer([r.numero,r.cliente,r.assunto,r.tipoRO,r.descricao,x.state.label,x.state.sector].join(' '))
+          : [r.numero,r.cliente,r.assunto,r.tipoRO,r.descricao,x.state.label,x.state.sector].join(' ').toLowerCase();
+        if(!hay.includes(q))return false;
+      }
+      return true;
+    });
+
+    const body=document.getElementById('mySubmittedRows');
+    if(!body)return;
+
+    body.innerHTML=rowsData.length?rowsData.map(({ro,state})=>{
+      const terminal=typeof submittedRoRowClass==='function'?submittedRoRowClass(ro):'';
+      const p=state.returnState?.pdca||null;
+      const internal=!!(p&&isInternalPdca(p));
+      const hasReturn=!!p;
+      const decisionButton=terminal
+        ? '<button class="btn secondary" type="button" onclick="nucleoShowDecisionReasonV47(\''+esc(ro.numero||'')+'\')">Consultar motivo</button>'
+        : '';
+
+      let responseCell='';
+      if(terminal){
+        responseCell=decisionButton;
+      }else if(hasReturn){
+        responseCell='<button class="btn primary" type="button" onclick="nucleoOpenSubmittedReturnV47(\''+esc(ro.numero||'')+'\')">'+
+          (internal?'Ver retorno':'Ver PDF')+
+        '</button>';
+      }else{
+        responseCell='<span class="status-badge pending">Aguardando retorno</span>';
+      }
+
+      let actionCell='';
+      if(terminal){
+        actionCell='<span class="small">Não se aplica</span>';
+      }else if(!hasReturn){
+        actionCell='<span class="small">Ainda sem ação informada</span>';
+      }else if(!internal){
+        actionCell=
+          '<div class="small">Sem controle interno da ação</div>';
+      }else{
+        const action=state.returnState.action;
+        const a=p.answers||{};
+        actionCell=
+          '<span class="status-badge '+((action.code==='finalized'||action.code==='completed')?'answered':'pending')+'">'+esc(action.label)+'</span>'+
+          '<div class="small" style="margin-top:4px">'+esc(a.p12?'Prazo: '+a.p12:'')+'</div>';
+      }
+
+      const bg=typeof nucleoDecisionForRecord==='function'
+        ? (nucleoDecisionForRecord(ro,typeof getRoTriageRecord==='function'?getRoTriageRecord(ro):null)?.color||'')
+        : '';
+
+      return '<tr style="background:'+esc(bg)+'" class="'+esc(terminal)+'">'+
+        '<td><b>'+esc(ro.numero||'-')+'</b></td>'+
+        '<td>'+esc(ro.data||'-')+'</td>'+
+        '<td>'+esc(ro.cliente||'-')+'</td>'+
+        '<td>'+esc(ro.assunto||ro.tipoRO||'-')+'</td>'+
+        '<td><span class="status-badge '+(terminal?'submitted-ro-terminal-badge':state.code==='done'?'answered':state.code==='contest'?'pending':'')+'">'+esc(state.label)+'</span></td>'+
+        '<td>'+esc(state.sector||(terminal?'—':'Aguardando definição'))+'</td>'+
+        '<td>'+responseCell+'</td>'+
+        '<td>'+actionCell+'</td>'+
+        '<td><button class="btn secondary" type="button" onclick="openSubmittedRoTracking(\''+esc(ro.numero||'')+'\')">Acompanhar</button></td>'+
+      '</tr>';
+    }).join('')
+    : '<tr><td colspan="9" style="text-align:center;padding:28px;color:#667085">Nenhuma R.O. encontrada.</td></tr>';
+  };
+
+  console.info('[NÚCLEO] V47 — PDF anexado abre arquivo real; ações só para PDCA interno; motivo de decisão consultável.');
+})();
+
+
+/* NÚCLEO | AJUSTE VISUAL RESPOSTAS V48 */
+(function(){
+  'use strict';
+  if(window.__nucleoSubmittedVisualV48)return;
+  window.__nucleoSubmittedVisualV48=true;
+
+  function renameConsultationHeader(){
+    const body=document.getElementById('mySubmittedRows');
+    const table=body?.closest('table');
+    const cells=table?.querySelectorAll('thead th');
+    if(cells&&cells.length){
+      cells[cells.length-1].textContent='Consulta';
+    }
+  }
+
+  const original=window.renderMySubmittedRos;
+  if(typeof original==='function'){
+    window.renderMySubmittedRos=function(){
+      const result=original.apply(this,arguments);
+      renameConsultationHeader();
+      return result;
+    };
+  }
+
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(renameConsultationHeader,0));
+  console.info('[NÚCLEO] V48 — ação de PDF sem selo/botão e última coluna renomeada para Consulta.');
+})();
+
