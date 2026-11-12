@@ -4,8 +4,22 @@ if(new URLSearchParams(location.search).get('recuperar')==='1'){
   try{sessionStorage.removeItem('ro-pdca-session-v63')}catch(e){}
 }
 const NUCLEO_DEFAULT_DECISIONS=[{"id":"directed","label":"Direcionar para tratativa","behavior":"directed","active":true,"requireSector":true,"requireReason":true,"pdcaRequired":true,"deadlineDays":null,"color":"#eef4ff"},{"id":"record","label":"Somente para registro","behavior":"record","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"},{"id":"cancelled","label":"Cancelar R.O.","behavior":"cancelled","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#fff0f0"},{"id":"obsolete","label":"Obsoleta","behavior":"obsolete","active":true,"requireSector":false,"requireReason":true,"pdcaRequired":false,"deadlineDays":null,"color":"#f0f1f3"},{"id":"falta_caixa","label":"Falta de caixa","behavior":"record","active":true,"requireSector":false,"requireReason":false,"pdcaRequired":false,"deadlineDays":null,"color":"#fff9e5"}];
-const NUCLEO_FEATURE_BUTTONS={"showList":["ros","consult"],"showAssignedRos":["ros","assigned"],"showMySubmittedRos":["ros","submitted"],"showTriage":["ros","triage"],"openTriageRecord":["ros","triage"],"saveTriageRecord":["ros","triage"],"showContestations":["ros","reviewContests"],"reviewContestation":["ros","reviewContests"],"submitContest":["ros","contest"],"openContest":["ros","contest"],"startPdcaFromList":["pdca","respond"],"openPDCA":["pdca","respond"],"finishPDCA":["pdca","respond"],"showSentPdcas":["pdca","received"],"showActionsDashboard":["pdca","actions"],"showPendingActions":["pdca","reviewActions"],"confirmActionCompletion":["pdca","reviewActions"],"markActionCompleted":["pdca","reviewActions"],"registerActionEvidence":["pdca","completeAction"],"presentPdca":["pdca","present"],"presentCurrentPdca":["pdca","present"],"savePdcaPresentationRecord":["pdca","present"],"finalizeAndSendSac":["sac","finalize"],"saveSacEditForm":["sac","edit"],"saveExternalRoControl":["sac","edit"],"saveSacDecisionLocally":["sac","edit"],"publishAnnouncement":["announcements","publish"],"openStandardDocumentCreate":["documents","standards"],"saveStandardDocument":["documents","standards"],"toggleStandardDocument":["documents","standards"],"deleteStandardDocument":["documents","standards"],"addOperationalUser":["users","create"],"approvePortalUser":["users","approve"],"rejectPortalUser":["users","approve"],"openUserRegistrationEditor":["users","edit"],"saveUserRegistrationEditor":["users","edit"],"removeOperationalUserByKey":["users","delete"],"saveSectorConfiguration":["sectors","edit"],"saveFixedEmailCopies":["sectors","emails"],"saveRncProcessTemplateFromForm":["processes","templates"],"deleteAssignedDirection":["ros","triage"],"openAssignedSectorEdit":["ros","triage"],"endAnnouncement":["announcements","publish"],"openUnitUserAccess":["users","permissions"],"showAnnouncementsAdmin":["announcements","publish"],"openAdminResetPassword":["users","edit"]};
-const NUCLEO_PERSON_FEATURES={"ros":{"consult":["Consultar R.O.s disponíveis",false,"view"],"submitted":["R.O.s cadastradas por mim",false,"view"],"assigned":["R.O.s atribuídas",false,"view"],"triage":["Triar, classificar e direcionar",true,"manage"],"contest":["Criar contestações",true,"view"],"reviewContests":["Analisar contestações",true,"manage"],"claimant":["Alterar e confirmar reclamante",true,"manage"]},"pdca":{"received":["Consultar PDCAs recebidos",false,"view"],"respond":["Responder e continuar PDCA",true,"view"],"actions":["Consultar ações",false,"view"],"completeAction":["Registrar conclusão e evidências",true,"view"],"reviewActions":["Conferir e aprovar ações",true,"manage"],"import":["Importar e vincular respostas",true,"manage"],"present":["Registrar apresentação",true,"manage"],"dispatch":["Despachar resposta ao reclamante",true,"manage"]},"sac":{"consult":["Consultar SACs",false,"view"],"edit":["Classificar e editar SACs",true,"manage"],"finalize":["Finalizar e enviar SAC",true,"manage"]},"documents":{"consult":["Consultar documentos e solicitações",false,"view"],"request":["Criar solicitação de documento",true,"view"],"standards":["Cadastrar e alterar documentos padrão",true,"manage"],"prepare":["Preencher e armazenar documento solicitado",true,"manage"],"deliver":["Enviar e entregar documentos",true,"manage"],"history":["Consultar histórico de entregas",false,"manage"]},"indicators":{"consult":["Consultar indicadores",false,"view"]},"announcements":{"consult":["Consultar comunicados",false,"view"],"publish":["Emitir, alterar e encerrar comunicados",true,"manage"]},"equipment":{"consult":["Consultar equipamentos",false,"view"],"pending":["Consultar calibrações pendentes",false,"view"],"history":["Consultar histórico metrológico",false,"view"],"edit":["Cadastrar e alterar equipamentos",true,"manage"],"delete":["Excluir equipamentos",true,"manage"]},"training":{"consult":["Consultar treinamentos",false,"view"],"pending":["Consultar reciclagens pendentes",false,"view"],"history":["Consultar histórico de competências",false,"view"],"edit":["Cadastrar e alterar treinamentos",true,"manage"],"delete":["Excluir treinamentos",true,"manage"]},"nc":{"consult":["Consultar RNCs e tratamento",false,"view"],"edit":["Cadastrar e alterar RNCs",true,"manage"],"send":["Enviar RNC e anexar fotos",true,"manage"],"delete":["Excluir RNCs",true,"manage"]},"processes":{"consult":["Consultar documentos vigentes",false,"view"],"review":["Consultar documentos em revisão",false,"view"],"history":["Consultar histórico documental",false,"view"],"edit":["Cadastrar e alterar documentos internos",true,"manage"],"templates":["Alterar modelos e estrutura dos formulários",true,"manage"],"delete":["Excluir documentos internos",true,"manage"]},"users":{"consult":["Consultar cadastros",false,"manage"],"create":["Cadastrar pessoas",true,"manage"],"edit":["Editar nomes, dados e setores",true,"manage"],"approve":["Aprovar e bloquear cadastros",true,"manage"],"permissions":["Definir permissões de outras pessoas",true,"manage"],"delete":["Excluir usuários",true,"manage"]},"sectors":{"decisions":["Editar decisões e regras de R.O.",true,"manage"],"consult":["Consultar configurações da unidade",false,"manage"],"edit":["Cadastrar e alterar setores",true,"manage"],"emails":["Alterar destinatários e cópias padrão",true,"manage"],"folders":["Alterar e validar pastas do Drive",true,"manage"],"documentTypes":["Editar tipos de documentos",true,"manage"]}};
+const NUCLEO_FEATURE_BUTTONS={"showList":["ros","consult"],"showAssignedRos":["ros","assigned"],"showTriage":["ros","triage"],"openTriageRecord":["ros","triage"],"saveTriageRecord":["ros","triage"],"showContestations":["ros","reviewContests"],"reviewContestation":["ros","reviewContests"],"submitContest":["ros","contest"],"openContest":["ros","contest"],"startPdcaFromList":["pdca","respond"],"openPDCA":["pdca","respond"],"finishPDCA":["pdca","respond"],"showSentPdcas":["pdca","received"],"showActionsDashboard":["pdca","actions"],"showPendingActions":["pdca","reviewActions"],"confirmActionCompletion":["pdca","reviewActions"],"markActionCompleted":["pdca","reviewActions"],"registerActionEvidence":["pdca","completeAction"],"presentPdca":["pdca","present"],"presentCurrentPdca":["pdca","present"],"savePdcaPresentationRecord":["pdca","present"],"finalizeAndSendSac":["sac","finalize"],"saveSacEditForm":["sac","edit"],"saveExternalRoControl":["sac","edit"],"saveSacDecisionLocally":["sac","edit"],"publishAnnouncement":["announcements","publish"],"openStandardDocumentCreate":["documents","standards"],"saveStandardDocument":["documents","standards"],"toggleStandardDocument":["documents","standards"],"deleteStandardDocument":["documents","standards"],"addOperationalUser":["users","create"],"approvePortalUser":["users","approve"],"rejectPortalUser":["users","approve"],"openUserRegistrationEditor":["users","edit"],"saveUserRegistrationEditor":["users","edit"],"saveSectorConfiguration":["sectors","edit"],"saveFixedEmailCopies":["sectors","emails"],"saveRncProcessTemplateFromForm":["processes","templates"],"deleteAssignedDirection":["ros","triage"],"openAssignedSectorEdit":["ros","triage"],"endAnnouncement":["announcements","publish"],"openUnitUserAccess":["users","permissions"],"showAnnouncementsAdmin":["announcements","publish"],"openAdminResetPassword":["users","edit"]};
+const NUCLEO_PERSON_FEATURES={"ros":{"consult":["Consultar R.O.s disponíveis",false,"view"],"submitted":["R.O.s cadastradas por mim",false,"view"],"assigned":["R.O.s atribuídas",false,"view"],"triage":["Triar, classificar e direcionar",true,"manage"],"contest":["Criar contestações",true,"view"],"reviewContests":["Analisar contestações",true,"manage"],"claimant":["Alterar e confirmar reclamante",true,"manage"]},"pdca":{"received":["Consultar PDCAs recebidos",false,"view"],"respond":["Responder e continuar PDCA",true,"view"],"actions":["Consultar ações",false,"view"],"completeAction":["Registrar conclusão e evidências",true,"view"],"reviewActions":["Conferir e aprovar ações",true,"manage"],"import":["Importar e vincular respostas",true,"manage"],"present":["Registrar apresentação",true,"manage"],"dispatch":["Despachar resposta ao reclamante",true,"manage"]},"sac":{"consult":["Consultar SACs",false,"view"],"edit":["Classificar e editar SACs",true,"manage"],"finalize":["Finalizar e enviar SAC",true,"manage"]},"documents":{"consult":["Consultar documentos e solicitações",false,"view"],"request":["Criar solicitação de documento",true,"view"],"standards":["Cadastrar e alterar documentos padrão",true,"manage"],"prepare":["Preencher e armazenar documento solicitado",true,"manage"],"deliver":["Enviar e entregar documentos",true,"manage"],"history":["Consultar histórico de entregas",false,"manage"]},"indicators":{"consult":["Consultar indicadores",false,"view"]},"announcements":{"consult":["Consultar comunicados",false,"view"],"publish":["Emitir, alterar e encerrar comunicados",true,"manage"]},"equipment":{"consult":["Consultar equipamentos",false,"view"],"pending":["Consultar calibrações pendentes",false,"view"],"history":["Consultar histórico metrológico",false,"view"],"edit":["Cadastrar e alterar equipamentos",true,"manage"],"delete":["Excluir equipamentos",true,"manage"]},"training":{"consult":["Consultar treinamentos",false,"view"],"pending":["Consultar reciclagens pendentes",false,"view"],"history":["Consultar histórico de competências",false,"view"],"edit":["Cadastrar e alterar treinamentos",true,"manage"],"delete":["Excluir treinamentos",true,"manage"]},"nc":{"consult":["Consultar RNCs e tratamento",false,"view"],"edit":["Cadastrar e alterar RNCs",true,"manage"],"send":["Enviar RNC e anexar fotos",true,"manage"],"delete":["Excluir RNCs",true,"manage"]},"processes":{"consult":["Consultar documentos vigentes",false,"view"],"review":["Consultar documentos em revisão",false,"view"],"history":["Consultar histórico documental",false,"view"],"edit":["Cadastrar e alterar documentos internos",true,"manage"],"templates":["Alterar modelos e estrutura dos formulários",true,"manage"],"delete":["Excluir documentos internos",true,"manage"]},"users":{"consult":["Consultar cadastros",false,"manage"],"create":["Cadastrar pessoas",true,"manage"],"edit":["Editar nomes, dados e setores",true,"manage"],"approve":["Aprovar e bloquear cadastros",true,"manage"],"permissions":["Definir permissões de outras pessoas",true,"manage"]},"sectors":{"decisions":["Editar decisões e regras de R.O.",true,"manage"],"consult":["Consultar configurações da unidade",false,"manage"],"edit":["Cadastrar e alterar setores",true,"manage"],"emails":["Alterar destinatários e cópias padrão",true,"manage"],"folders":["Alterar e validar pastas do Drive",true,"manage"],"documentTypes":["Editar tipos de documentos",true,"manage"]}};
+let nucleoSidebarAuditAccess=null;
+const NUCLEO_ACCESS_CONSULTATIONS={
+ users:['navUsersConsult','Consultar cadastros'],
+ sectors:['navSectorsConsult','Consultar configurações da unidade'],
+ sac:['navSacsConsult','Consultar SACs'],
+ documents:['navDocumentRequests','Consultar documentos e solicitações'],
+ announcements:['navAnnouncements','Consultar comunicados']
+};
+const NUCLEO_PERMISSION_MODULE_KEYS={
+ documents:'documentos',indicators:'indicadores',announcements:'comunicados',
+ equipment:'equipamentos',training:'treinamentos',nc:'rnc',
+ processes:'gestao-processos',users:'usuarios-acessos'
+};
+const nucleoPermissionCache=new WeakMap();
 const NUCLEO_PERSON_MODULES={"ros": "R.O.s", "pdca": "PDCAs e ações", "sac": "SACs", "documents": "Documentos", "indicators": "Indicadores", "announcements": "Comunicados", "equipment": "Equipamentos", "training": "Treinamentos", "nc": "RNCs", "processes": "Gestão de processos", "users": "Usuários e acessos", "sectors": "Setores da unidade"};
 // Telas administrativas carregadas somente quando solicitadas.
 let nucleoAdminModulePromise=null;
@@ -14,7 +28,7 @@ function nucleoLoadAdminModule(){
   if(nucleoAdminModulePromise)return nucleoAdminModulePromise;
   nucleoAdminModulePromise=new Promise((resolve,reject)=>{
     const script=document.createElement('script');
-    script.src=new URL('assets/modules/admin-workspaces.js?v=20261013-process-master1',document.baseURI).href;
+    script.src=new URL('assets/modules/admin-workspaces.js?v=20261111-contestacao-destinatario-v95',document.baseURI).href;
     const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo.')),20000);
     function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoAdminModulePromise=null;reject(error)}else resolve();}
     script.onload=()=>finish();
@@ -86,7 +100,8 @@ const ADMIN_OPERATIONAL_MODULES={
     title:'Gestão de processos',
     desc:'Lista Mestra digital dos documentos controlados, nomenclaturas, modelos e histórico documental do SGQ.',
     cards:[
-      ['Lista Mestra','Consultar todos os documentos controlados, situação, revisão e vínculo com o arquivo vigente.','master'],
+      ['Documentos vigentes','Consultar a Lista Mestra e os arquivos vigentes.','master'],
+      ['Documentos em revisão','Consultar documentos em revisão ou aguardando aprovação.','review'],
       ['Adicionar documento existente','Adotar um documento que já existe e trazê-lo para o controle do Núcleo sem recriar o arquivo.','adopt'],
       ['Importar documentos existentes','Colar uma tabela do Excel/Sheets ou importar CSV/TSV para migrar a Lista Mestra atual.','import'],
       ['Nomenclaturas','Controlar siglas de tipos, unidades e áreas usadas na codificação documental.','nomenclature'],
@@ -1210,7 +1225,9 @@ function applyPortalBackendSnapshot(snapshot){
       throw new Error('A base central retornou dados de outra sessão.');
     }
     setSession({...currentSession,...received,authToken,sessionExpiresAt,sessionExpiryClockVersion,
-      ...(data.overviewIndicators!==undefined?{overviewIndicators:data.overviewIndicators}:{})});
+      ...(data.overviewIndicators!==undefined?{overviewIndicators:data.overviewIndicators}:{}),
+      ...(data.sectorNucleusPreferences!==undefined?{sectorNucleusPreferences:data.sectorNucleusPreferences}:{})});
+    if(Object.prototype.hasOwnProperty.call(received,'permissions'))enforceAdminVisibility();
   }
 
   if(Array.isArray(data.unitContacts))localStorage.setItem('nucleo-unit-contacts',JSON.stringify(data.unitContacts));
@@ -1246,6 +1263,7 @@ function applyPortalBackendSnapshot(snapshot){
   if(Array.isArray(data.users)){
     const filteredUsers=data.users.filter(u=>!isDeletedUserRecord(u));
     localStorage.setItem(USERS_KEY,JSON.stringify(filteredUsers));
+    if(nucleoInlineTeamData?.length&&document.getElementById('overviewTeamPeople'))nucleoRenderInlineTeam(nucleoInlineTeamExpanded);
   }
   if(Array.isArray(data.announcements)){
     const localAnnouncements=data.announcements.map(a=>{
@@ -1416,6 +1434,7 @@ async function loadPortalBackend(showMessage,options,load){
       refreshContestPendingBadge();
       refreshPdcaSidebarBadge();
       refreshRoSummary();
+      if(canConsultRoHistory()&&document.getElementById('mySubmittedRosView')?.classList.contains('hidden')===false)renderMySubmittedRos(true);
     }catch(e){}
 
     const heavyRefresh=()=>{
@@ -1672,9 +1691,16 @@ function getNotificationReadMap(){
   try{return JSON.parse(localStorage.getItem(NOTIFICATION_READ_KEY)||'{}')||{}}
   catch(e){return {}}
 }
+function nucleoSectorNucleusAllowed(notification,preferences){
+  if(notification.type!=='ro'||!notification.sector||!['sector','user'].includes(notification.audience))return true;
+  const unit=explicitPortalUnit(notification.unidade);
+  if(!unit)return true;
+  const sector=String(notification.sector).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+  return preferences?.[unit+'::'+sector]!==false;
+}
 function isNotificationForCurrentUser(n){
   const s=getSession();
-  if(!s)return false;
+  if(!s||!nucleoSectorNucleusAllowed(n,s.sectorNucleusPreferences))return false;
   if(['admin','quality'].includes(s.role))return n.audience==='admin'||n.audience==='all';
   if(n.audience==='all')return true;
   if(n.audience==='user' && n.userKey===notificationUserKey())return true;
@@ -3509,10 +3535,6 @@ function saveOwnProfile(){
   };
   users[idx]=updatedUser;
 
-  if(previous.email && norm(previous.email)!==norm(email)){
-    portalBackendDelete('users',previous.email);
-  }
-
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
   portalBackendSave('users',email||name,updatedUser);
 
@@ -4152,7 +4174,7 @@ function renderOperationalUsers(){
         <button class="btn secondary" type="button" onclick="openManagerSectorsEditor('${escapeHtml(u.email||u.name)}')">Editar gestão</button>
         <button class="btn secondary" type="button" onclick="openUserRegistrationEditor('${escapeHtml(u.email||u.name)}')">Editar cadastro</button>
         <button class="btn secondary" type="button" onclick="openAdminResetPassword('${escapeHtml(u.email||u.name)}')">Redefinir senha</button>
-        <button class="remove-admin" type="button" onclick="removeOperationalUserByKey('${escapeHtml(u.email||u.name)}')">Excluir login</button>
+        ${nucleoLoginStatusButton(u)}
       </div>
     </div>`).join(''):'';
 
@@ -4245,35 +4267,40 @@ async function rejectPortalUser(key){
   renderOperationalUsers();
   addPortalAuditEvent('recusar_usuario',users[idx].email||users[idx].name,{name:users[idx].name,sector:users[idx].sector});
 }
-function removeOperationalUserByKey(key){
-  if(!nucleoFeatureRequire('users','delete'))return;
-  if(!isAdmin())return;
-  const users=getOperationalUsers();
-  const normalized=String(key||'').trim().toLowerCase();
-  const u=users.find(x=>
-    String(x.email||'').trim().toLowerCase()===normalized ||
-    String(x.name||'').trim().toLowerCase()===normalized
-  );
-  if(!u)return;
-  if(u.role==='admin'){if(!nucleoPersonPermissions(getSession()).sgq)return;return deleteAdminAccountByEmail(u.email);}
-
-  const label=u.name||u.email||'este usuário';
-  if(!confirm('Apagar definitivamente o cadastro de '+label+'?'))return;
-
-  const deleteKey=String(u.email||u.name||key).trim();
-  rememberDeletedUser(deleteKey);
-  if(u.name)rememberDeletedUser(u.name);
-
-  const filtered=users.filter(x=>x!==u && !isDeletedUserRecord(x));
-  localStorage.setItem(USERS_KEY,JSON.stringify(filtered));
-
-  portalBackendDelete('users',deleteKey);
-  addPortalAuditEvent('apagar_usuario',deleteKey,{name:u.name,sector:u.sector,email:u.email});
-
-  renderOperationalUsers();
-  try{refreshNewUserManagerFields()}catch(e){}
-  alert('Usuário apagado.');
+function nucleoCanChangeLogin(user){
+ const session=getSession();
+ if(!isAdmin()||!nucleoPersonFeatureCan('users','approve')||!user||!session)return false;
+ const mail=String(user.email||'').trim().toLowerCase();
+ if((user.personId&&user.personId===session.personId)||(mail&&mail===String(session.email||'').trim().toLowerCase())||mail==='sgq@empresa.com')return false;
+ const units=nucleoPersonUnits(user);
+ return session.role!=='quality'||(user.role!=='admin'&&!nucleoPersonPermissions(user).sgq&&units.length>0&&units.every(unit=>unit==='filial'));
 }
+function nucleoLoginStatusButton(user){
+ if(!nucleoCanChangeLogin(user))return '';
+ const status=user.approvalStatus||'approved';
+ if(!['approved','inactive','disabled'].includes(status))return '';
+ const enable=status!=='approved';
+ const id=encodeURIComponent(String(user.personId||user.storageId||user.email||''));
+ if(!id)return '';
+ return `<button class="btn secondary" type="button" data-login-id="${escapeHtml(id)}" onclick="nucleoSetLoginEnabled(this,${enable})">${enable?'Reativar login':'Desativar login'}</button>`;
+}
+async function nucleoSetLoginEnabled(button,enabled){
+ const id=decodeURIComponent(button.dataset.loginId);
+ const user=getOperationalUsers().find(item=>String(item.personId||item.storageId||item.email||'')===id);
+ if(!nucleoCanChangeLogin(user))return;
+ if(!confirm((enabled?'Reativar':'Desativar')+' o login de '+(user.name||user.email)+'?'))return;
+ button.disabled=true;
+ try{
+  const result=await portalJsonp({acao:'portal_set_login_enabled',person:id,enabled:String(enabled)},25000);
+  if(!result?.sucesso||result.confirmado!==true||result.active!==enabled)throw Error(result?.erro||'A base central não confirmou o status.');
+  const users=getOperationalUsers().map(item=>String(item.personId||item.storageId||item.email||'')===id?{...item,approvalStatus:result.approvalStatus,active:result.active,status:result.status}:item);
+  localStorage.setItem(USERS_KEY,JSON.stringify(users));
+  renderOperationalUsers();
+  renderAdminUsers();
+ }catch(error){alert(error.message);}
+ finally{button.disabled=false;}
+}
+
 function addPortalAuditEvent(action,recordId,data){
   const item={
     id:'AUD-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
@@ -5941,7 +5968,7 @@ function refreshRepresentativeSacMenu(){
   const allowed=isRepresentativeSacAccess(), item=document.getElementById('navMySacs'), mod=document.getElementById('moduleSac');
   if(item){item.style.display=(!admin&&allowed)?'':'none';item.classList.toggle('hidden',admin||!allowed)}
   if(mod){
-    const showModule=admin||allowed;
+    const showModule=admin||allowed||!!(getSession()?.permissions&&nucleoPersonFeatureCan('sac','consult'));
     mod.style.display=showModule?'':'none';
     mod.classList.toggle('hidden',!showModule);
   }
@@ -6652,10 +6679,14 @@ function saveSacEditForm(){
 }
 
 let currentSacPreviewId='';
-function openSacOfficialFormPreview(id){
-  currentSacPreviewId=String(id||'');
+function openSacOfficialFormPreview(id, consultation=false){
+  if(consultation&&!nucleoFeatureRequire('sac','consult'))return;
   const r=getExternalRoControls().find(x=>String(x.id)===String(id));
-  if(!r){alert('Controle de SAC não encontrado.');return}
+  if(!r||(consultation&&(!sacIsRealSac(r)||!nucleoPersonUnits(getSession()).includes(explicitRecordUnit(r))))){
+    alert('SAC não encontrado nas unidades autorizadas.');
+    return;
+  }
+  currentSacPreviewId=String(id||'');
   const f=r.officialForm||{};
   const yesno=v=>v==='yes'?'Sim':v==='no'?'Não':v==='na'?'Não se aplica':v==='analysis'?'Em análise':'—';
   const dev=({informative:'Informativo',billing:'Faturamento',quality:'Qualidade'})[f.deviationType]||'—';
@@ -6670,6 +6701,11 @@ function openSacOfficialFormPreview(id){
   if(!overlay||!content){alert('Não foi possível abrir a ficha SAC.');return}
   if(title)title.textContent='Ficha SAC · R.O. '+(r.ro||'');
 
+  overlay.querySelector('#sacPreviewEdit').hidden=consultation||!isAdmin()||!nucleoPersonFeatureCan('sac','edit');
+  overlay.querySelector('#sacPreviewPrint').hidden=consultation;
+  const pdfButton=overlay.querySelector('#sacPreviewConsultPdf');
+  pdfButton.hidden=!consultation;
+  pdfButton.dataset.sacConsultPdf=currentSacPreviewId;
   content.innerHTML=`
     <div style="border:1px solid #cfd8df;border-radius:12px;overflow:hidden;background:#fff">
       <div style="padding:16px 18px;background:#f8fafc;border-bottom:1px solid #cfd8df;display:flex;justify-content:space-between;gap:16px;align-items:flex-start">
@@ -6681,7 +6717,8 @@ function openSacOfficialFormPreview(id){
           cell('R.O.',r.ro||'—'),
           cell('Cliente',r.client||'—'),
           cell('Data da reclamação',f.complaintDate?formatDateBR(f.complaintDate):'—'),
-          cell('Representante',f.representative||r.representative||'—')
+          cell('Representante',f.representative||r.representative||'—'),
+          cell('Unidade',r.unit||r.unidade||'—')
         ])}
         ${section('Entrada fiscal',[
           cell('Baixa de títulos',yesno(f.titleWriteoff)),
@@ -6695,7 +6732,7 @@ function openSacOfficialFormPreview(id){
         ${section('Referência fiscal',[
           cell('Nota Fiscal',f.fiscalInvoice||'—'),
           cell('Pedido',f.fiscalOrder||r.order||'—'),
-          cell('Código do produto',f.fiscalProductCode||r.product||'—'),
+          cell('Código do produto',f.fiscalProductCode||f.deviationProductCode||r.product||'—'),
           cell('Qtd. não conforme',f.nonconformingQty||'—'),
           cell('Retirada?',yesno(f.pickup)),
           cell('Data de envio',f.sentDate?formatDateBR(f.sentDate):'—')
@@ -6721,8 +6758,17 @@ function openSacOfficialFormPreview(id){
         <div><span class="small">Tratativa</span><br><b>${escapeHtml(externalTreatmentLabel(r.treatmentType))}</b></div>
         <div><span class="small">Prazo vigente</span><br><b>${escapeHtml(r.treatmentDeadline?formatDateBR(r.treatmentDeadline):'—')}</b></div>
         <div><span class="small">Setor responsável</span><br><b>${escapeHtml(r.responsibleSector||'—')}</b></div>
-        <div><span class="small">PDCA</span><br><b>${r.pdcaRequired===false?'Dispensado':'Obrigatório'}</b></div>
+        <div><span class="small">PDCA</span><br><b>${r.pdcaRequired===false?'Dispensado':consultation&&r.pdcaRequired!==true?'—':'Obrigatório'}</b></div>
       </div>
+      ${consultation?section('Acompanhamento',[
+        cell('Situação',externalTreatmentStatusLabel(r.treatmentStatus)),
+        cell('Prazo do PDCA',r.pdcaDeadline?formatDateBR(r.pdcaDeadline):'—'),
+        cell('Orientação da Qualidade',r.qualityNote||'—',2),
+        cell('Detalhes da tratativa',r.treatmentDescription||'—',2),
+        cell('Decisão da Diretoria',r.directorDecision||'—',2)
+      ]):''}
+      ${consultation&&r.deadlineHistory?.length?section('Histórico de prazos',r.deadlineHistory.map(h=>cell('Prazo',[h.oldDeadline,h.newDeadline].filter(Boolean).map(date=>formatDateBR(date)).join(' → ')+(h.reason?' · '+h.reason:''),2))):''}
+      ${consultation&&r.sacSendHistory?.length?section('Histórico de envios',r.sacSendHistory.map(h=>cell('Envio',[h.sentAt&&formatDateTimeBR(h.sentAt),h.sentBy,h.to||h.directorEmail].filter(Boolean).join(' · '),2))):''}
     </div>`;
   overlay.classList.add('open');
   document.body.style.overflow='hidden';
@@ -9345,7 +9391,7 @@ function renderSgqCharts(d){
 }
 
 function renderSgqIndicators(){
-  if(!isAdmin()){showList();return}
+  if(!nucleoPersonFeatureCan('indicators','consult'))return;
   nucleoRefreshIndicatorDecisions();
   nucleoRefreshIndicatorClassificationOptions();
   const d=sgqIndicatorData();
@@ -9405,7 +9451,6 @@ function renderSgqIndicators(){
 }
 async function showSgqIndicators(){
  if(!nucleoFeatureRequire('indicators','consult'))return;
-  if(!isAdmin()){showList();return}
   view('sgqIndicatorsView');
   setNav('indicators');
   populateSgqIndicatorUnits();
@@ -10614,7 +10659,7 @@ function refreshManagerSectorsVisibility(){
 function closeManagerSectorsEditor(){
   document.getElementById('managerSectorsOverlay')?.classList.remove('open');document.body.style.overflow='';
 }
-function saveManagerSectorsEditor(){
+async function saveManagerSectorsEditor(){
  if(!nucleoFeatureRequire('users','edit'))return;
   if(!isAdmin())return;
   const key=document.getElementById('managerSectorsUserKey')?.value||'';
@@ -10622,6 +10667,18 @@ function saveManagerSectorsEditor(){
   const managed=role==='manager'?[...(document.getElementById('managerSectorsSelect')?.selectedOptions||[])].map(o=>o.value):[];
   if(role==='manager'&&!managed.length){alert('Selecione pelo menos um setor sob gestão.');return}
   const users=getOperationalUsers();const i=users.findIndex(u=>String(u.email||u.name)===String(key));if(i<0)return;
+  if(nucleoPersonPermissions(getSession()).sgq){
+    try{
+      const person=String(users[i].personId||users[i].email||users[i].name);
+      const result=await portalJsonp({acao:'portal_set_user_access',person,management:JSON.stringify({role,sectors:managed})},60000);
+      if(!result?.sucesso)throw Error(result?.erro||'A base central não confirmou os setores.');
+      closeManagerSectorsEditor();
+      await syncPortalBackend(false);
+      renderOperationalUsers();
+      alert('Setores atualizados na base central.');
+    }catch(error){alert(error.message);}
+    return;
+  }
   users[i]={...users[i],role:users[i].role==='admin'?'admin':role,managedSectors:managed,updatedAt:new Date().toISOString(),updatedBy:getSession()?.name||'SGQ'};
   localStorage.setItem(USERS_KEY,JSON.stringify(users));
   portalBackendSave('users',users[i].email||users[i].name,users[i]);
@@ -11937,7 +11994,7 @@ function applyImportedRos(records,meta){
     try{render()}catch(e){}
   }
   if(document.getElementById('mySubmittedRosView')?.classList.contains('hidden')===false){
-    try{renderMySubmittedRos()}catch(e){console.warn('Falha ao atualizar minhas R.O.s:',e)}
+    try{renderMySubmittedRos(true)}catch(e){console.warn('Falha ao atualizar minhas R.O.s:',e)}
   }
   refreshRoSummary();
   if(isAdmin()){
@@ -14333,7 +14390,6 @@ function renderAdminUsers(){
   if(!box)return;
   const st=getAccessState();
   const users=getOperationalUsers();
-  const current=String(getSession()?.email||'').trim().toLowerCase();
 
   // A fonte principal é a coleção de usuários: qualquer cadastro role=admin
   // precisa aparecer aqui, mesmo que a lista local access.admins esteja antiga.
@@ -14351,11 +14407,7 @@ function renderAdminUsers(){
     const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
     const displayName=u?.name||email;
     const initial=(displayName||'?').trim().charAt(0).toUpperCase();
-    const active=!(u?.active===false || u?.approvalStatus==='disabled');
-    const isSelf=email===current;
-    const protectedBase=email==='sgq@empresa.com';
-    const realAdmins=emails.filter(e=>e!=='sgq@empresa.com'||users.some(u=>String(u.email||'').trim().toLowerCase()===e));
-    const cantDelete=realAdmins.length<=1 || isSelf || protectedBase;
+    const active=!(u?.active===false || ['disabled','inactive'].includes(u?.approvalStatus));
     const safeEmail=encodeURIComponent(email);
     return `<div class="admin-user-row">
       <div class="admin-user-info">
@@ -14365,8 +14417,7 @@ function renderAdminUsers(){
       <div style="display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end">
         ${u?`<button class="btn secondary" type="button" onclick="openUnitUserAccess('${encodeURIComponent(u.personId||u.email||u.name)}')">Editar acesso</button>`:''}
         <button class="btn secondary" type="button" onclick="editAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Editar</button>
-        <button class="btn secondary" type="button" ${isSelf?'disabled title="Você não pode desativar a conta que está usando"':''} onclick="toggleAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">${active?'Desativar':'Ativar'}</button>
-        <button class="remove-admin" type="button" ${cantDelete?'disabled title="Não é possível excluir esta conta"':''} onclick="deleteAdminAccountByEmail(decodeURIComponent('${safeEmail}'))">Excluir</button>
+        ${nucleoLoginStatusButton(u)}
       </div>
     </div>`;
   }).join('');
@@ -14382,37 +14433,6 @@ function editAdminAccountByEmail(email){
   if(i<0){st.admins.push(String(email||'').trim().toLowerCase());saveAccessState(st);i=adminIndexByEmail(email)}
   editAdminAccount(i);
 }
-function toggleAdminAccountByEmail(email){
-  const st=getAccessState();
-  let i=adminIndexByEmail(email);
-  if(i<0){st.admins.push(String(email||'').trim().toLowerCase());saveAccessState(st);i=adminIndexByEmail(email)}
-  toggleAdminAccount(i);
-}
-function deleteAdminAccountByEmail(email){
-  if(!isAdmin()){alert('Acesso restrito.');return}
-  email=String(email||'').trim().toLowerCase();
-  const current=String(getSession()?.email||'').trim().toLowerCase();
-  if(email===current){alert('Você não pode excluir a conta que está usando.');return}
-  if(email==='sgq@empresa.com'){alert('A conta administrativa principal não pode ser excluída.');return}
-
-  const users=getOperationalUsers();
-  const admins=users.filter(u=>String(u.role||'').toLowerCase()==='admin' && String(u.email||'').trim().toLowerCase()!==email);
-  if(admins.length<1){alert('É necessário manter pelo menos um administrador cadastrado.');return}
-  const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
-  if(!u){alert('Cadastro do administrador não encontrado.');return}
-  if(!confirm(`Excluir permanentemente o acesso de ${u.name||email}?\n\nO histórico do sistema será preservado, mas esta conta não poderá mais entrar.`))return;
-
-  saveOperationalUsers(users.filter(x=>String(x.email||'').trim().toLowerCase()!==email));
-  markDeletedUserKey(email);
-  const st=getAccessState();
-  st.admins=(st.admins||[]).filter(x=>String(x||'').trim().toLowerCase()!==email);
-  saveAccessState(st);
-  portalBackendDelete('users',email);
-  renderAdminUsers();
-  renderOperationalUsers();
-  alert('Administrador excluído.');
-}
-
 function editAdminAccount(index){
   if(!isAdmin()){alert('Acesso restrito.');return}
   const st=getAccessState();
@@ -14429,43 +14449,6 @@ function editAdminAccount(index){
   saveOperationalUsers(users);
   portalBackendSave('users',users[ui].email||users[ui].name,users[ui]);
   renderAdminUsers();
-}
-function toggleAdminAccount(index){
-  if(!isAdmin()){alert('Acesso restrito.');return}
-  const st=getAccessState();
-  const email=String(st.admins[index]||'').trim().toLowerCase();
-  const current=String(getSession()?.email||'').trim().toLowerCase();
-  if(email===current){alert('Você não pode desativar a conta que está usando.');return}
-  const users=getOperationalUsers();
-  const ui=users.findIndex(u=>String(u.email||'').trim().toLowerCase()===email);
-  if(ui<0){alert('Cadastro do administrador não encontrado.');return}
-  const active=!(users[ui].active===false || users[ui].approvalStatus==='disabled');
-  const action=active?'desativar':'ativar';
-  if(!confirm(`Deseja ${action} o acesso de ${users[ui].name||email}?`))return;
-  users[ui]={...users[ui],role:'admin',active:!active,approvalStatus:active?'disabled':'approved',status:active?'disabled':'active',updatedAt:new Date().toISOString()};
-  saveOperationalUsers(users);
-  portalBackendSave('users',users[ui].email||users[ui].name,users[ui]);
-  renderAdminUsers();
-}
-function deleteAdminAccount(index){
-  if(!isAdmin()){alert('Acesso restrito.');return}
-  const st=getAccessState();
-  if(st.admins.length<=1){alert('É necessário manter pelo menos um administrador cadastrado.');return}
-  const email=String(st.admins[index]||'').trim().toLowerCase();
-  const current=String(getSession()?.email||'').trim().toLowerCase();
-  if(email===current){alert('Você não pode excluir a conta que está usando.');return}
-  if(email==='sgq@empresa.com'){alert('A conta administrativa principal não pode ser excluída.');return}
-  const users=getOperationalUsers();
-  const u=users.find(x=>String(x.email||'').trim().toLowerCase()===email);
-  if(!confirm(`Excluir permanentemente o acesso de ${u?.name||email}?\n\nO histórico do sistema será preservado, mas esta conta não poderá mais entrar.`))return;
-  const filtered=users.filter(x=>String(x.email||'').trim().toLowerCase()!==email);
-  localStorage.setItem(USERS_KEY,JSON.stringify(filtered));
-  markDeletedUserKey(email);
-  st.admins=st.admins.filter(x=>String(x||'').trim().toLowerCase()!==email);
-  saveAccessState(st);
-  portalBackendDelete('users',email);
-  renderAdminUsers();
-  renderOperationalUsers();
 }
 async function addAdmin(){
   if(!nucleoPersonPermissions(getSession()||{}).sgq)return;
@@ -14627,9 +14610,9 @@ function restoreSideModules(){
     setSideModuleOpen(id,s[id]===undefined?defaultOpen:!!s[id],false);
   });
 }
-function openModuleForNav(id){const m={navNewRo:'moduleRo',navMySubmittedRos:'moduleRo',navAssignedRos:'moduleRo',navSent:'moduleRo',navActions:'moduleRo',navPendingActions:'moduleRo',navTriage:'moduleRo',navContests:'moduleRo',navNewExternalRo:'moduleRo',navExternalRoControl:'moduleSac',navMySacs:'moduleSac',navSacTracking:'moduleSac',navPendingHub:'modulePersonal',navDocumentRequests:'modulePersonal',navIndicators:'moduleManagement',navAnnouncements:'moduleManagement',navEquipment:'moduleManagement',navTraining:'moduleManagement',navNcCapa:'moduleManagement',navDocuments:'moduleManagement',navProcesses:'moduleManagement'};if(m[id])setSideModuleOpen(m[id],true)}
+function openModuleForNav(id){const m={navNewRo:'moduleRo',navMySubmittedRos:'moduleRo',navAssignedRos:'moduleRo',navSent:'moduleRo',navActions:'moduleRo',navPendingActions:'moduleRo',navTriage:'moduleRo',navContests:'moduleRo',navNewExternalRo:'moduleRo',navExternalRoControl:'moduleSac',navMySacs:'moduleSac',navSacsConsult:'moduleSac',navSacTracking:'moduleSac',navPendingHub:'modulePersonal',navDocumentRequests:'modulePersonal',navIndicators:'moduleManagement',navAnnouncements:'moduleManagement',navEquipment:'moduleManagement',navTraining:'moduleManagement',navNcCapa:'moduleManagement',navDocuments:'moduleManagement',navProcesses:'moduleManagement'};if(m[id])setSideModuleOpen(m[id],true)}
 function setNav(which){
-  ['navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navAdmin'].forEach(function(id){
+  ['navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navMyAccess',...Object.values(NUCLEO_ACCESS_CONSULTATIONS).map(([id])=>id),'navAdmin'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.classList.remove('active');
   });
@@ -14647,6 +14630,9 @@ function setNav(which){
     indicators:'navIndicators',
     pending:'navPendingActions',
     profile:'navProfile',
+    navProcesses:'navProcesses',
+    myAccess:'navMyAccess',
+    ...Object.fromEntries(Object.values(NUCLEO_ACCESS_CONSULTATIONS).map(([id])=>[id,id])),
     admin:'navAdmin'
   };
 
@@ -14657,7 +14643,7 @@ function setNav(which){
   if(crumb){
     var labels={
       ros:'Minhas R.O.s',
-      mysubmitted:'R.O.s cadastradas por mim',
+      mysubmitted:canConsultRoHistory()?'Histórico de R.O.s':'R.O.s cadastradas por mim',
       assigned:'R.O.s atribuídas',
       sent:'PDCAs enviados',
       actions:'Ações',
@@ -14668,6 +14654,9 @@ function setNav(which){
       indicators:'Indicadores SGQ',
       pending:'Ações pendentes',
       profile:'Meu perfil',
+      navProcesses:'Gestão de processos',
+      myAccess:'Meus acessos',
+      ...Object.fromEntries(Object.values(NUCLEO_ACCESS_CONSULTATIONS)),
       admin:'Administração'
     };
     crumb.textContent=labels[which] || 'Minhas R.O.s';
@@ -14955,7 +14944,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     let operationalActions='';
     if(!admin){
       const respondDisabled=noPdca||contest||alreadySent;
-      const contestDisabled=noPdca||contest;
+      const canContest=nucleoCanContestRo(r,triageMap,pdcaByRo,tri);
 
       operationalActions=`
         <td class="operational-action-col">
@@ -14967,20 +14956,18 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
             </button>
             ${hasDraft?`<span class="status-badge pending">Rascunho iniciado</span>
               <button class="btn secondary" type="button" onclick="discardAssignedPdcaDraft('${escapeHtml(r.numero)}',this)">Excluir rascunho</button>`:''}`}
-            <button class="btn secondary" type="button"
-              ${contestDisabled?'disabled':''}
-              onclick="contestRoFromList('${escapeHtml(r.numero)}')">
-              ${contest?'Em contestação':'Contestar'}
-            </button>
+            ${canContest?`<button class="btn secondary" type="button"
+              onclick="contestRoFromList('${escapeHtml(r.numero)}','${escapeHtml(responsibleSector)}')">Contestar</button>`:''}
           </div>
         </td>`;
     }else{
       operationalActions='<td class="operational-action-col" style="display:none"></td>';
     }
 
-    const statusControl = admin && !noPdca && displayStatus==='Pendente'
-      ? `<div class="pdca-source-control"><span class="badge warn">Pendente</span><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">✓ Temos PDCA</button></div>`
-      : `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+    const statusControl = `<span class="${displayStatus==='PDCA externo'||displayStatus==='PDCA respondido'||displayStatus==='PDCA apresentado'?'badge ok':displayStatus==='Pendente'?'badge warn':badgeClass(displayStatus)}">${escapeHtml(displayDecisionLabel)}</span>`;
+    const pdcaControl = admin && !noPdca && displayStatus==='Pendente'
+      ? `<div class="pdca-source-control"><button class="btn secondary" type="button" onclick="setExternalPdca('${escapeHtml(r.numero)}',true,'${escapeHtml(responsibleSector)}')">✓ Temos PDCA</button></div>`
+      : escapeHtml(noPdca?'Não se aplica':hasResponse?displayStatus:pdcaSituation);
 
     return `<tr>
       <td><button type="button" class="ro-link-btn" onclick="openRO('${escapeHtml(r.numero)}')"><b>${escapeHtml(r.numero)}</b></button>${isArchivedRo(r.numero)?'<div class="small">Arquivada</div>':''}</td>
@@ -14989,7 +14976,7 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
       <td><span class="status-badge">${escapeHtml(r.origemBase||'')}</span></td>
       <td>${escapeHtml(assignedRoDeadline(r,displayStatus,triageMap))}</td>
       <td>${statusControl}</td>
-      <td class="ro-eye-cell"><div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
+      <td class="ro-eye-cell">${pdcaControl}<div class="ro-row-actions"><button class="ro-eye-btn" type="button" onclick="openRoReport('${escapeHtml(r.numero)}')" title="Visualizar R.O." aria-label="Visualizar R.O. ${escapeHtml(r.numero)}">👁</button>${admin&&tri?.roKey?`<button class="ro-eye-btn ro-edit-btn" type="button" onclick="openAssignedSectorEdit('${escapeHtml(tri.roKey)}')" title="Editar setor causa" aria-label="Editar setor causa">✎</button><button class="ro-eye-btn ro-delete-btn" type="button" onclick="deleteAssignedDirection('${escapeHtml(tri.roKey)}')" title="Excluir este direcionamento" aria-label="Excluir este direcionamento">🗑</button>`:''}</div></td>
       ${operationalActions}
     </tr>`;
   }).join('');
@@ -14998,9 +14985,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
     ? `Mostrando ${roListVisibleLimit} de ${list.length} R.O.s · <button class="btn secondary" type="button" onclick="showMoreRos()">Mostrar mais 60</button>`
     : (list.length?`Mostrando ${list.length} R.O.s`:'');
 
-  // A coluna "Ações" é exclusiva da visão operacional.
-  document.querySelectorAll('.operational-action-col').forEach(el=>{
-    el.style.display=admin?'none':'';
+  document.querySelectorAll('#roListView .operational-action-col').forEach(el=>{
+    el.style.removeProperty('display');
   });
 }
 
@@ -15081,20 +15067,24 @@ function startPdcaFromList(numero){
   openPDCA();
 }
 
-function contestRoFromList(numero){
+function nucleoCanContestRo(ro,triageMap,pdcaByRo,tri=getRoTriageRecord(ro,triageMap)){
+  if(!ro||!nucleoPersonFeatureCan('ros','contest')||tri?.decision!=='directed'||!canViewRO(ro,triageMap))return false;
+  const session=getSession();
+  const author=normalizeAnswer(roRegistrantName(ro)||'');
+  if(wasRoSubmittedByCurrentUser(ro)||(author&&author===normalizeAnswer(session?.name||'')))return false;
+  const recipientEmail=String(tri.responsibleUserEmail||'').trim().toLowerCase();
+  if(recipientEmail?recipientEmail!==String(session?.email||'').trim().toLowerCase():!userMatchesDirectedPerson(tri))return false;
+  if(isAdmin()&&!recipientEmail&&!tri.responsibleUserName)return false;
+  if(/cancel|registro|obsolet|contest|respondid|apresentad|pdca enviado|finalizad|concluid/.test(normalizeAnswer(ro.status||'')))return false;
+  if(pdcaExternalExists(ro,triageMap)||tri.pdcaResponded===true||String(ro.pdca||'')==='Enviado')return false;
+  return !getPdcaReturnForRo({...ro,__assignedSector:'',__triageRecord:null},pdcaByRo);
+}
+
+function contestRoFromList(numero,sector){
   const ro=selectRoForOperationalAction(numero);
   if(!ro)return;
-
-  if(['Cancelada','Somente para registro'].includes(ro.status)){
-    alert('Esta R.O. está encerrada e não pode ser contestada por este fluxo.');
-    return;
-  }
-  if(ro.status==='Em contestação'){
-    alert('Esta R.O. já está em contestação.');
-    return;
-  }
-
-  try{fillDetail()}catch(e){console.warn('Falha ao preparar detalhes antes da contestação.',e)}
+  const tri=sector?getTriageRecordForRoSector(numero,sector)||getRoTriageRecord(ro):getRoTriageRecord(ro);
+  selected={...ro,__assignedSector:sector||tri?.responsibleSector,__triageRecord:tri};
   openContest();
 }
 
@@ -15114,7 +15104,7 @@ function view(id){
   const returnPanel=document.getElementById('complainantReturnPanel');
   if(returnPanel)returnPanel.classList.add('hidden');
   if(pdcaBtn)pdcaBtn.style.display='';
-  if(contestBtn)contestBtn.style.display='';
+  if(contestBtn)contestBtn.style.display='none';
   setTimeout(refreshRoPdfAccess,0);
   const __ro=ros.find(r=>(r.id||r.codigo||r.numero)===n || r.numero===n);
   if(!__ro || !canViewRO(__ro)){alert('R.O. não encontrada ou indisponível.');showList();return;}
@@ -15124,7 +15114,7 @@ function view(id){
   setTimeout(refreshRoPdfAccess,0);
   setNav('ros');
 }function fillDetail(){
-  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';const hasResponse=selectedRoHasPdcaResponse(selected);pdcaBtn.hidden=hasResponse;pdcaBtn.disabled=noPDCA||contest||hasResponse;contestBtn.disabled=noPDCA||contest;if(pdcaBtn&&!pdcaBtn.disabled){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
+  document.getElementById('submittedRoDecisionInfo')?.remove();dNumero.textContent=selected.numero;dCliente.textContent=selected.cliente;dStatus.textContent=selected.status;dStatus.className=badgeClass(selected.status);dUnidade.textContent=selected.unidade;dSetor.textContent=selected.setor;dData.textContent=selected.data;dPrazo.textContent=selected.prazo;dDescricao.textContent=selected.descricao;const noPDCA=['Cancelada','Somente para registro'].includes(selected.status),contest=selected.status==='Em contestação';const hasResponse=selectedRoHasPdcaResponse(selected);pdcaBtn.hidden=hasResponse;pdcaBtn.disabled=noPDCA||contest||hasResponse;contestBtn.disabled=!nucleoCanContestRo(selected);contestBtn.style.display=contestBtn.disabled||detailReturnView==='mysubmitted'?'none':'';if(pdcaBtn&&!pdcaBtn.disabled){const roKey=selected.numero||selected.id||selected.codigo||'';pdcaBtn.textContent=isPdcaStarted(roKey)?'Continuar a responder o PDCA':'Responder o PDCA';}dNotice.classList.toggle('hidden',!(noPDCA||contest));dNotice.textContent=contest?'O PDCA está suspenso enquanto a contestação estiver em análise pelo SGQ.':noPDCA?'Esta R.O. não exige PDCA.':'';refreshContestUserStatus();refreshFavoriteButton();renderRoTimeline();renderRoIntelligence()}
 function roSummaryData(){
   const source=(typeof ROs!=='undefined' ? ROs : (typeof ros!=='undefined' ? ros : []));
   const triageMap=getSavedTriageMap();
@@ -15198,6 +15188,15 @@ function refreshRoleNavigationLabels(){
   try{enforceAdminVisibility()}catch(e){}
   try{refreshRoRegistrationAccess()}catch(e){}
   try{refreshDocumentRequestAccess()}catch(e){}
+  const history=canConsultRoHistory();
+  const submitted=document.getElementById('navMySubmittedRos');
+  if(submitted){
+    submitted.querySelector('b').textContent=history?'Histórico de R.O.s':'R.O.s cadastradas por mim';
+    submitted.querySelector('small').textContent=history?'Consultar ocorrências':'Acompanhar registros';
+    const allowed=history||nucleoPersonFeatureCan('ros','submitted');
+    submitted.classList.toggle('hidden',!allowed);
+    if(allowed)submitted.style.removeProperty('display');
+  }
   const sent=document.querySelector('#navSent b');
   if(sent) sent.textContent=isAdmin()?'PDCAs recebidos':'PDCAs enviados';
   const ros=document.querySelector('#navRos b');
@@ -15365,10 +15364,7 @@ function refreshComplainantReturnPanel(ro){
   }
 }
 
-function getSubmittedRoTrackingState(ro){
-  const tri=getRoTriageRecord(ro);
-  const contest=getContestRecord(ro.numero||ro.id||ro.codigo);
-  const ret=complainantReturnState(ro);
+function getSubmittedRoTrackingState(ro,{tri=getRoTriageRecord(ro),contest=getContestRecord(ro.numero||ro.id||ro.codigo),ret=complainantReturnState(ro)}={}){
   const sent=ret.pdca;
 
   if(contest?.status==='pending'){
@@ -15401,7 +15397,7 @@ function getSubmittedRoTrackingState(ro){
 
 function getMySubmittedRos(){
   return getAllRoRecords()
-    .filter(ro=>isAdmin()&&getSession()?.permissions?.detailVersion!==1 ? true : (wasRoSubmittedByCurrentUser(ro) && sameUnitAsCurrentUser(ro)))
+    .filter(ro=>wasRoSubmittedByCurrentUser(ro) && sameUnitAsCurrentUser(ro))
     .map(ro=>({ro,state:getSubmittedRoTrackingState(ro)}));
 }
 
@@ -15410,20 +15406,179 @@ function returnFromRoDetail(){
   else showList();
 }
 
+function canConsultRoHistory(){
+  return isAdmin()&&nucleoPersonFeatureCan('ros','consult');
+}
+
+function groupRoHistoryRecords(records,keyFor){
+  const grouped=new Map();
+  for(const record of records){
+    if(!record||typeof record!=='object')continue;
+    const key=String(keyFor(record)||'').trim();
+    if(!key)continue;
+    if(!grouped.has(key))grouped.set(key,[]);
+    grouped.get(key).push(record);
+  }
+  return grouped;
+}
+
+function buildRoHistoryRows(){
+  if(!canConsultRoHistory())return [];
+  const triages=groupRoHistoryRecords(getSavedTriageMap().values(),t=>t.roNumber||String(t.roKey||'').split('::')[0]);
+  const responses=groupRoHistoryRecords(localStorage.getItem(SENT_PDCA_KEY)?getAllSentPdcas():[],p=>p.ro||p.roId||p.numeroRo);
+  const contests=groupRoHistoryRecords(getContestations().filter(c=>!c.type||c.type==='ro'),c=>c.ro);
+  const sacs=groupRoHistoryRecords(getExternalRoControls().filter(sacIsRealSac),r=>r.ro);
+  const session=getSession();
+  const units=nucleoPersonUnits(session);
+  const allUnits=session.role==='admin'&&units.includes('matriz')&&units.includes('filial');
+  // A sincronização atualiza ros em lugar. Algumas versões mantêm ROs como lista separada.
+  const source=typeof ros!=='undefined'&&Array.isArray(ros)&&ros.length?ros:getAllRoRecords();
+  return source.filter(ro=>ro&&(allUnits||units.includes(explicitRecordUnit(ro)))).map(ro=>{
+    const number=String(ro.numero||ro.id||ro.codigo||'').trim();
+    const unit=explicitRecordUnit(ro);
+    const related=records=>(records.get(number)||[]).filter(item=>{
+      const itemUnit=explicitRecordUnit(item);
+      return itemUnit?itemUnit===unit:![item.unit,item.unidade,item.roUnit].some(value=>explicitPortalUnit(value));
+    });
+    const decisions=related(triages).sort((a,b)=>String(b.triagedAt||'').localeCompare(String(a.triagedAt||'')));
+    const decision=getRoTriageRecord(ro,new Map(decisions.map(t=>[t.roKey,t])));
+    if(decision&&!decisions.some(t=>t.roKey===decision.roKey&&t.decision===decision.decision))decisions.push(decision);
+    const pdcas=related(responses).sort((a,b)=>String(b.sentAt||b.envio||'').localeCompare(String(a.sentAt||a.envio||'')));
+    const objections=related(contests).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    const current=pdcas[0];
+    const state=getSubmittedRoTrackingState(ro,{
+      tri:decision||null,contest:objections[0]||null,
+      ret:{pdca:current,action:complainantActionState(current)}
+    });
+    return {ro,number,unit,state,decisions,pdcas,objections,sacs:related(sacs),registeredAt:sgqIndicatorDate(ro)?.getTime()||0};
+  }).sort((a,b)=>b.registeredAt-a.registeredAt||b.number.localeCompare(a.number,undefined,{numeric:true}));
+}
+
+let roHistoryPage=1;
+let roHistoryRows=[];
+const RO_HISTORY_PAGE_SIZE=30;
+function renderRoHistory(){
+  const body=document.getElementById('mySubmittedRows');
+  if(!body)return;
+  const text=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+  const q=normalizeAnswer(document.getElementById('mySubmittedSearch')?.value||'');
+  const status=document.getElementById('mySubmittedStatusFilter')?.value||'all';
+  const unit=document.getElementById('roHistoryUnitFilter')?.value||'';
+  const rows=roHistoryRows.filter(({ro,number,unit:rowUnit,state,decisions})=>
+    (!unit||unit===rowUnit)&&(status==='all'||status===state.code)&&
+    (!q||normalizeAnswer([number,ro.cliente,ro.assunto,ro.tipoRO,ro.descricao,state.label,...decisions.map(t=>t.responsibleSector)].join(' ')).includes(q)));
+  text('mySubmittedTotal',rows.length);
+  text('mySubmittedWaiting',rows.filter(x=>x.state.code==='triage').length);
+  text('mySubmittedDirected',rows.filter(x=>['directed','contest'].includes(x.state.code)).length);
+  text('mySubmittedDone',rows.filter(x=>x.state.code==='done').length);
+  const pages=Math.max(1,Math.ceil(rows.length/RO_HISTORY_PAGE_SIZE));
+  roHistoryPage=Math.max(1,Math.min(roHistoryPage,pages));
+  text('roHistoryPageLabel','Página '+roHistoryPage+' de '+pages);
+  const prev=document.getElementById('roHistoryPrev'),next=document.getElementById('roHistoryNext');
+  if(prev)prev.disabled=roHistoryPage===1;
+  if(next)next.disabled=roHistoryPage===pages;
+  body.innerHTML=rows.slice((roHistoryPage-1)*RO_HISTORY_PAGE_SIZE,roHistoryPage*RO_HISTORY_PAGE_SIZE).map(({ro,number,unit,state,decisions,pdcas})=>`
+    <tr>
+      <td><b>${escapeHtml(number)}</b><div class="small">${unit==='filial'?'Filial':unit==='matriz'?'Matriz':'Unidade não informada'}</div></td>
+      <td>${escapeHtml(ro.data||'—')}</td>
+      <td>${escapeHtml(ro.cliente||'—')}</td>
+      <td>${escapeHtml(ro.assunto||ro.tipoRO||'—')}</td>
+      <td><span class="status-badge ${state.code==='done'?'answered':'pending'}">${escapeHtml(state.label)}</span></td>
+      <td>${escapeHtml([...new Set(decisions.map(t=>t.responsibleSector||t.decisionSector).filter(Boolean))].join(' · ')||'—')}</td>
+      <td>${pdcas.length?pdcas.length+' PDCA(s)':'—'}</td>
+      <td>${escapeHtml(pdcas.length?state.returnState.action.label:'—')}</td>
+      <td><button class="btn secondary" type="button" data-history-ro="${escapeHtml(number)}" data-history-unit="${unit}">Consultar</button></td>
+    </tr>`).join('')||'<tr><td colspan="9" style="text-align:center;padding:28px">Nenhuma R.O. encontrada nos filtros selecionados.</td></tr>';
+  body.querySelectorAll('[data-history-ro]').forEach(button=>button.onclick=()=>openRoHistory(button.dataset.historyRo,button.dataset.historyUnit));
+}
+
+function openRoHistory(number,unit){
+  if(!canConsultRoHistory())return;
+  const session=getSession(),units=nucleoPersonUnits(session);
+  if(!units.includes(unit)&&!(unit===''&&session.role==='admin'&&units.includes('matriz')&&units.includes('filial')))return;
+  const entry=roHistoryRows.find(row=>row.number===number&&row.unit===unit);
+  if(!entry)return;
+  const {ro,state,decisions,pdcas,objections,sacs}=entry;
+  const fields=items=>'<dl class="ro-history-fields">'+items.filter(([,value])=>String(value??'').trim()).map(([label,value])=>'<div><dt>'+escapeHtml(label)+'</dt><dd>'+escapeHtml(String(value))+'</dd></div>').join('')+'</dl>';
+  const card=(title,items)=>'<article class="card ro-history-event"><h4>'+escapeHtml(title)+'</h4>'+fields(items)+'</article>';
+  const date=value=>value?(Number.isNaN(new Date(value).getTime())?String(value):formatDateTimeBR(value)):'';
+  const modal=document.getElementById('roHistoryDialog');
+  document.getElementById('roHistoryTitle').textContent='Histórico · '+number;
+  const sections=[
+    card('Registro da ocorrência',[
+      ['Data do registro',ro.data],['Registrada por',roRegistrantName(ro)],['Unidade',unit==='filial'?'Filial':unit==='matriz'?'Matriz':'Unidade não informada'],
+      ['Cliente',ro.cliente],['Situação',state.label],['Ocorrência',ro.assunto||ro.tipoRO],['Descrição',ro.descricao]
+    ]),
+    ...(decisions.length?decisions.map(t=>card('Triagem · '+(t.decisionLabel||triageStatusLabel(t.decision)),[
+      ['Data da triagem',date(t.triagedAt)||'Não registrada'],['Triada por',t.triagedBy],['Classificação',t.classification],['Criticidade',t.criticality],
+      ['Setor responsável',t.responsibleSector||t.decisionSector],['Pessoa responsável',t.responsibleUserName],
+      ['Setor anterior',t.previousResponsibleSector!==t.responsibleSector?t.previousResponsibleSector:''],
+      ['Justificativa da triagem',t.note||'Não registrada'],['Justificativa do direcionamento',t.assignmentReason],
+      ['PDCA',t.pdcaRequired===true?'Obrigatório':t.pdcaRequired===false?'Dispensado':''],['Prazo do PDCA',t.pdcaDeadline&&formatDateBR(t.pdcaDeadline)]
+    ])):[card('Triagem',[['Situação','Nenhuma triagem registrada']])]),
+    ...(pdcas.length?pdcas.map(p=>{
+      const answers=p.answers||p.respostas||{};
+      const actions=allPdcaActionsForRecord(p);
+      return card('Resposta · '+(p.id||'PDCA'),[
+        ['Data da resposta',date(p.sentAt||p.envio)||'Não registrada'],['Respondida por',p.responsavel],['Setor',p.setor],
+        ['Problema',answers.p1],['Causa raiz',answers.p7],['Meta',answers.p8],['Status da meta',answers.p10],
+        ['Resultado da verificação',answers.c1],['Padronização',answers.a2],['Apresentado em',date(p.apresentadoEm)]
+      ])+actions.map(a=>card('Ação do '+(p.id||'PDCA'),[
+        ['Ação',a.action],['Responsáveis',a.owner],['Prazo',a.deadline&&date(a.deadline)],
+        ['Situação',inferActionStatus({...p,answers:{...answers,p12:a.deadline},acaoConferidaEm:a.completedAt||a.acaoConferidaEm||(a.id?.endsWith('-A1')?p.acaoConferidaEm:'')}).label],
+        ['Conclusão registrada',date(a.completedAt||a.acaoConferidaEm||(!a.id?.endsWith('-A1')?'':p.acaoConferidaEm))],['Evidência',a.evidenceNote]
+      ])).join('');
+    }):[card('Resposta e ações',[['Situação','Nenhum PDCA recebido']])]),
+    ...objections.map(c=>card('Contestação',[
+      ['Data',date(c.createdAt)],['Justificativa',c.reason],['Análise',date(c.reviewedAt)],
+      ['Situação',({pending:'Em análise',accepted:'Aceita',rejected:'Rejeitada'})[c.status]],['Parecer',c.reviewNote]
+    ])),
+    ...sacs.map(r=>card('SAC',[
+      ['Tratativa',externalTreatmentLabel(r.treatmentType)],['Situação',externalTreatmentStatusLabel(r.treatmentStatus)],
+      ['Definida em',date(r.treatmentDefinedAt)],['Concluída em',date(r.treatmentCompletedAt)],['Orientação da Qualidade',r.qualityNote]
+    ]))
+  ];
+  document.getElementById('roHistoryContent').innerHTML=sections.join('');
+  if(!modal.open)modal.showModal();
+}
+
 function showMySubmittedRos(){
-  if(!nucleoFeatureRequire('ros','submitted'))return;
-  if(isAdmin()&&getSession()?.permissions?.detailVersion!==1){showList();return}
+  const history=canConsultRoHistory();
+  if(!history&&!nucleoFeatureRequire('ros','submitted'))return;
+  const page=document.getElementById('mySubmittedRosView');
+  page.querySelectorAll('[data-ro-history-only]').forEach(el=>el.hidden=!history);
+  page.querySelectorAll('[data-ro-personal-only]').forEach(el=>el.hidden=history);
+  document.getElementById('mySubmittedTitle').textContent=history?'Histórico de R.O.s':'R.O.s cadastradas por mim';
+  document.getElementById('mySubmittedTotalLabel').textContent=history?'R.O.s no histórico':'Cadastradas por mim';
+  const unitFilter=document.getElementById('roHistoryUnitFilter');
+  if(history){
+    const units=nucleoPersonUnits(getSession());
+    unitFilter.value='';
+    [...unitFilter.options].forEach(option=>option.hidden=!!option.value&&!units.includes(option.value));
+    unitFilter.hidden=units.length<2;
+    roHistoryPage=1;
+  }else roHistoryRows=[];
   view('mySubmittedRosView');
-  setNav('mysubmitted');
-  renderMySubmittedRos();
+  try{setNav('mysubmitted');}finally{renderMySubmittedRos(true);}
 }
 
 function submittedRoRowClass(ro){
  const decision=getRoTriageRecord(ro)?.decision;
  return decision==='cancelled'?'submitted-ro-cancelled':decision==='record'?'submitted-ro-record':decision==='obsolete'?'submitted-ro-obsolete':'';
 }
-function renderMySubmittedRos(){
-  if(isAdmin()&&getSession()?.permissions?.detailVersion!==1)return;
+function renderMySubmittedRos(refreshHistory=false){
+  if(canConsultRoHistory()){
+    try{
+      if(refreshHistory)roHistoryRows=buildRoHistoryRows();
+      renderRoHistory();
+    }catch(error){
+      console.error('Histórico de R.O.s:',error);
+      roHistoryRows=[];
+      const body=document.getElementById('mySubmittedRows');
+      if(body)body.innerHTML='<tr><td colspan="9" style="padding:20px">Não foi possível carregar o histórico. Sincronize e tente novamente.</td></tr>';
+    }
+    return;
+  }
 
   const q=normalizeAnswer(document.getElementById('mySubmittedSearch')?.value||'');
   const filter=document.getElementById('mySubmittedStatusFilter')?.value||'all';
@@ -15523,7 +15678,7 @@ function openSubmittedRoTracking(numero){
   // Tracking is read-only when the current user's sector is not the responsible sector.
   const canTreat=canViewRO(ro);
   if(pdcaBtn)pdcaBtn.style.display=canTreat?'':'none';
-  if(contestBtn)contestBtn.style.display=canTreat?'':'none';
+  if(contestBtn)contestBtn.style.display='none';
 
   view('detailView');
   setNav('mysubmitted');
@@ -15840,8 +15995,9 @@ function openAssignedFilters(){
     ['assignedSectorFilter','Setor'],
     ['assignedOriginFilter','Origem'],
     ['assignedUnitFilter','Unidade'],
-    ['filter','Situação']
-  ];
+    ['filter','Situação'],
+    ['assignedEmailFilter','Envio de e-mail']
+  ].filter(([id])=>document.getElementById(id));
   fields.replaceChildren(...filters.map(([id,name])=>{
     const source=document.getElementById(id);
     const field=source.cloneNode(true);
@@ -15861,7 +16017,9 @@ function applyAssignedFilters(event){
   document.querySelectorAll('#assignedFilterFields select').forEach(field=>{
     const source=document.getElementById(field.dataset.filterId);
     if(source&&!source.disabled&&Array.from(source.options).some(option=>option.value===field.value)){
+      const changed=source.value!==field.value;
       source.value=field.value;
+      if(changed&&source.id==='assignedEmailFilter')source.dispatchEvent(new Event('change'));
     }
   });
   document.getElementById('assignedFilterDialog').close();
@@ -16296,7 +16454,7 @@ function goFirstMissingQuestion(){
 }
 
 function changeStage(d){activeStage=Math.max(0,Math.min(stages.length-1,activeStage+d));renderStage();window.scrollTo({top:0,behavior:'smooth'})}function openContest(){
-  if(!nucleoFeatureRequire('ros','contest'))return;
+  if(!nucleoCanContestRo(selected)){alert('A contestação está disponível somente ao destinatário, antes da resposta.');return;}
   const modal=document.getElementById('contestModal');
   if(!modal){
     alert('Não foi possível abrir a contestação.');
@@ -16311,8 +16469,8 @@ function changeStage(d){activeStage=Math.max(0,Math.min(stages.length-1,activeSt
 }function closeContest(){
   const modal=document.getElementById('contestModal');
   if(modal)modal.classList.add('hidden');
-}function submitContest(){
-  if(!nucleoFeatureRequire('ros','contest'))return;
+}async function submitContest(){
+  if(!nucleoCanContestRo(selected)){alert('A contestação está disponível somente ao destinatário, antes da resposta.');return;}
   const textEl=document.getElementById('contestText');
   const sectorEl=document.getElementById('contestSector');
   const reason=String(textEl?.value||'').trim();
@@ -16347,7 +16505,7 @@ function changeStage(d){activeStage=Math.max(0,Math.min(stages.length-1,activeSt
   }
 
   const baseRo=getAllRoRecords().find(r=>String(r.numero||r.id||r.codigo||'').trim()===roNumber);
-  const tri=baseRo?getRoTriageRecord(baseRo):null;
+  const tri=getRoTriageRecord(selected)||(baseRo?getRoTriageRecord(baseRo):null);
   const currentResponsibleSector=String(
     tri?.responsibleSector ||
     selected.setorResponsavel ||
@@ -16369,8 +16527,15 @@ function changeStage(d){activeStage=Math.max(0,Math.min(stages.length-1,activeSt
     createdAt:new Date().toISOString()
   };
 
-  list.unshift(record);
-  saveContestations(list);
+  const submitButton=document.querySelector('#contestModal button[onclick*="submitContest"]');
+  if(submitButton?.disabled)return;
+  if(submitButton)submitButton.disabled=true;
+  try{
+    const result=await portalJsonp({acao:'portal_save',colecao:'contestations',id:record.id,dados:JSON.stringify(record)},60000);
+    if(!result?.sucesso)throw Error(result?.erro||'A base central não confirmou a contestação.');
+    localStorage.setItem(CONTEST_KEY,JSON.stringify([record,...getContestations()]));
+  }catch(error){alert(error.message);return;}
+  finally{if(submitButton)submitButton.disabled=false;}
 
   if(getRuleYes('ruleContestSuspends')){
     selected.status='Em contestação';
@@ -16869,8 +17034,20 @@ function openUnitUserAccess(encoded){
  const parent=nucleoPersonPermissions(getSession()),perms=nucleoPersonPermissions(user),units=nucleoPersonUnits(user),allowed=nucleoPersonUnits(getSession());
  if(!parent.sgq&&(user.role==='admin'||units.some(u=>!allowed.includes(u)))){alert('Este cadastro é administrado pelo SGQ.');return;}
  let overlay=document.getElementById('unitUserAccess');overlay?.remove();overlay=document.createElement('div');overlay.id='unitUserAccess';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
- overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto"><h3>Editar acesso — '+escapeHtml(user.name)+'</h3><p>Escolha as unidades e marque somente as funções permitidas dentro de cada área.</p><div id="personAccessUnits">'+['matriz','filial'].map(u=>'<label style="display:inline-flex;gap:8px;margin:10px"><input type="checkbox" value="'+u+'" '+(units.includes(u)?'checked':'')+' '+(!allowed.includes(u)?'disabled':'')+' style="width:20px;height:20px">'+(u==='matriz'?'SETA SC — Matriz':'SETA ES — Linhares')+'</label>').join('')+'</div>'+nucleoFeatureEditor(user,getSession())+'<p><label><input id="personRegisterRo" type="checkbox" '+(perms.registerRo?'checked':'')+' '+(!parent.sgq&&!parent.registerRo?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. interna</label></p><p><label><input id="personRegisterExternal" type="checkbox" '+(perms.registerExternal?'checked':'')+' '+(!parent.sgq&&!parent.registerExternal?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. externa / SAC</label></p>'+(parent.sgq?'<p><label><input id="personSgq" type="checkbox" '+(perms.sgq?'checked':'')+' style="width:20px;height:20px"> Administração geral SGQ — todas as permissões, integração e configurações globais</label></p><details><summary>Setores unificados</summary><p class="small">Um vínculo por linha: matriz | PCP ou filial | PCP.</p><textarea id="unitAccessMemberships" rows="4"></textarea></details>':'')+'<p class="small">O cadastro e o e-mail continuam únicos. A alteração exige novo login da pessoa para atualizar seu acesso.</p><button class="btn primary" id="unitAccessSave">Salvar permissões</button> <button class="btn secondary" id="unitAccessClose">Fechar</button><p id="unitAccessStatus" role="status"></p></div>';
- document.body.appendChild(overlay);if(parent.sgq)document.getElementById('unitAccessMemberships').value=(user.sectorMemberships||[]).map(m=>m.unit+' | '+m.sector).join('\n');document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
+ overlay.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto"><h3>Editar acesso — '+escapeHtml(user.name)+'</h3><p>Escolha as unidades e marque somente as funções permitidas dentro de cada área.</p><div id="personAccessUnits">'+['matriz','filial'].map(u=>'<label style="display:inline-flex;gap:8px;margin:10px"><input type="checkbox" value="'+u+'" '+(units.includes(u)?'checked':'')+' '+(!allowed.includes(u)?'disabled':'')+' style="width:20px;height:20px">'+(u==='matriz'?'SETA SC — Matriz':'SETA ES — Linhares')+'</label>').join('')+'</div>'+nucleoFeatureEditor(user,getSession())+'<p><label><input id="personRegisterRo" type="checkbox" '+(perms.registerRo?'checked':'')+' '+(!parent.sgq&&!parent.registerRo?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. interna</label></p><p><label><input id="personRegisterExternal" type="checkbox" '+(perms.registerExternal?'checked':'')+' '+(!parent.sgq&&!parent.registerExternal?'disabled':'')+' style="width:20px;height:20px"> Cadastrar R.O. externa / SAC</label></p>'+(parent.sgq?'<p><label><input id="personSgq" type="checkbox" '+(perms.sgq?'checked':'')+' style="width:20px;height:20px"> Administração geral SGQ — todas as permissões, integração e configurações globais</label></p><div class="small" id="unitAccessSectorPreview" aria-live="polite"></div>':'')+'<p class="small">O cadastro e o e-mail continuam únicos. A alteração exige novo login da pessoa para atualizar seu acesso.</p><button class="btn primary" id="unitAccessSave">Salvar permissões</button> <button class="btn secondary" id="unitAccessClose">Fechar</button><p id="unitAccessStatus" role="status"></p></div>';
+ document.body.appendChild(overlay);
+ document.getElementById('unitAccessClose').onclick=()=>overlay.remove();
+ const selectedUnits=()=>[...overlay.querySelectorAll('#personAccessUnits input:checked')].map(input=>input.value);
+ const preview=overlay.querySelector('#unitAccessSectorPreview');
+ if(preview){
+  const sectors=[...new Set([user.sector,...(user.managedSectors||[])].map(value=>String(value||'').trim()).filter(Boolean))];
+  const refresh=()=>{
+   const unitLabels=selectedUnits().map(unit=>unit==='matriz'?'Matriz':'Filial');
+   preview.textContent=unitLabels.length&&sectors.length?'Vínculos automáticos em '+unitLabels.join(' e ')+': '+sectors.join(', ')+'.':'Selecione as unidades para vincular os setores do cadastro.';
+  };
+  overlay.querySelector('#personAccessUnits').addEventListener('change',refresh);
+  refresh();
+ }
  overlay.querySelectorAll('[data-mode="manage"]').forEach(input=>input.onchange=()=>{if(input.checked)input.closest('tr').querySelector('[data-mode="view"]').checked=true;});
  document.getElementById('unitAccessSave').onclick=async()=>{
   const btn=document.getElementById('unitAccessSave'),status=document.getElementById('unitAccessStatus');btn.disabled=true;status.textContent='Salvando permissões na base central…';
@@ -16878,12 +17055,28 @@ function openUnitUserAccess(encoded){
    const next={version:1,modules:{},registerRo:document.getElementById('personRegisterRo').checked,registerExternal:document.getElementById('personRegisterExternal').checked,sgq:!!document.getElementById('personSgq')?.checked};
    next.detailVersion=1;next.features={};
    Object.keys(NUCLEO_PERSON_FEATURES).forEach(module=>{next.features[module]={};overlay.querySelectorAll('[data-feature-module="'+module+'"]').forEach(input=>next.features[module][input.dataset.feature]=input.checked);const entries=Object.entries(next.features[module]).filter(([,enabled])=>enabled);next.modules[module]={view:entries.length>0,manage:entries.some(([key])=>NUCLEO_PERSON_FEATURES[module][key][1])};});
-   const accessUnits=[...overlay.querySelectorAll('#personAccessUnits input:checked')].map(x=>x.value);if(!accessUnits.length)throw new Error('Selecione ao menos uma unidade.');
-   let memberships=user.sectorMemberships||[];
-   if(parent.sgq)memberships=document.getElementById('unitAccessMemberships').value.split('\n').filter(x=>x.trim()).map(line=>{const parts=line.split('|');if(parts.length!==2)throw new Error('Informe unidade | setor em cada vínculo.');return {unit:parts[0].trim().toLowerCase(),sector:parts[1].trim()};});
-   const result=await portalJsonp({acao:'portal_set_user_access',person:id,permissions:JSON.stringify(next),accessUnits:JSON.stringify(accessUnits),memberships:JSON.stringify(memberships)},60000);
+   const accessUnits=selectedUnits();if(!accessUnits.length)throw new Error('Selecione ao menos uma unidade.');
+   const payload={...next,modules:{...next.modules},features:{...next.features}};
+   for(const [key,canonical] of Object.entries(NUCLEO_PERMISSION_MODULE_KEYS)){
+    payload.modules[canonical]=next.modules[key];
+    payload.features[canonical]=next.features[key];
+   }
+   const result=await portalJsonp({acao:'portal_set_user_access',person:id,permissions:JSON.stringify(payload),accessUnits:JSON.stringify(accessUnits),...(parent.sgq?{automaticMemberships:'1'}:{})},60000);
    if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a alteração.');
-   status.textContent='Permissões salvas na base central. A pessoa deve entrar novamente.';await syncPortalBackend(false);renderOperationalUsers();
+   if(parent.sgq&&result.user?.permissions&&result.user.automaticSectorMemberships!==true){
+    throw new Error('A base não confirmou os vínculos automáticos. Publique o Codigo.gs atualizado na implantação usada pelo Núcleo.');
+   }
+   const confirmed=result.user?.permissions;
+   if(!confirmed||confirmed.detailVersion!==1)throw new Error('A API não devolveu as permissões detalhadas. Confira a implantação usada pelo Núcleo.');
+   const differences=[];
+   for(const [module,features] of Object.entries(NUCLEO_PERSON_FEATURES)){
+    for(const [key,[label]] of Object.entries(features)){
+     const wanted=next.sgq||next.features[module][key]===true;
+     if(nucleoPersonFeatureAllowed(result.user,module,key)!==wanted)differences.push(label);
+    }
+   }
+   if(differences.length)throw new Error('A base central devolveu opções diferentes: '+differences.join(', ')+'. Confira se o Codigo.gs atualizado está publicado na API usada pelo Núcleo.');
+   status.textContent='Permissões conferidas na base central. A pessoa deve entrar novamente.';await syncPortalBackend(false);renderOperationalUsers();
   }catch(e){status.textContent='Não foi possível salvar: '+(/perfil inv[aá]lido/i.test(e.message)?'A implantação do Apps Script ainda usa a versão antiga dos perfis. Atualize o código e publique uma nova versão na implantação existente.':e.message);}finally{btn.disabled=false;}
  };
 }
@@ -16905,7 +17098,14 @@ function explicitRecordUnit(record){
   const values=[record?.unidade,record?.unit,record?.roUnit,record?.raw?.__unidade,record?.__unidade,record?.raw?.Unidade,record?.raw?.['Unidade produtiva'],record?.raw?.['Em qual unidade produtiva ocorreu o problema?']];
   const units=[...new Set(values.map(explicitPortalUnit).filter(Boolean))];return units.length===1?units[0]:'';
 }
-function qualityRecordAllowed(record){const s=getSession()||{};if(Array.isArray(s.accessUnits))return s.accessUnits.includes(explicitRecordUnit(record));return s.role!=='quality'||explicitRecordUnit(record)==='filial';}
+function qualityRecordAllowed(record){const s=getSession()||{};if(Array.isArray(s.accessUnits)){
+ const unit=explicitRecordUnit(record);
+ if(record?.module==='equipment'&&!unit&&nucleoPersonFeatureCan('equipment','consult')){
+  const unassigned=!String(record.unit||record.unidade||'').trim();
+  if(unassigned&&s.accessUnits.includes('matriz')&&s.accessUnits.includes('filial'))return true;
+ }
+ return s.accessUnits.includes(unit);
+}return s.role!=='quality'||explicitRecordUnit(record)==='filial';}
 
 function applySettingsUnitSelection(){
   const unit=document.getElementById('qualityConfigUnit')?.value||'matriz';
@@ -16917,7 +17117,7 @@ function applySettingsUnitSelection(){
 // Módulo de arquivos carregado sob demanda.
 let nucleoDriveModulePromise=null;
 function nucleoDriveLoad(){if(typeof nucleoDriveShow==='function')return Promise.resolve();if(!nucleoDriveModulePromise)nucleoDriveModulePromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=new URL('assets/modules/drive-documents.js?v=20261009-mutation-fix1',document.baseURI).href;const timer=setTimeout(()=>finish(new Error('Tempo limite ao carregar o módulo de arquivos. Tente novamente.')),20000);function finish(error){clearTimeout(timer);script.onload=script.onerror=null;if(error){script.remove();nucleoDriveModulePromise=null;reject(error);}else resolve();}script.onload=()=>finish();script.onerror=()=>finish(new Error('Não foi possível carregar o módulo de arquivos.'));document.head.appendChild(script);});return nucleoDriveModulePromise;}
-async function nucleoDriveOpen(tab){try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
+async function nucleoDriveOpen(tab){if(tab==='requests'&&!nucleoFeatureRequire('documents','prepare'))return;try{await nucleoDriveLoad();await nucleoDriveShow(tab);}catch(e){alert(e.message);}}
 function nucleoDriveSettingsShortcut(){
  const box=document.getElementById('unitQualitySettings');if(!box)return;
  box.style.display='block';
@@ -17131,19 +17331,244 @@ async function nucleoSyncAfterLogin(token){
 }
 
 function nucleoPersonPermissions(user){
- if(user.permissions?.version===1)return user.permissions;
+ if(user.permissions?.version===1){
+  const saved=user.permissions;
+  if(nucleoPermissionCache.has(saved))return nucleoPermissionCache.get(saved);
+  const normalized={...saved,modules:{},features:{}};
+  for(const module of Object.keys(NUCLEO_PERSON_MODULES)){
+   const key=NUCLEO_PERMISSION_MODULE_KEYS[module]||module;
+   for(const group of ['modules','features']){
+    const value=saved[group]?.[key]??saved[group]?.[module];
+    if(value)normalized[group][module]=value;
+   }
+  }
+  nucleoPermissionCache.set(saved,normalized);
+  return normalized;
+ }
  const elevated=['admin','quality'].includes(user.role),modules={};Object.keys(NUCLEO_PERSON_MODULES).forEach(k=>modules[k]={view:elevated||['ros','pdca','sac'].includes(k),manage:elevated});
  if(!elevated)modules.documents.view=['comercial interno','comercial externo','diretoria','sgq'].includes(normalizeAnswer(user.sector||''));
  return {version:1,modules,registerRo:user.role!=='admin',registerExternal:user.role==='quality'||['comercial interno','comercial externo','diretoria','processos','sgq'].includes(normalizeAnswer(user.sector||'')),sgq:user.role==='admin'};
 }
-function nucleoPersonCan(module,manage=false){const user=getSession();if(!user)return false;const p=nucleoPersonPermissions(user);return !!(p.sgq||p.modules[module]?.[manage?'manage':'view']);}
+function nucleoPersonCan(module,manage=false){
+ const user=getSession();if(!user)return false;
+ const p=nucleoPersonPermissions(user);
+ if(p.sgq)return true;
+ if(!manage&&p.detailVersion===1){
+  return Object.keys(NUCLEO_PERSON_FEATURES[module]||{}).some(key=>nucleoPersonFeatureAllowed(user,module,key));
+ }
+ return p.modules[module]?.[manage?'manage':'view']===true;
+}
 function nucleoPersonUnits(user){return Array.isArray(user.accessUnits)?user.accessUnits:user.role==='admin'?['matriz','filial']:user.role==='quality'?['filial']:[explicitPortalUnit(user.unit)||'matriz'];}
 function nucleoApplyPersonAccess(){
- const user=getSession();if(!user?.permissions)return;
+ const user=getSession();
+ const catalog=document.getElementById('navMyAccess');
+ if(catalog)catalog.hidden=!user||(!user.permissions&&!user.managedSectors?.length)||(nucleoPersonPermissions(user).sgq===true&&!user.managedSectors?.length);
+ nucleoRefreshAuditMenu(user);
+ if(!user?.permissions){
+  for(const id of ['moduleRo','modulePersonal']){
+   const group=document.getElementById(id);
+   if(group)group.style.removeProperty('display');
+  }
+  nucleoRefreshAccessConsultations(user);
+  return;
+ }
  const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
  Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
  nucleoApplyFeatureAccess();
+ nucleoRefreshAccessConsultations(user);
+ for(const id of ['moduleRo','modulePersonal']){
+  const group=document.getElementById(id);
+  if(!group)continue;
+  const visible=[...group.querySelectorAll('.side-module-body .side-item')].some(item=>
+    !item.hidden&&!item.classList.contains('hidden')&&item.style.display!=='none'&&getComputedStyle(item).display!=='none'
+  );
+  group.style.display=visible?'':'none';
+ }
  ['cfgUsers','unitQualitySettings','cfgNotifications','cfgUnits'].forEach(id=>{const el=document.getElementById(id);if(!el)return;const module=id==='cfgUsers'?'users':'sectors';el.style.setProperty('display',nucleoPersonCan(module)?'':'none','important');});
+}
+
+function nucleoRefreshAuditMenu(user){
+ const item=document.getElementById('navAudit5s');
+ if(!item)return;
+ const token=user?.authToken;
+ if(!token){nucleoSidebarAuditAccess=null;item.hidden=true;return;}
+ if(isAdmin()){item.hidden=false;return;}
+ const now=new Date();
+ const month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+ const unit=nucleoPersonUnits(user).includes(explicitPortalUnit(user.unit))?explicitPortalUnit(user.unit):nucleoPersonUnits(user)[0];
+ const key=token+'|'+unit+'|'+month;
+ if(nucleoSidebarAuditAccess?.key===key){item.hidden=!nucleoSidebarAuditAccess.allowed;return;}
+ const state={key,allowed:false};
+ nucleoSidebarAuditAccess=state;
+ item.hidden=true;
+ portalJsonp({acao:'nucleo_5s_access',unit,month},30000).then(access=>{
+  if(nucleoSidebarAuditAccess!==state||getSession()?.authToken!==token)return;
+  if(!access?.sucesso){nucleoSidebarAuditAccess=null;return;}
+  state.allowed=Boolean(access.canAudit||access.canSeeAllResults||access.resultSectors?.length);
+  item.hidden=!state.allowed;
+  nucleoRefreshAccessConsultations(getSession());
+ }).catch(()=>{if(nucleoSidebarAuditAccess===state)nucleoSidebarAuditAccess=null;});
+}
+
+function nucleoRefreshAccessConsultations(user){
+ const module=document.getElementById('moduleManagement');
+ const permissions=['users','sectors','sac'].map(key=>[NUCLEO_ACCESS_CONSULTATIONS[key][0],key]);
+ permissions.forEach(([id,key])=>{
+   const item=document.getElementById(id);
+   if(item)item.hidden=!user?.permissions||isAdmin()||!nucleoPersonFeatureAllowed(user,key,'consult');
+ });
+ if(!module||!user||isAdmin())return;
+ const moduleItems=['navEquipment','navTraining','navNcCapa','navProcesses','navAudit5s','navIndicators','navAnnouncements'];
+ const visible=moduleItems.some(id=>{
+   const item=document.getElementById(id);
+   return item&&!item.hidden&&!item.classList.contains('hidden')&&item.style.display!=='none';
+ });
+ module.classList.toggle('hidden',!visible);
+ module.style.display=visible?'':'none';
+}
+
+function nucleoShowMyAccess(tab='permissions'){
+ const user=getSession();
+ if(!user||(!user.permissions&&!user.managedSectors?.length))return;
+ const host=document.getElementById('adminModuleContent');
+ if(!host)return;
+ const navigation={
+  ros:['navAssignedRos','navMySubmittedRos','navRos','navTriage'],
+  pdca:['navSent','navActions','navExternalPdcas'],sac:['navExternalRoControl','navMySacs'],
+  indicators:['navIndicators'],
+  equipment:['navEquipment'],training:['navTraining'],nc:['navNcCapa'],processes:['navProcesses']
+ };
+ window.nucleoManagerModuleKey='';
+ view('adminModuleView');
+ setNav('myAccess');
+ document.getElementById('adminModuleTitle').textContent='Meus acessos';
+ document.getElementById('adminModuleSubtitle').textContent='Permissões confirmadas no seu login.';
+ document.getElementById('adminModuleEyebrow').textContent='';
+ const tabs='<div class="actions" style="grid-column:1/-1"><button type="button" class="btn '+(tab==='permissions'?'primary':'secondary')+'" onclick="nucleoShowMyAccess()">Permissões</button><button type="button" class="btn '+(tab==='sectors'?'primary':'secondary')+'" onclick="nucleoShowMyAccess(\'sectors\')">Meus setores</button></div>';
+ if(tab==='sectors'){
+  host.innerHTML=tabs+'<section class="card" id="mySectorPreferences" style="grid-column:1/-1"><p role="status">Carregando setores…</p></section>';
+  nucleoRenderMySectorPreferences(document.getElementById('mySectorPreferences'));
+  return;
+ }
+ const modules=Object.entries(NUCLEO_PERSON_FEATURES).map(([key,features])=>{
+   const allowed=Object.entries(features).filter(([feature])=>nucleoPersonFeatureAllowed(user,key,feature));
+   if(!allowed.length)return null;
+   const consultation=NUCLEO_ACCESS_CONSULTATIONS[key]?.[0];
+   const actions=[consultation,...(navigation[key]||[])].filter(Boolean)
+     .map(id=>document.getElementById(id))
+     .filter(el=>el&&!el.hidden&&(el.dataset.accessCatalogOnly!==undefined||getComputedStyle(el).display!=='none'&&!el.classList.contains('hidden')));
+   return {title:NUCLEO_PERSON_MODULES[key],allowed,actions};
+ }).filter(Boolean);
+ host.innerHTML=tabs+(modules.length?modules.map(({title,allowed,actions})=>
+   '<section class="card"><h3>'+escapeHtml(title)+'</h3><ul>'+allowed.map(([,definition])=>'<li>'+escapeHtml(definition[0])+'</li>').join('')+
+   '</ul><div class="actions">'+actions.map(el=>'<button type="button" class="btn secondary" data-access-target="'+escapeHtml(el.id)+'">'+escapeHtml(el.querySelector('b')?.textContent||'Abrir')+'</button>').join('')+
+   '</div>'+(!actions.length?'<p class="small">Permissão confirmada. Este módulo ainda não tem uma entrada de menu para este perfil.</p>':'')+'</section>'
+ ).join(''):'<p>Nenhuma função personalizada foi confirmada neste login.</p>');
+ host.querySelectorAll('[data-access-target]').forEach(button=>{
+  button.addEventListener('click',()=>document.getElementById(button.dataset.accessTarget)?.click());
+ });
+}
+
+function nucleoOpenDocumentMenu(){
+ if(!getSession()?.permissions||nucleoPersonFeatureCan('documents','request')||nucleoPersonFeatureCan('documents','prepare')){
+  return showAdminOperationalModule('documents');
+ }
+ return nucleoOpenAccessConsultation('documents');
+}
+function nucleoOpenAnnouncementsMenu(){
+ if(nucleoPersonFeatureCan('announcements','publish')&&isAdmin())return showAnnouncementsAdmin();
+ return nucleoOpenAccessConsultation('announcements');
+}
+
+function nucleoOpenAccessConsultation(module){
+ const entry=NUCLEO_ACCESS_CONSULTATIONS[module];
+ if(!Array.isArray(entry)||!nucleoFeatureRequire(module,'consult'))return;
+ const units=nucleoPersonUnits(getSession());
+ const [navId,title]=entry;
+ const host=document.getElementById('adminModuleContent');
+ if(!host)return;
+ window.nucleoManagerModuleKey='';
+ view('adminModuleView');
+ setNav(navId);
+ document.getElementById('adminModuleTitle').textContent=title;
+ document.getElementById('adminModuleSubtitle').textContent='';
+ document.getElementById('adminModuleEyebrow').textContent='';
+ const label=unit=>unit==='filial'?'Filial':'Matriz';
+ if(module==='users'){
+   const people=getOperationalUsers().filter(person=>!nucleoPersonPermissions(person).sgq&&nucleoPersonUnits(person).some(unit=>units.includes(unit)));
+   host.innerHTML='<ul class="card">'+people.map(person=>'<li><b>'+escapeHtml(person.name||'')+'</b> · '+escapeHtml(person.sector||'')+' · '+escapeHtml(nucleoPersonUnits(person).filter(unit=>units.includes(unit)).map(label).join(' e '))+'</li>').join('')+'</ul>';
+   if(!people.length)host.textContent='Nenhum cadastro disponível. Sincronize para atualizar a consulta.';
+ }else if(module==='sectors'){
+   host.innerHTML=units.map(unit=>{
+     const sectors=unitConfiguration(unit)?.sectorList;
+     const names=normalizeSectorList(sectors);
+     return '<section class="card"><h3>'+label(unit)+'</h3>'+(names.length?'<ul>'+names.map(name=>'<li>'+escapeHtml(name)+'</li>').join('')+'</ul>':'<p>Nenhum setor disponível para consulta.</p>')+'</section>';
+   }).join('');
+ }else{
+   const inUnit=record=>units.includes(explicitRecordUnit(record));
+   let items;
+   if(module==='sac'){
+     const records=getExternalRoControls().filter(r=>inUnit(r)&&sacIsRealSac(r));
+     host.innerHTML=records.length?'<div class="sac-consult-grid">'+records.map(nucleoSacConsultationCard).join('')+'</div>':'<p>Nenhum SAC disponível para consulta.</p>';
+     host.querySelectorAll('[data-sac-consult-open]').forEach(button=>{
+       button.addEventListener('click',()=>openSacOfficialFormPreview(button.dataset.sacConsultOpen,true));
+     });
+     host.querySelectorAll('[data-sac-consult-pdf]').forEach(button=>{
+       button.addEventListener('click',()=>nucleoGenerateSacConsultPdf(button));
+     });
+     return;
+   }else if(module==='documents'){
+     const own=normalizeAnswer(getSession()?.name||'');
+     const requests=getAdminModuleRecords().filter(r=>r.module==='documents'&&inUnit(r)&&own&&normalizeAnswer(r.createdBy||'')===own);
+     items=getStandardDocuments().filter(inUnit).concat(requests).map(r=>[r.title||r.name||r.code||r.documentType,r.status||'']);
+   }else{
+     items=getAnnouncements().filter(a=>announcementMatchesUser(a)&&isAnnouncementCurrentlyActive(a)).map(a=>[a.title,a.message||a.text||a.body||'']);
+   }
+   host.innerHTML=items.length?items.map(([heading,detail])=>
+     '<article class="card"><b>'+escapeHtml(heading||'')+'</b>'+(detail?'<p style="white-space:pre-wrap">'+escapeHtml(detail)+'</p>':'')+'</article>'
+   ).join(''):'<p>Nenhum registro disponível para consulta.</p>';
+ }
+}
+
+function nucleoSacConsultationCard(sac){
+ const form=sac.officialForm||{};
+ const hasAnswers=Object.values(form).some(value=>value!=null&&value!==0&&String(value).trim()!=='');
+ const complete=sacHasFilledForm(sac);
+ const status=complete?'Ficha preenchida totalmente':hasAnswers?'Ficha preenchida parcialmente':'Ficha sem preenchimento';
+ const id=escapeHtml(String(sac.id||''));
+ return `<article class="card sac-consult-card">
+   <div class="sac-consult-header">
+     <div><b>${escapeHtml(sac.ro||'SAC')}</b><div class="small">${escapeHtml(sac.client||sac.cliente||'—')}</div></div>
+     <span class="status-badge ${complete?'approved':hasAnswers?'pending':''}">${status}</span>
+   </div>
+   <div class="small">Direcionado para: ${escapeHtml(sacDirectedSector(sac))}</div>
+   <div class="sac-consult-summary">
+     <div><div class="small">Tratativa</div><b>${escapeHtml(externalTreatmentLabel(sac.treatmentType))}</b></div>
+     <div><div class="small">Prazo</div><b>${escapeHtml(sac.treatmentDeadline?formatDateBR(sac.treatmentDeadline):'—')}</b></div>
+     <div><div class="small">Setor</div><b>${escapeHtml(sac.responsibleSector||'—')}</b></div>
+     <div><div class="small">Última atualização</div><b>${escapeHtml(sac.updatedAt?formatDateTimeBR(sac.updatedAt):'—')}</b></div>
+   </div>
+   <div class="sac-consult-actions">
+     <button type="button" class="btn primary" data-sac-consult-open="${id}">Consultar</button>
+     <button type="button" class="btn secondary" data-sac-consult-pdf="${id}">Gerar PDF</button>
+   </div>
+ </article>`;
+}
+
+async function nucleoGenerateSacConsultPdf(button){
+ if(!nucleoFeatureRequire('sac','consult'))return;
+ const token=getSession()?.authToken;
+ button.disabled=true;
+ try{
+  const result=await portalJsonp({acao:'portal_sac_consult_pdf',id:button.dataset.sacConsultPdf},90000);
+  if(token!==getSession()?.authToken)return;
+  if(!result?.sucesso)throw Error(result?.erro||'Não foi possível gerar o PDF do SAC.');
+  if(!result.base64)throw Error('A integração não retornou a ficha SAC. Confira se o Apps Script atualizado está publicado na URL usada pelo Núcleo.');
+  const raw=atob(result.base64);
+  if(!raw.startsWith('%PDF-'))throw Error('O arquivo retornado não é um PDF válido.');
+  showPdfBlob(new Blob([Uint8Array.from(raw,c=>c.charCodeAt(0))],{type:'application/pdf'}),result.fileName||'SAC.pdf');
+ }catch(error){alert(error.message||String(error));}
+ finally{button.disabled=false;}
 }
 
 function nucleoAnnouncementSelectedUnits(){
@@ -17178,14 +17603,14 @@ function nucleoFeatureEditor(user,parent){
 }
 function nucleoApplyFeatureAccess(){
  if(getSession()?.permissions?.detailVersion!==1)return;
- const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','request'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','publish'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
- Object.entries(nav).forEach(([id,[module,key]])=>{const el=document.getElementById(id);if(el&&!(key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key))){el.style.setProperty('display','none','important');el.classList.add('hidden');}});
+ const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','*'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','*'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
+ Object.entries(nav).forEach(([id,[module,key]])=>{const el=document.getElementById(id);if(el&&!(id==='navMySubmittedRos'?(canConsultRoHistory()||nucleoPersonFeatureCan(module,key)):id==='navDocumentRequests'?['consult','request','prepare'].some(feature=>nucleoPersonFeatureCan(module,feature)):id==='navAnnouncements'?(nucleoPersonFeatureCan(module,'consult')||isAdmin()&&nucleoPersonFeatureCan(module,'publish')):key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key))){el.style.setProperty('display','none','important');el.classList.add('hidden');}});
 }
 
 function nucleoWorkspaceFeature(key,mode){
  const module=key==='nccapa'?'nc':key;
- const maps={documents:{new:'request',mine:'consult',standards:'standards',deliveries:'history',doc_analysis:'prepare',doc_preparation:'prepare',doc_ready:'deliver',history:'consult'},processes:{new:'edit',published:'consult',review:'review',pending:'review',history:'history',templates:'templates'},equipment:{new:'edit',active:'consult',pending:'pending',history:'history'},training:{new:'edit',active:'consult',pending:'pending',history:'history'},nccapa:{new_rnc:'edit',new_internal:'edit',active:'consult',history:'consult',suppliers:'edit',supplier_indicators:'consult'}};
- return [module,maps[key]?.[mode]||'consult'];
+ const maps={documents:{new:'request',mine:'consult',standards:'standards',deliveries:'history',doc_analysis:'prepare',doc_preparation:'prepare',doc_ready:'deliver',history:'consult'},processes:{new:'edit',master:'consult',published:'consult',review:'review',pending:'review',history:'history',adopt:'edit',import:'edit',nomenclature:'edit',templates:'templates'},equipment:{new:'edit',active:'consult',pending:'pending',history:'history'},training:{new:'edit',active:'consult',pending:'pending',history:'history'},nccapa:{new_rnc:'edit',new_internal:'edit',active:'consult',history:'consult',suppliers:'edit',supplier_indicators:'consult'}};
+ return [module,maps[key]?.[mode]||(key==='processes'?'':'consult')];
 }
 function nucleoWorkspaceAllowed(key,mode){const [module,feature]=nucleoWorkspaceFeature(key,mode);return nucleoPersonFeatureCan(module,feature);}
 function nucleoApplyFeatureButtons(){
@@ -17429,8 +17854,8 @@ function nucleoManagerQuery(){
 function nucleoManagerMatchQuery(record,context){
  if(!context.active)return true;
  const state=context.state,unit=state.unit==='all'?'':explicitRecordUnit(record);
- if(unit&&unit!==state.unit)return false;
- if(state.sector==='all')return true;
+ if(state.unit!=='all'&&(unit||record.module==='equipment')&&unit!==state.unit)return false;
+ if(state.sector==='all'||record.module==='equipment')return true;
  const own=[record.responsibleSector,record.decisionSector,record.setor,record.sector,record.__assignedSector,...(Array.isArray(record.responsibleSectors)?record.responsibleSectors:[])].filter(Boolean);
  const ro=String(record.roNumber||record.ro||record.roKey||record.numero||record.roId||'').split('::')[0],linked=context.roSectors.get(ro),selected=normalizeAnswer(state.sector);
  return own.some(s=>normalizeAnswer(s)===selected)||!!linked?.has(selected)||(!own.length&&!linked?.size);
@@ -17443,7 +17868,7 @@ function nucleoManagerScopeControl(){
  let host=document.getElementById('managerGlobalScope');if(!host){host=document.createElement('div');host.id='managerGlobalScope';host.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px;margin:10px 0;background:#eef4ff;border:1px solid #d9e5f5;border-radius:12px';const top=document.querySelector('.workspace > .topbar')||document.getElementById('listView')?.parentElement;if(!top)return;if(top.tagName==='HEADER')top.after(host);else top.prepend(host);}
  host.hidden=!nucleoHasManagedScope();host.style.display=nucleoHasManagedScope()?'flex':'none';if(!nucleoHasManagedScope())return;
  const state=nucleoManagerScopeState(),sectors=nucleoVisibleManagerSectors(true,managedSectorsForCurrentUser(),[]),units=nucleoPersonUnits(getSession());if(!sectors.includes(state.sector))state.sector='all';if(!units.includes(state.unit))state.unit='all';
- host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span><button class="btn secondary" type="button" onclick="nucleoOpenManagerEmails()">Recebimento de e-mails</button>';
+ host.innerHTML='<b>Visualizar:</b><label>Setor <select id="managerGlobalSector" aria-label="Setor em todas as áreas"><option value="all">Todos os meus setores</option>'+sectors.map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="managerGlobalUnit" aria-label="Unidade em todas as áreas"><option value="all">Todas as unidades permitidas</option>'+units.map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label><span class="small">Filtro geral de consulta</span><button class="btn secondary" type="button" onclick="nucleoOpenManagerEmails()">Meus setores</button>';
  document.getElementById('managerGlobalSector').value=state.sector;document.getElementById('managerGlobalUnit').value=state.unit;
  ['managerGlobalSector','managerGlobalUnit'].forEach(id=>document.getElementById(id).onchange=nucleoManagerChangeScope);
  nucleoManagerInstallReadScopes();nucleoManagerInstallRenderScopes();
@@ -17478,19 +17903,57 @@ function nucleoToggleKpi(id,checked){nucleoKpiDraft=nucleoKpiDraft.filter(x=>x!=
 function nucleoMoveKpi(id,delta){const i=nucleoKpiDraft.indexOf(id),j=i+delta;if(i<0||j<0||j>=nucleoKpiDraft.length)return;[nucleoKpiDraft[i],nucleoKpiDraft[j]]=[nucleoKpiDraft[j],nucleoKpiDraft[i]];nucleoRenderKpiEditor();}
 async function nucleoSaveKpis(){const button=document.getElementById('overviewIndicatorSave'),status=document.getElementById('overviewIndicatorSaveStatus');button.disabled=true;status.textContent='Salvando na base central…';try{const result=await portalJsonp({acao:'portal_save_overview_preferences',indicators:JSON.stringify(nucleoKpiDraft)},60000);if(!result?.sucesso)throw new Error(result?.erro||'A base central não confirmou a preferência.');setSession({...getSession(),overviewIndicators:result.indicators});document.getElementById('overviewIndicatorEditor').remove();renderCurrentOverview();alert('Indicadores salvos para seu login.');}catch(e){status.textContent='Não foi possível salvar: '+e.message;}finally{button.disabled=false;}}
 
-async function nucleoOpenManagerEmails(){
- try{const result=await portalJsonp({acao:'portal_manager_email_preferences'},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível carregar.');const old=document.getElementById('managerEmailEditor');old?.remove();const box=document.createElement('div');box.id='managerEmailEditor';box.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';box.innerHTML='<div style="background:white;padding:24px;border-radius:12px;max-width:650px;max-height:85vh;overflow:auto"><h3>Recebimento de e-mails por setor</h3><p>Avisos de triagem como gestor. As notificações no Núcleo continuam disponíveis.</p>'+result.scopes.map(m=>{const key=m.key;return '<label style="display:block;padding:12px"><input type="checkbox" data-manager-email="'+escapeHtml(key)+'" style="width:22px;height:22px" '+(result.preferences[key]!==false?'checked':'')+'> '+escapeHtml(m.sector)+' · '+(m.unit==='filial'?'Filial — Linhares':'Matriz')+'</label>';}).join('')+'<p role="status" id="managerEmailStatus"></p><button class="btn primary" onclick="nucleoSaveManagerEmails(this)">Salvar</button> <button class="btn secondary" onclick="document.getElementById(\'managerEmailEditor\').remove()">Cancelar</button></div>';document.body.appendChild(box);}catch(err){alert(err.message);}
+function nucleoOpenManagerEmails(){nucleoShowMyAccess('sectors');}
+
+async function nucleoRenderMySectorPreferences(host){
+ if(!host)return;
+ const token=getSession()?.authToken;
+ const current=()=>host.isConnected&&getSession()?.authToken===token;
+ try{
+  const result=await portalJsonp({acao:'portal_manager_email_preferences'},60000);
+  if(!current())return;
+  if(!result?.sucesso)throw Error(result?.erro||'Não foi possível carregar os setores.');
+  const scopes=result.scopes||[];
+  if(!scopes.length){host.textContent='Nenhum setor acompanhado no seu cadastro.';return;}
+  const sectors=[...new Set(scopes.map(scope=>scope.sector))];
+  host.innerHTML='<h3>Meus setores</h3><p>Você acompanha '+escapeHtml(sectors.join(', '))+'.</p>'+
+   '<p>Escolha como receber avisos de direcionamento de R.O. em cada setor. A opção de e-mail controla as cópias de acompanhamento do gestor.</p>'+
+   '<form><div style="display:grid;gap:8px">'+scopes.map(scope=>{
+     const label=scope.sector+' · '+(scope.unit==='filial'?'Filial':'Matriz');
+     return '<fieldset style="display:flex;flex-wrap:wrap;gap:12px;border:1px solid #dce5ee;border-radius:8px"><legend>'+escapeHtml(label)+'</legend>'+
+       '<label><input type="checkbox" data-sector-email="'+escapeHtml(scope.key)+'" '+(result.preferences?.[scope.key]!==false?'checked':'')+'> Receber e-mail</label>'+
+       '<label><input type="checkbox" data-sector-nucleus="'+escapeHtml(scope.key)+'" '+(result.nucleusPreferences?.[scope.key]!==false?'checked':'')+'> Notificar no Núcleo</label></fieldset>';
+    }).join('')+'</div><p role="status"></p><button class="btn primary" type="submit">Salvar preferências</button></form>';
+  host.querySelector('form').addEventListener('submit',async event=>{
+   event.preventDefault();
+   const form=event.currentTarget,button=form.querySelector('button'),status=form.querySelector('[role="status"]');
+   const read=(selector,key)=>Object.fromEntries([...form.querySelectorAll(selector)].map(input=>[input.dataset[key],input.checked]));
+   const data=read('[data-sector-email]','sectorEmail'),nucleusData=read('[data-sector-nucleus]','sectorNucleus');
+   button.disabled=true;
+   status.textContent='Salvando preferências…';
+   try{
+    const saved=await portalJsonp({acao:'portal_manager_email_preferences',data:JSON.stringify(data),nucleusData:JSON.stringify(nucleusData)},60000);
+    if(!current())return;
+    if(!saved?.sucesso||!saved.nucleusPreferences)throw Error(saved?.erro||'A base não confirmou as preferências dos dois canais.');
+    setSession({...getSession(),sectorNucleusPreferences:saved.nucleusPreferences});
+    refreshNotificationBell();
+    renderNotificationPanel();
+    status.textContent='Preferências salvas.';
+   }catch(error){status.textContent=error.message;}
+   finally{button.disabled=false;}
+  });
+ }catch(error){if(current())host.textContent=error.message;}
 }
-async function nucleoSaveManagerEmails(button){button.disabled=true;const status=document.getElementById('managerEmailStatus');status.textContent='Salvando na base central…';try{const data={};document.querySelectorAll('[data-manager-email]').forEach(el=>data[el.dataset.managerEmail]=el.checked);const result=await portalJsonp({acao:'portal_manager_email_preferences',data:JSON.stringify(data)},60000);if(!result?.sucesso)throw new Error(result?.erro||'Salvamento não confirmado.');status.textContent='Preferências salvas na base central.';}catch(err){status.textContent=err.message;}finally{button.disabled=false;}}
 
 var nucleoMyTeamData=[];
 async function nucleoOpenMyTeam(){
  const old=document.getElementById('myTeamOverlay');old?.remove();const overlay=document.createElement('div');overlay.id='myTeamOverlay';overlay.style.cssText='position:fixed;inset:0;background:#0008;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';overlay.innerHTML='<div style="background:white;padding:24px;border-radius:16px;width:min(850px,96vw);max-height:85vh;overflow:auto"><div style="display:flex;justify-content:space-between;align-items:center"><h3>Minha equipe</h3><button class="btn secondary" onclick="document.getElementById(\'myTeamOverlay\').remove()">Fechar</button></div><p class="small">Gestores e colegas com cadastro aprovado e ativo nos seus setores.</p><div id="myTeamFilters"></div><div id="myTeamContents" role="status">Carregando equipes da base central…</div></div>';document.body.appendChild(overlay);
- try{const result=await portalJsonp({acao:'portal_my_team'},60000);if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível carregar a equipe.');if(!overlay.isConnected)return;nucleoMyTeamData=result.teams||[];document.getElementById('myTeamFilters').innerHTML='<div class="actions"><label>Setor <select id="myTeamSector"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoMyTeamData.map(t=>t.sector))].map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="myTeamUnit"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoMyTeamData.map(t=>t.unit))].map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label></div>';['myTeamSector','myTeamUnit'].forEach(id=>document.getElementById(id).onchange=nucleoRenderMyTeam);nucleoRenderMyTeam();}catch(err){if(overlay.isConnected)document.getElementById('myTeamContents').textContent='Não foi possível consultar: '+err.message;}
+ try{const result=await nucleoLoadTeamProfiles();if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível carregar a equipe.');if(!overlay.isConnected)return;nucleoMyTeamData=result.teams||[];document.getElementById('myTeamFilters').innerHTML='<div class="actions"><label>Setor <select id="myTeamSector"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoMyTeamData.map(t=>t.sector))].map(s=>'<option value="'+escapeHtml(s)+'">'+escapeHtml(s)+'</option>').join('')+'</select></label><label>Unidade <select id="myTeamUnit"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoMyTeamData.map(t=>t.unit))].map(u=>'<option value="'+escapeHtml(u)+'">'+(u==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label></div>';['myTeamSector','myTeamUnit'].forEach(id=>document.getElementById(id).onchange=nucleoRenderMyTeam);nucleoRenderMyTeam();}catch(err){if(overlay.isConnected)document.getElementById('myTeamContents').textContent='Não foi possível consultar: '+err.message;}
 }
 function nucleoRenderMyTeam(){
  const host=document.getElementById('myTeamContents');if(!host)return;const sector=document.getElementById('myTeamSector')?.value||'all',unit=document.getElementById('myTeamUnit')?.value||'all',teams=nucleoMyTeamData.filter(t=>(sector==='all'||t.sector===sector)&&(unit==='all'||t.unit===unit));
- host.innerHTML=teams.map(t=>'<section style="border:1px solid #dce5ee;border-radius:12px;padding:18px;margin-top:16px"><h3 style="margin:0">'+escapeHtml(t.sector)+'</h3><p class="small">'+(t.unit==='filial'?'Filial — Linhares':'Matriz')+' · '+t.people.length+' pessoa(s)</p>'+(!t.people.some(p=>p.manager)?'<p class="small">Nenhum gestor cadastrado para esta equipe.</p>':'')+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'+t.people.map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div style="padding:14px;border-radius:10px;background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante da equipe'))+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div>';}).join('')+'</div></section>').join('')||'<p>Nenhuma equipe disponível para esta seleção.</p>';
+ const directory=nucleoTeamDirectoryById();
+ host.innerHTML=teams.map(t=>'<section style="border:1px solid #dce5ee;border-radius:12px;padding:18px;margin-top:16px"><h3 style="margin:0">'+escapeHtml(t.sector)+'</h3><p class="small">'+(t.unit==='filial'?'Filial — Linhares':'Matriz')+' · '+t.people.length+' pessoa(s)</p>'+(!t.people.some(p=>p.manager)?'<p class="small">Nenhum gestor cadastrado para esta equipe.</p>':'')+'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">'+t.people.map(person=>nucleoTeamPersonCard(person,directory)).join('')+'</div></section>').join('')||'<p>Nenhuma equipe disponível para esta seleção.</p>';
 }
 
 var nucleoAiScoreState;
@@ -17597,14 +18060,14 @@ async function finalizeAndSendSac(id){
  }catch(e){status.textContent=e.message;}
 }
 
-var nucleoInlineTeamKey='',nucleoInlineTeamPromise=null,nucleoInlineTeamAt=0,nucleoInlineTeamData=[];
+var nucleoInlineTeamExpanded=false,nucleoInlineTeamKey='',nucleoInlineTeamPromise=null,nucleoInlineTeamAt=0,nucleoInlineTeamData=[];
 async function nucleoEnsureInlineTeam(){
  const page=document.getElementById('listView');if(!page)return;
  let box=document.getElementById('overviewTeam');if(!box){box=document.createElement('section');box.id='overviewTeam';box.className='overview-panel';box.style.marginTop='16px';box.innerHTML='<h3 style="margin:0 0 10px">Minha equipe</h3><div id="overviewTeamFilters" class="actions" style="align-items:center"></div><div id="overviewTeamPeople" role="status">Carregando equipe…</div>';page.appendChild(box);}
- const key=JSON.stringify([getSession()?.email,getSession()?.personId,getSession()?.name,getSession()?.token]);
+ const key=JSON.stringify([getSession()?.email,getSession()?.personId,getSession()?.name,getSession()?.authToken]);
  if(key===nucleoInlineTeamKey&&(nucleoInlineTeamPromise||Date.now()-nucleoInlineTeamAt<60000))return;
  nucleoInlineTeamKey=key;nucleoInlineTeamAt=0;document.getElementById('overviewTeamPeople').textContent='Carregando equipe…';
- const request=portalJsonp({acao:'portal_my_team'},60000);nucleoInlineTeamPromise=request;
+ const request=nucleoLoadTeamProfiles();nucleoInlineTeamPromise=request;
  try{const result=await request;if(key!==nucleoInlineTeamKey)return;if(!result?.sucesso)throw Error(result?.erro||'Consulta não concluída.');nucleoInlineTeamData=result.teams||[];nucleoInlineTeamAt=Date.now();
  document.getElementById('overviewTeamFilters').innerHTML='<label>Setor <select id="overviewTeamSector" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.sector))].map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('')+'</select></label><label>Unidade <select id="overviewTeamUnit" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.unit))].map(t=>'<option value="'+escapeHtml(t)+'">'+(t==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label>';nucleoRenderInlineTeam(false);
  }catch(e){if(key===nucleoInlineTeamKey)document.getElementById('overviewTeamPeople').textContent='Não foi possível carregar a equipe. Clique em Atualizar para tentar novamente.';}finally{if(nucleoInlineTeamPromise===request)nucleoInlineTeamPromise=null;}
@@ -17622,12 +18085,51 @@ function nucleoUniqueTeamPeople(teams,sector,unit){
  });
  return [...people.values()];
 }
+async function nucleoLoadTeamProfiles(){
+ const token=getSession()?.authToken;
+ const result=await portalJsonp({acao:'portal_my_team'},60000);
+ if(getSession()?.authToken!==token)throw Error('A sessão mudou durante a consulta.');
+ return result;
+}
+
+function nucleoTeamRegisteredUnits(user){
+ if(!user)return [];
+ const units=(Array.isArray(user.accessUnits)?user.accessUnits:[]).map(value=>normalizeAnswer(value)==='todas'?'todas':explicitPortalUnit(value)).filter(Boolean);
+ if(units.includes('todas'))return ['matriz','filial'];
+ if(units.length)return units;
+ if(user.role==='admin'||normalizeAnswer(user.unit)==='todas')return ['matriz','filial'];
+ const unit=explicitPortalUnit(user.unit)||(user.role==='quality'?'filial':'');
+ return unit?[unit]:[];
+}
+
+function nucleoTeamDirectoryById(){
+ let users=[];
+ try{const stored=JSON.parse(localStorage.getItem(USERS_KEY)||'[]');if(Array.isArray(stored))users=stored;}catch(_){}
+ const session=getSession();
+ const byId=new Map(users.filter(user=>user?.personId).map(user=>[String(user.personId),user]));
+ if(session?.personId)byId.set(String(session.personId),session);
+ return byId;
+}
+
+function nucleoTeamPersonCard(person,directory=new Map()){
+ const registered=directory.get(String(person.personId||person.personKey||''))||(person.self?getSession():null);
+
+ const {name}=splitPersonNameDescription(person.name,person.description||undefined);
+ const units=person.accessUnits?.length?person.accessUnits:nucleoTeamRegisteredUnits(registered);
+ const matriz=units.includes('matriz'),filial=units.includes('filial');
+ const unitLabel=matriz&&filial?'Matriz e Filial':matriz?'Matriz':filial?'Filial':'Unidade não informada';
+ return '<div class="inline-team-person" style="background:'+(person.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(person.avatar)+
+  '<div><strong>'+escapeHtml(name)+'</strong><div class="small">'+escapeHtml(person.primarySector||registered?.sector||'Setor não informado')+
+  '</div><div class="small">'+escapeHtml(unitLabel)+'</div></div></div>';
+}
 function nucleoRenderInlineTeam(expanded){
+ nucleoInlineTeamExpanded=expanded;
  const host=document.getElementById('overviewTeamPeople');if(!host)return;
  const sector=document.getElementById('overviewTeamSector')?.value||'all',unit=document.getElementById('overviewTeamUnit')?.value||'all';
  const people=nucleoUniqueTeamPeople(nucleoInlineTeamData,sector,unit);
  const width=host.clientWidth||window.innerWidth,columns=width<520?1:width<850?2:4,limit=columns*2;
- host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(p=>{const parts=splitPersonNameDescription(p.name,p.description||undefined);return '<div class="inline-team-person" style="background:'+(p.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(p.avatar)+'<div><strong>'+escapeHtml(parts.name)+'</strong>'+(p.self?' <span class="small">(você)</span>':'')+'<div class="small">'+(p.manager?'Gestor':escapeHtml(p.jobTitle||p.functionLabel||'Integrante'))+'</div><div class="small">'+escapeHtml(p.teamMemberships.map(m=>m.sector+' · '+(m.unit==='filial'?'Filial':'Matriz')).join(' / '))+'</div>'+(p.jobTitle&&p.manager?'<div class="small">'+escapeHtml(p.jobTitle)+'</div>':'')+(p.workDescription?'<div class="small">'+escapeHtml(p.workDescription)+'</div>':'')+(parts.description?'<div class="small">'+escapeHtml(parts.description)+'</div>':'')+'</div></div>';}).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
+ const directory=nucleoTeamDirectoryById();
+ host.innerHTML='<div class="inline-team-grid">'+people.slice(0,expanded?people.length:limit).map(person=>nucleoTeamPersonCard(person,directory)).join('')+'</div>'+(people.length>limit?'<button class="btn secondary" style="margin-top:12px" onclick="nucleoRenderInlineTeam('+(!expanded)+')">'+(expanded?'Ver menos':'Ver mais')+'</button>':'')+(!people.length?'<p class="small">Nenhuma equipe disponível para esta seleção.</p>':'');
  const grid=host.querySelector('.inline-team-grid');grid.style.gridTemplateColumns='repeat('+columns+',minmax(0,1fr))';
 }
 window.addEventListener('resize',()=>{clearTimeout(window.nucleoTeamResizeTimer);window.nucleoTeamResizeTimer=setTimeout(()=>{if(document.getElementById('overviewTeamPeople'))nucleoRenderInlineTeam(false);},150);});
