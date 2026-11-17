@@ -3454,6 +3454,7 @@ html[data-nucleo-theme="dark"] :is(.side-item,.small,.help,.crumbs,.label){color
     <button class="btn secondary" type="button" onclick="document.getElementById('nucleoSystemEmailHistory').scrollIntoView()">Histórico de e-mails</button>
   </nav>
 
+  <div id="nucleoSistemaMonitoramento" hidden>
   <form class="actions" onsubmit="event.preventDefault();nucleoOpenSistemaTeste()">
     <label>Dia <input type="date" id="nucleoSistemaDay" required></label>
     <button class="btn primary" type="submit">Consultar</button>
@@ -3467,6 +3468,7 @@ html[data-nucleo-theme="dark"] :is(.side-item,.small,.help,.crumbs,.label){color
   <div class="system-table"><table><thead><tr><th>Horário</th><th>Conta</th><th>Categoria</th><th>Operação</th></tr></thead><tbody id="nucleoSistemaErrors"></tbody></table></div>
   <h3>Última atividade por conta</h3>
   <div class="system-table"><table><thead><tr><th>Data e horário</th><th>Conta</th></tr></thead><tbody id="nucleoSistemaUsers"></tbody></table></div>
+  </div>
     <div class="settings-block" id="nucleoSystemEmailHistory">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
         <div><h3 style="margin:0">Histórico de e-mails</h3><div class="help">Últimos registros informados pela base central.</div></div>
@@ -6221,7 +6223,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/indicators/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app-5s-producao-v122.js"></script>
+<script src="assets/nucleo-app-producao-sistema-v124.js"></script>
 <script src="assets/api-source-lock-v20.js?v=20261110-periodo-central-v72"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
