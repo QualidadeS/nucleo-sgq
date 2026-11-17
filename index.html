@@ -7789,4 +7789,60 @@ body.nucleo-hide-sac-indicators [data-nucleo-sac-indicator="1"]{
   #roListView #assignedFilterButton{display:inline-flex}
 }
 </style>
+<style id="nucleo-dark-theme-v123">
+html[data-nucleo-theme="dark"] {
+  --nucleo-deep:#b9dcfa;
+  --nucleo-main:#8bcaff;
+  --nucleo-text:#eef3fa;
+  --nucleo-muted:#b7c8dc;
+  --nucleo-nav:#111c2e;
+  --nucleo-nav-hover:#20334c;
+  --nucleo-nav-active:#284361;
+}
+html[data-nucleo-theme="dark"] body {background:var(--bg);color:var(--text)}
+html[data-nucleo-theme="dark"] .workspace {background:var(--bg)}
+html[data-nucleo-theme="dark"] .sidebar {
+  background:var(--nucleo-nav) !important;
+  border-color:var(--line) !important;
+  box-shadow:none;
+}
+html[data-nucleo-theme="dark"] .sidebar .brand-logo-wrap {border-color:var(--line) !important}
+html[data-nucleo-theme="dark"] .sidebar :is(.brand-sub,.side-copy,.side-chevron,.side-module-arrow) {
+  color:var(--nucleo-muted) !important;
+}
+html[data-nucleo-theme="dark"] .sidebar .side-kicker {color:var(--nucleo-main) !important}
+html[data-nucleo-theme="dark"] .sidebar :is(.side-num,.sidebar-collapse-btn,.sidebar-icon-btn) {
+  background:var(--soft) !important;
+  border-color:var(--line) !important;
+  color:var(--nucleo-deep) !important;
+}
+html[data-nucleo-theme="dark"] .sidebar :is(.side-item,.side-module-head,.sidebar-collapse-btn,.sidebar-icon-btn):hover {
+  background:var(--nucleo-nav-hover) !important;
+}
+html[data-nucleo-theme="dark"] .sidebar :is(.side-item,.side-module-head,.sidebar-icon-btn).active {
+  background:var(--nucleo-nav-active) !important;
+}
+html[data-nucleo-theme="dark"] .sidebar .side-module-body {border-color:var(--line)}
+html[data-nucleo-theme="dark"] .sidebar .sidebar-bottom-icons {
+  background:var(--nucleo-nav) !important;
+  border-color:var(--line) !important;
+}
+html[data-nucleo-theme="dark"] .topbar {
+  background:var(--nucleo-nav) !important;
+  border-color:var(--line) !important;
+}
+html[data-nucleo-theme="dark"] .topbar .crumbs {color:var(--muted) !important}
+html[data-nucleo-theme="dark"] .topbar #crumbCurrent {color:var(--text) !important}
+html[data-nucleo-theme="dark"] .topbar :is(.top-btn,.notification-bell,.mobile-menu-btn),
+html[data-nucleo-theme="dark"] .workspace .btn.secondary {
+  background:var(--soft) !important;
+  border-color:var(--line) !important;
+  color:var(--text) !important;
+}
+html[data-nucleo-theme="dark"] .topbar :is(.top-btn,.notification-bell,.mobile-menu-btn):hover,
+html[data-nucleo-theme="dark"] .workspace .btn.secondary:hover {background:var(--nucleo-nav-active) !important}
+html[data-nucleo-theme="dark"] .workspace :is(input,select,textarea)::placeholder {color:var(--muted);opacity:1}
+html[data-nucleo-theme="dark"] .workspace :is(button,input,select,textarea,a):focus-visible,
+html[data-nucleo-theme="dark"] .sidebar button:focus-visible {outline:2px solid var(--nucleo-main) !important;outline-offset:2px}
+</style>
 </body></html>
