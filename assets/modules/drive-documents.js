@@ -260,7 +260,7 @@ function nucleoDriveSectors(ro){
  nucleoDriveCandidates().filter(r=>String(r.numero||r.id)===ro).forEach(r=>{const tri=getRoTriageRecord(r),base=baseTriageSituation(r);if(tri?.decision==='directed')sectors.push(tri.responsibleSector||tri.sector||tri.setor||tri.directedSector);if(base.decision==='directed')sectors.push(base.sector);});
  return [...new Set(sectors.filter(Boolean).flatMap(x=>typeof parseResponsibleSectors==='function'?parseResponsibleSectors(x):[x]))];
 }
-function nucleoDriveRenderConfirmation(){const p=nucleoDriveState.parsed||{};document.getElementById('ndPdcaConfirm').innerHTML='<h4>'+nucleoDriveEscape(nucleoDriveState.selectedPdf.name)+'</h4><p class="small">Números encontrados: '+nucleoDriveEscape((p.numbers||[]).join(', ')||'nenhum')+'. Confirme todos os vínculos abaixo.</p><div class="grid"><label>Responsável<input id="ndResponsible" value="'+nucleoDriveEscape(p.responsible||'')+'"></label><label>Cliente<input id="ndClient" value="'+nucleoDriveEscape(p.client||'')+'"></label><label>Data do documento<input id="ndDate" value="'+nucleoDriveEscape(p.date||'')+'"></label></div><div id="ndLinks"></div><button class="btn secondary" onclick="nucleoDriveAddLink()">Adicionar R.O. / setor</button> <button class="btn primary" id="ndSavePdca" onclick="nucleoDriveSavePdca()">Confirmar e armazenar resposta</button>';nucleoDriveRenderLinks();}
+function nucleoDriveRenderConfirmation(){const p=nucleoDriveState.parsed||{};document.getElementById('ndPdcaConfirm').innerHTML='<h4>'+nucleoDriveEscape(nucleoDriveState.selectedPdf.name)+'</h4><p class="small">Números encontrados: '+nucleoDriveEscape((p.numbers||[]).join(', ')||'nenhum')+'. Confirme todos os vínculos abaixo.</p><div class="grid"><label>Responsável<input id="ndResponsible" value="'+nucleoDriveEscape(p.responsible||'')+'"></label><label>Cliente<input id="ndClient" value="'+nucleoDriveEscape(p.client||'')+'"></label><label>Data do documento<input id="ndDate" value="'+nucleoDriveEscape(p.date||'')+'"></label></div><div id="ndLinks"></div><button class="btn secondary" onclick="nucleoDriveAddLink()">Adicionar R.O. / setor</button> <button class="btn primary" id="ndSavePdca" onclick="nucleoDriveSavePdca()">Confirmar e armazenar resposta</button>'+(nucleoPersonFeatureCan('pdca','present')?'<label style="display:flex;align-items:center;gap:8px;margin-top:12px"><input type="checkbox" id="ndMarkPresented" style="width:auto"> Marcar como apresentada ao armazenar (todos os vínculos acima)</label>':'');nucleoDriveRenderLinks();}
 function nucleoDriveAddLink(){nucleoDriveState.links.push({ro:'',sector:nucleoDriveState.parsed?.sector||''});nucleoDriveRenderLinks();}
 function nucleoDriveRenderLinks(){const candidates=nucleoDriveCandidates();document.getElementById('ndLinks').innerHTML=nucleoDriveState.links.map((l,i)=>{const directed=nucleoDriveSectors(l.ro);const sectors=[...new Set(directed.concat(getConfiguredSectors(nucleoDriveState.unit)))];const identified=l.sector||nucleoDriveState.parsed?.sector||'';const actual=directed.find(x=>sectorCompareKey(x)===sectorCompareKey(identified));const chosen=l.sectorConfirmed?sectors.find(x=>sectorCompareKey(x)===sectorCompareKey(l.sector)):actual;l.sector=chosen||(!identified&&directed.length===1?directed[0]:'');return '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">'+(l.matchWarning&&!l.ro?'<p class="small" style="width:100%;color:#9b3b12">'+nucleoDriveEscape('R.O. '+l.identifiedNumber+' '+l.identifiedOrigin+' — '+l.matchWarning)+'</p>':'')+(!l.sector?'<p class="small" style="width:100%">Setor direcionado não identificado. Selecione o setor.</p>':'')+'<select onchange="nucleoDriveState.links['+i+'].ro=this.value;nucleoDriveState.links['+i+'].sector=\'\';nucleoDriveState.links['+i+'].sectorConfirmed=false;nucleoDriveRenderLinks()"><option value="">Selecione a R.O.</option>'+candidates.map(r=>{const key=r.numero||r.id;return '<option value="'+nucleoDriveEscape(key)+'" '+(key===l.ro?'selected':'')+'>'+nucleoDriveEscape(key+' · '+(r.cliente||''))+'</option>';}).join('')+'</select><select onchange="nucleoDriveState.links['+i+'].sector=this.value;nucleoDriveState.links['+i+'].sectorConfirmed=true;nucleoDriveRenderLinks()"><option value="">Setor direcionado</option>'+sectors.map(sector=>'<option '+(sectorCompareKey(sector)===sectorCompareKey(l.sector)?'selected':'')+' value="'+nucleoDriveEscape(sector)+'">'+nucleoDriveEscape(sector)+'</option>').join('')+'</select><button class="btn secondary" onclick="nucleoDriveState.links.splice('+i+',1);nucleoDriveRenderLinks()">Remover</button></div>';}).join('');nucleoDriveUpdateClient();}
 function nucleoDriveUpdateClient(){
@@ -272,6 +272,8 @@ async function nucleoDriveSavePdca(){if(!nucleoFeatureRequire('pdca','import'))r
  const btn=document.getElementById('ndSavePdca');if(!btn||nucleoDriveState.busy)return;btn.disabled=true;
  let status=document.getElementById('ndImportResult');if(!status){status=document.createElement('p');status.id='ndImportResult';status.setAttribute('role','status');btn.after(status);}status.textContent='Conferindo vínculos…';status.scrollIntoView({behavior:'smooth',block:'center'});
  let stored=false;
+ const markPresented=Boolean(document.getElementById('ndMarkPresented')?.checked&&nucleoPersonFeatureCan('pdca','present'));
+ const importToken=getSession()?.authToken;
  try{
   if(!nucleoDriveState.links.length||nucleoDriveState.links.some(l=>!l.ro||!l.sector))throw new Error('Selecione a R.O. e o setor de cada vínculo.');
   if(!confirm('Confirma estes vínculos?\n'+nucleoDriveState.links.map(l=>l.ro+' — '+l.sector).join('\n'))){status.textContent='Confirmação cancelada. Nenhuma resposta foi armazenada.';return;}
@@ -281,10 +283,26 @@ async function nucleoDriveSavePdca(){if(!nucleoFeatureRequire('pdca','import'))r
   if(selected.fileId){params.fileId=selected.fileId;nucleoDriveState.busy=true;try{result=await nucleoDriveApi('nucleo_drive_pdca',{...params,eventoId:'ND-'+Date.now()+'-'+Math.random().toString(36).slice(2)},120000);}finally{nucleoDriveState.busy=false;}}
   else{params.fileData=await fileToBase64(selected.file);params.fileName=selected.name;result=await nucleoDriveMutation('nucleo_drive_pdca',params);}
   if(!result?.record||result.record.importComplete!==true||!Array.isArray(result.sentRecords)||!result.sentRecords.length)throw new Error('A base não confirmou a inclusão em PDCAs recebidos. Confira se a versão atual do Apps Script foi publicada antes de tentar novamente.');
+  if(getSession()?.authToken!==importToken)throw new Error('A sessão mudou. Sincronize para conferir a importação.');
   stored=true;
   const existing=getSentPdcas(),byId=new Map(existing.map(x=>[x.id,x]));result.sentRecords.forEach(x=>byId.set(x.id,x));localStorage.setItem(SENT_PDCA_KEY,JSON.stringify([...byId.values()]));
   const files=nucleoDriveState.pdcaFiles.filter(x=>x.id!==result.record.id);files.push(result.record);nucleoDriveState.pdcaFiles=files;nucleoDriveState.previousId='';nucleoDriveState.selectedPdf=null;nucleoDriveState.links=[];nucleoDriveState.parsed=null;
+  const failedPresentations=[];
+  if(markPresented){
+    status.textContent='PDF armazenado. Registrando a apresentação…';
+    for(const pdca of result.sentRecords){
+      if(getSession()?.authToken!==importToken)return;
+      try{await nucleoSavePdcaPresented(pdca);}
+      catch(error){failedPresentations.push(pdca.ro+' · '+(pdca.setor||'')+' — '+error.message);}
+    }
+  }
+  if(getSession()?.authToken!==importToken)return;
   nucleoDriveRenderPdca();nucleoDriveSavedNotice(savedRos,result.record.fileName,result.record.id);nucleoDriveStatus(result.alreadyLinked?'Este PDF já estava vinculado. Registro localizado em PDCAs recebidos.':'PDCA confirmado em PDCAs recebidos.');
+  if(markPresented){
+    nucleoDriveStatus(failedPresentations.length
+      ? 'PDF armazenado. Apresentação pendente em '+failedPresentations.join('; ')+'. Registre pela tela de R.O.s atribuídas.'
+      : 'PDF armazenado e apresentação confirmada.');
+  }
  }catch(e){status.textContent='Não foi possível concluir: '+e.message;status.style.color='#b42318';status.scrollIntoView({behavior:'smooth',block:'center'});nucleoDriveStatus(e.message);}
  finally{if(!stored)btn.disabled=false;}
 }
