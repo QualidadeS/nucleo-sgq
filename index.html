@@ -4715,6 +4715,7 @@ Diretoria"></textarea>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
     <button id="sacTrackTabActive" class="btn primary" type="button" onclick="setSacTrackingTab('active')">Em andamento</button>
     <button id="sacTrackTabHistory" class="btn secondary" type="button" onclick="setSacTrackingTab('history')">Histórico</button>
+    <button id="sacTrackTabRework" class="btn secondary" type="button" onclick="setSacTrackingTab('rework')">Retrabalho / reposição</button>
     <button id="sacTrackTabPdf" class="btn secondary" type="button" onclick="setSacTrackingTab('pdf')">PDFs do SAC</button>
   </div>
   <div id="sacTrackingContent" style="margin-top:16px"></div>
@@ -6223,7 +6224,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/indicators/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app-producao-sac-v133.js"></script>
+<script src="assets/nucleo-app-producao-retrabalho-v151.js"></script>
 <script src="assets/api-source-lock-v150.js"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
@@ -7847,5 +7848,12 @@ html[data-nucleo-theme="dark"] .workspace :is(input,select,textarea)::placeholde
 html[data-nucleo-theme="dark"] .workspace :is(button,input,select,textarea,a):focus-visible,
 html[data-nucleo-theme="dark"] .sidebar button:focus-visible {outline:2px solid var(--nucleo-main) !important;outline-offset:2px}
 </style>
+<style>
+.simple-rework-dialog{width:min(800px,calc(100vw - 24px));max-height:90vh;overflow:auto;background:var(--card);color:var(--text)}
+.simple-rework-dialog label{display:grid;gap:5px;min-width:0}
+.simple-rework-dialog input,.simple-rework-dialog select,.simple-rework-dialog textarea{width:100%;min-width:0}
+.simple-rework-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-top:12px}
+</style>
 </body></html>
+
 
