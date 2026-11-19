@@ -4716,10 +4716,15 @@ Diretoria"></textarea>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px">
     <button id="sacTrackTabActive" class="btn primary" type="button" onclick="setSacTrackingTab('active')">Em andamento</button>
     <button id="sacTrackTabHistory" class="btn secondary" type="button" onclick="setSacTrackingTab('history')">Histórico</button>
-    <button id="sacTrackTabRework" class="btn secondary" type="button" onclick="setSacTrackingTab('rework')">Retrabalho / reposição</button>
     <button id="sacTrackTabPdf" class="btn secondary" type="button" onclick="setSacTrackingTab('pdf')">PDFs do SAC</button>
   </div>
   <div id="sacTrackingContent" style="margin-top:16px"></div>
+</section>
+
+<section id="simpleReworkView" class="card hidden">
+<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h2>Retrabalho / reposição</h2><p class="small">Pedidos, andamento e histórico de retrabalhos e reposições.</p></div><button class="btn primary" onclick="openSimpleRework()">Novo retrabalho / reposição</button></div>
+<div id="simpleReworkFilters" style="margin-top:16px"></div>
+<div id="simpleReworkContent" style="margin-top:16px"></div>
 </section>
 
 <section id="contestationsView" class="card hidden">
@@ -6225,7 +6230,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/indicators/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app-producao-retrabalho-v152.js"></script>
+<script src="assets/nucleo-app-producao-retrabalho-v154.js"></script>
 <script src="assets/api-source-lock-v150.js"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
