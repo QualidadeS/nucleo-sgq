@@ -166,10 +166,27 @@ function unifiedActionSelectedDependencies(){
 }
 function unifiedActionDependencyText(a){
  const deps=a?.dependencies||{},sectors=Array.isArray(deps.sectors)?deps.sectors:[],external=Array.isArray(deps.external)?deps.external:[];
- const parts=Array.isArray(deps.sectorResponsibilities)?deps.sectorResponsibilities:[];
- const all=[...sectors.map(sector=>{const part=parts.find(p=>p.sector===sector);return sector+(part?.description?': '+part.description:'');}),...external];
+ const all=[...sectors,...external];
  if(!all.length&&a?.dependency)all.push(String(a.dependency));
  return all.length?all.join(' · '):'—';
+}
+function unifiedActionDependencyDetails(a){
+ const summary=unifiedActionDependencyText(a);
+ const me=unifiedCurrentUserKey();
+ if(!isAdmin()&&a.createdByKey!==me)return escapeHtml(summary);
+ const parts=new Map((a.dependencies?.sectorResponsibilities||[]).map(part=>[part.sector,part.description]));
+ if(a.groupId&&!a.dependencySector){
+   for(const child of getUnifiedManualActions()){
+     if(child.groupId===a.groupId&&child.dependencySector){
+       parts.set(child.dependencySector,child.action);
+     }
+   }
+ }
+ const details=[...parts].filter(([,description])=>description);
+ if(!details.length)return escapeHtml(summary);
+ return '<div>'+escapeHtml(summary)+'</div><details><summary>Consultar</summary>'+details.map(([sector,description])=>
+   '<div style="margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere"><b>'+escapeHtml(sector)+'</b><br>'+escapeHtml(description)+'</div>'
+ ).join('')+'</details>';
 }
 document.addEventListener('change',event=>{
  if(event.target.id==='unifiedActionDependencySectors')renderUnifiedSectorResponsibilities();
@@ -296,7 +313,15 @@ function refreshUnifiedActionPeopleBySector(){
   }
 }
 
-async function saveUnifiedAction(){
+let unifiedActionPendingCreation=null;
+async function saveUnifiedAction(button){
+  if(button?.disabled)return;
+  if(button)button.disabled=true;
+  try{await createUnifiedAction();}
+  catch(error){alert(error.message||String(error));}
+  finally{if(button)button.disabled=false;}
+}
+async function createUnifiedAction(){
   const text=String(document.getElementById('unifiedActionText')?.value||'').trim();
   const deadline=String(document.getElementById('unifiedActionDeadline')?.value||'').trim();
   const note=String(document.getElementById('unifiedActionNote')?.value||'').trim();
@@ -357,68 +382,76 @@ async function saveUnifiedAction(){
     return;
   }
 
-  const list=getUnifiedManualActions();
-  const groupId='ACTGRP-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
-  assignees.forEach((a,i)=>{
-    list.push({
-      id:'ACT-'+Date.now()+'-'+i+'-'+Math.random().toString(36).slice(2,7),
-      groupId:assignees.length>1?groupId:'',
-      source:mode==='self'?'self':'assigned',
-      recordKind:'manual_action',
-      ro:ro?.number||'',roUnit:ro?.unit||'',sourceRoOrigin:ro?.origin||'',
-      action:text,
-      deadline,
-      note,
-      type,
-      project,
-      subject,
-      dependencies,
-      dependency:unifiedActionDependencyText({dependencies}),
-      urgency,
-      nextStep,
-      progress,
-      remaining,
-      history:[{
-        id:'UPD-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),
-        at:now,
-        byKey:creatorKey,
-        byName:creatorName,
-        text:'Ação criada.',
-        progress,
-        remaining,
-        nextStep
-      }],
-      assigneeKey:a.key,
-      assigneeName:a.name,
-      sector:a.sector||'',
-      unit:a.unit||'',
-      createdByKey:creatorKey,
-      createdByName:creatorName,
-      createdAt:now,
-      completedAt:'',
-      completedBy:'',
-      evidence:''
-    });
-  });
-  await saveUnifiedManualActions(list);
+  const unit=explicitPortalUnit(ro?.unit||(mode==='sector'?document.getElementById('unifiedActionUnit')?.value:'')||session.unit||currentUserUnit());
+  const deliveries=[];
+  for(const part of dependencies.sectorResponsibilities){
+    if(!part.description){alert('Descreva a ação de '+part.sector+'.');return;}
+    if(!unit){alert('Identifique a unidade da ação para atribuir aos setores.');return;}
+    const recipients=getOperationalUsers().filter(unifiedActionIsActiveUser)
+      .filter(u=>unifiedActionUserKey(u)&&userHasUnitSector(u,unit,part.sector));
+    if(!recipients.length){alert('Não há usuários ativos em '+part.sector+' nesta unidade.');return;}
+    const recipientKeys=new Set();
+    for(const user of recipients){
+      const key=unifiedActionUserKey(user);
+      if(recipientKeys.has(key))continue;
+      recipientKeys.add(key);
+      deliveries.push({key,name:user.name||user.email,unit,sector:part.sector,description:part.description});
+    }
+  }
 
-  // Local/global shared_state persistence is handled automatically by the shared key.
-  assignees.forEach(a=>{
-    createNotification({
-      type:'action',
-      skipEmail:true,
-      audience:'user',
-      userKey:a.key,
-      sector:a.sector||'',
-      title:mode==='self'?'Nova ação pessoal':'Nova ação atribuída',
-      message:text+(deadline?' · Prazo: '+formatDateBR(deadline):'')
+  const destinations=[...assignees,...deliveries];
+  const signature=JSON.stringify({creatorKey,mode,ro,text,deadline,note,type,project,subject,dependencies,urgency,nextStep,progress,remaining,destinations});
+  if(unifiedActionPendingCreation?.signature!==signature){
+    const groupId='ACTGRP-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+    const records=destinations.map((recipient,index)=>{
+      const isDependency=index>=assignees.length;
+      return {
+        id:'ACT-'+groupId.slice(7)+'-'+index,
+        groupId:destinations.length>1?groupId:'',
+        source:isDependency||mode!=='self'?'assigned':'self',
+        recordKind:'manual_action',
+        ro:ro?.number||'',roUnit:ro?.unit||'',sourceRoOrigin:ro?.origin||'',
+        action:isDependency?recipient.description:text,
+        deadline,
+        note:isDependency?'':note,
+        type,project,subject,urgency,
+        dependencies:isDependency?{}:{sectors:dependencies.sectors,external:dependencies.external},
+        dependencySector:isDependency?recipient.sector:'',
+        nextStep:isDependency?'':nextStep,
+        progress:isDependency?0:progress,
+        remaining:isDependency?'':remaining,
+        history:[{
+          id:'UPD-'+groupId+'-'+index,at:now,byKey:creatorKey,byName:creatorName,
+          text:'Ação criada.',progress:isDependency?0:progress,
+          remaining:isDependency?'':remaining,nextStep:isDependency?'':nextStep
+        }],
+        assigneeKey:recipient.key,assigneeName:recipient.name,
+        sector:recipient.sector||'',unit:recipient.unit||'',
+        createdByKey:creatorKey,createdByName:creatorName,createdAt:now,
+        completedAt:'',completedBy:'',evidence:''
+      };
     });
-  });
+    unifiedActionPendingCreation={signature,records};
+  }
+  const records=unifiedActionPendingCreation.records;
+  await loadUnifiedManualActions();
+  const list=getUnifiedManualActions();
+  const existing=new Set(list.map(record=>record.id));
+  await saveUnifiedManualActions(list.concat(records.filter(record=>!existing.has(record.id))));
+  unifiedActionPendingCreation=null;
+
+  for(const record of records){
+    createNotification({
+      type:'action',skipEmail:true,audience:'user',userKey:record.assigneeKey,
+      sector:record.sector,title:record.source==='self'?'Nova ação pessoal':'Nova ação atribuída',
+      message:record.action+(deadline?' · Prazo: '+formatDateBR(deadline):'')
+    });
+  }
 
   closeUnifiedActionModal();
   renderActionsDashboard();
   refreshUserPendingActionAlert();
-  alert(assignees.length>1?`Ação atribuída a ${assignees.length} pessoa(s).`:'Ação criada.');
+  alert(deliveries.length?'Ação criada e partes atribuídas aos setores selecionados.':assignees.length>1?`Ação atribuída a ${assignees.length} pessoa(s).`:'Ação criada.');
 }
 function unifiedManualActionCanComplete(a){
   const me=unifiedCurrentUserKey();
@@ -479,7 +512,7 @@ function renderUnifiedActionHistory(a){
       <div><span>Setor</span><b>${escapeHtml(a.sector||'-')}</b></div>
       <div><span>Tipo</span><b>${escapeHtml(a.type||'Ação')}</b></div>
       <div><span>Urgência</span><b>${escapeHtml(unifiedActionUrgencyLabel(a.urgency))}</b></div>
-      <div><span>Dependências</span><b>${escapeHtml(unifiedActionDependencyText(a))}</b></div>
+      <div><span>Dependências</span>${unifiedActionDependencyDetails(a)}</div>
       <div><span>Prazo</span><b>${escapeHtml(a.deadline?formatDateBR(a.deadline):'—')}</b></div>
       <div class="full"><span>Próximo passo</span><b>${escapeHtml(a.nextStep||'—')}</b></div>
       <div class="full"><span>Falta para terminar</span><b>${escapeHtml(a.remaining||'—')}</b></div>
@@ -791,7 +824,7 @@ function renderActionsDashboard(){
     <td><div class="action-main-text">${escapeHtml(x.acao)}</div>${x.manualAction?.note?`<div class="small" style="margin-top:4px">${escapeHtml(x.manualAction.note)}</div>`:''}</td>
     <td><b>${escapeHtml(x.responsavel)}</b></td>
     <td>${escapeHtml(x.setor)}</td>
-    <td>${escapeHtml(x.dependency||'—')}</td>
+    <td>${x.manualAction?unifiedActionDependencyDetails(x.manualAction):escapeHtml(x.dependency||'—')}</td>
     <td><span class="urgency-pill ${escapeHtml(normalizeAnswer(x.urgency||'media'))}">${escapeHtml(unifiedActionUrgencyLabel(x.urgency))}</span></td>
     <td><span class="action-pill ${x.status.code}">${escapeHtml(x.status.label)}</span>${x.impacta5S?'<div class="five-s-impact">Impacta 5S</div>':x.source==='pdca'?'<div class="five-s-neutral">Sem impacto no 5S</div>':''}</td>
     <td>
