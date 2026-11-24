@@ -3229,6 +3229,30 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 }
 @media print { :root {--nucleo-font-scale:1!important} }
 </style>
+<style id="nucleo-compact-density">
+@media screen {
+ html[data-nucleo-density="compact"] .workspace .card {padding:12px!important}
+ html[data-nucleo-density="compact"] .workspace :is(.settings-block,.triage-box) {padding:12px!important;margin-block:10px!important}
+ html[data-nucleo-density="compact"] .workspace :is(.settings-grid,.triage-grid,.grid,.actions,.toolbar,.action-controls) {gap:8px!important}
+ html[data-nucleo-density="compact"] .workspace .toolbar {margin-bottom:10px!important}
+ html[data-nucleo-density="compact"] .workspace :is(th,td),
+ html[data-nucleo-density="compact"] #actionsDashboardView .action-table :is(th,td),
+ html[data-nucleo-density="compact"] .workspace main table.mobile-code-actions :is(th,td) {padding:6px 8px!important;line-height:1.35}
+ html[data-nucleo-density="compact"] body :is(.workspace,.triage-modal,.modal-box) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]):not([type="hidden"]),select) {padding:6px 9px!important;min-height:32px}
+ html[data-nucleo-density="compact"] body :is(.workspace,.triage-modal,.modal-box) textarea {padding:6px 9px!important}
+ html[data-nucleo-density="compact"] body :is(.workspace,.triage-modal,.modal-box) :is(.btn,.top-btn) {padding:6px 10px!important;min-height:32px}
+ html[data-nucleo-density="compact"] .sidebar :is(.side-item,.side-module-head) {padding:6px 8px!important;gap:6px!important;min-height:34px!important;height:auto}
+ html[data-nucleo-density="compact"] .sidebar :is(.side-item,.side-module-head) :is(b,small) {line-height:1.25}
+ html[data-nucleo-density="compact"] .side-module-body {gap:2px!important}
+ html[data-nucleo-density="compact"] .triage-modal-body {padding:12px!important}
+ html[data-nucleo-density="compact"] :is(.triage-modal-head,.triage-modal-foot) {padding:10px 12px!important}
+ html[data-nucleo-density="compact"] dialog.modal-box {padding:16px!important}
+ html[data-nucleo-density="compact"] .workspace :is(label,.field) {margin-block:3px!important}
+}
+@media screen and (pointer:coarse) {
+ html[data-nucleo-density="compact"] body :is(.btn,.top-btn,.side-item,.side-module-head) {min-height:44px!important}
+}
+</style>
 </head><body>
 
 <div id="nucleoLoadingOverlay" role="status" aria-live="polite" aria-busy="true">

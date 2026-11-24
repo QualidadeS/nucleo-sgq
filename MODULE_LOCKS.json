@@ -2,7 +2,7 @@
   "build": "20261124-producao-validacao-teste",
   "algorithm": "sha256",
   "files": {
-    "index.html": "1487c6f909651d317ffebfdfd1c8ae55f0c2f925f15e2196940bcc7fe510c355",
+    "index.html": "7ed3f20d82cba803149735a992f25b595d0ec7b24d189e4286a465d3ca4a9c16",
     "assets/core/api-sync.js": "2c8b91bfb347e30666a42902c5ca4d1a751286b3c5f9f5731da6d4d35ce353bf",
     "assets/core/auth.js": "920ddf4ed4ef24bb3f779b997096ccded49b8196da67bebf9991a61d3e40ab06",
     "assets/core/core-facade.js": "ba52e50976da75ecb9b954d9121864eddb7a98e72cea8b9f2f0e462449a0b051",
