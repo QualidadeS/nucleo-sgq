@@ -149,25 +149,31 @@ function populateUnifiedActionDependencySectors(){
     .map(s=>`<option value="${escapeHtml(s)}"${current.has(s)?' selected':''}>${escapeHtml(s)}</option>`)
     .join('');
 }
+const unifiedSectorDescriptions=new Map();
+function renderUnifiedSectorResponsibilities(){
+ const host=document.getElementById('unifiedActionSectorResponsibilities');if(!host)return;
+ host.querySelectorAll('textarea[data-action-sector]').forEach(el=>unifiedSectorDescriptions.set(el.dataset.actionSector,el.value));
+ const sectors=[...(document.getElementById('unifiedActionDependencySectors')?.selectedOptions||[])].map(o=>o.value);
+ host.innerHTML=sectors.map(sector=>'<label style="display:block;margin-top:10px"><div class="label">Parte do setor '+escapeHtml(sector)+'</div><textarea data-action-sector="'+escapeHtml(sector)+'" rows="2" maxlength="2000" placeholder="Descreva o que este setor precisa fazer nesta ação">'+escapeHtml(unifiedSectorDescriptions.get(sector)||'')+'</textarea></label>').join('');
+ host.hidden=sectors.length===0;
+}
 function unifiedActionSelectedDependencies(){
-  const sectors=[...(document.getElementById('unifiedActionDependencySectors')?.selectedOptions||[])]
-    .map(o=>String(o.value||'').trim()).filter(Boolean);
-  const external=String(document.getElementById('unifiedActionExternalDependencies')?.value||'')
-    .split(/\n|;/).map(x=>x.trim()).filter(Boolean);
-  return {
-    sectors:[...new Set(sectors)],
-    external:[...new Set(external)]
-  };
+ const sectors=[...(document.getElementById('unifiedActionDependencySectors')?.selectedOptions||[])].map(o=>String(o.value||'').trim()).filter(Boolean);
+ document.querySelectorAll('#unifiedActionSectorResponsibilities textarea[data-action-sector]').forEach(el=>unifiedSectorDescriptions.set(el.dataset.actionSector,el.value));
+ const external=String(document.getElementById('unifiedActionExternalDependencies')?.value||'').split(/\n|;/).map(x=>x.trim()).filter(Boolean);
+ return {sectors:[...new Set(sectors)],external:[...new Set(external)],
+   sectorResponsibilities:[...new Set(sectors)].map(sector=>({sector,description:String(unifiedSectorDescriptions.get(sector)||'').trim()}))};
 }
 function unifiedActionDependencyText(a){
-  const deps=a?.dependencies||{};
-  const sectors=Array.isArray(deps.sectors)?deps.sectors:[];
-  const external=Array.isArray(deps.external)?deps.external:[];
-  const legacy=String(a?.dependency||'').trim();
-  const all=[...sectors,...external];
-  if(!all.length&&legacy)all.push(legacy);
-  return all.length?all.join(' · '):'—';
+ const deps=a?.dependencies||{},sectors=Array.isArray(deps.sectors)?deps.sectors:[],external=Array.isArray(deps.external)?deps.external:[];
+ const parts=Array.isArray(deps.sectorResponsibilities)?deps.sectorResponsibilities:[];
+ const all=[...sectors.map(sector=>{const part=parts.find(p=>p.sector===sector);return sector+(part?.description?': '+part.description:'');}),...external];
+ if(!all.length&&a?.dependency)all.push(String(a.dependency));
+ return all.length?all.join(' · '):'—';
 }
+document.addEventListener('change',event=>{
+ if(event.target.id==='unifiedActionDependencySectors')renderUnifiedSectorResponsibilities();
+});
 async function openUnifiedActionModal(){
   if(!nucleoFeatureRequire('pdca','actions'))return;
   try{await loadUnifiedManualActions();}catch(e){alert(e.message);return;}
@@ -186,7 +192,11 @@ async function openUnifiedActionModal(){
   document.getElementById('unifiedActionNextStep').value='';
   document.getElementById('unifiedActionProgress').value='0';
   document.getElementById('unifiedActionRemaining').value='';
+  unifiedSectorDescriptions.clear();
+  const responsibilityHost=document.getElementById('unifiedActionSectorResponsibilities');if(responsibilityHost)responsibilityHost.innerHTML='';
+  const sectorSelect=document.getElementById('unifiedActionDependencySectors');if(sectorSelect)[...sectorSelect.options].forEach(o=>o.selected=false);
   populateUnifiedActionDependencySectors();
+  renderUnifiedSectorResponsibilities();
 
   const mode=document.getElementById('unifiedActionMode');
   if(isAdmin()){
@@ -363,7 +373,7 @@ async function saveUnifiedAction(){
       project,
       subject,
       dependencies,
-      dependency:[...(dependencies.sectors||[]),...(dependencies.external||[])].join(' · '),
+      dependency:unifiedActionDependencyText({dependencies}),
       urgency,
       nextStep,
       progress,
