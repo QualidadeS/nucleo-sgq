@@ -2,7 +2,7 @@
   "build": "20261124-producao-validacao-teste",
   "algorithm": "sha256",
   "files": {
-    "index.html": "d545a53f54d12e462aa726a9a58d09b9d987182b14d201cebb0cb494cce5a0db",
+    "index.html": "c3bca23b95446b0f6b9bf2214fdefa94ff3424e76c1deb72e637cdf9477889d1",
     "assets/core/api-sync.js": "2c8b91bfb347e30666a42902c5ca4d1a751286b3c5f9f5731da6d4d35ce353bf",
     "assets/core/auth.js": "920ddf4ed4ef24bb3f779b997096ccded49b8196da67bebf9991a61d3e40ab06",
     "assets/core/core-facade.js": "ba52e50976da75ecb9b954d9121864eddb7a98e72cea8b9f2f0e462449a0b051",
@@ -34,9 +34,10 @@
     "assets/ro-drive-template-verify.js": "bf09cd78cee93b8a181612342560dd4b0cc15fc534ebc7d7df2d8fd95c3a1a63",
     "assets/ro-model-geometry-snapshot.js": "06687844f45d0e6b51c1292c09b90efabbeac4f1b0e9e560c8b8046caac17ea9",
     "Script/Código.txt": "07bf94554966475e2d5b41c3485a740215ef6210696e2588acdced02f560cb6d",
-    "assets/nucleo-app-producao-retrabalho-v156.js": "7144eb3e1a908a6397aab92e8dc9db3a76948da6282fb866216cef9b11a512ec",
+    "assets/nucleo-app-producao-retrabalho-v156.js": "5a822b3232e31efa4129a0e24961aebbd82e1837c00bcb8ecda02912221095ac",
     "assets/api-source-lock-v150.js": "b3660c832d199dd5445361755aab4da4fae24748449010237a18551266a9ccb1",
     "assets/nucleo-runtime-config.js": "e4b50be4e5cdd976b546df1787d09c1826632fcd179f32b4749e6b152407bc1c",
-    "manifest.webmanifest": "72e47256fdb44e5b866e9a7081353525349826bf5c3ea4931a37e79955a2699e"
+    "manifest.webmanifest": "72e47256fdb44e5b866e9a7081353525349826bf5c3ea4931a37e79955a2699e",
+    "assets/ro-apresentacao.js": "ca17c39ed8953cf9067904be423affdfb92ffafb260e2ca68c8f20a29319b54e"
   }
 }
