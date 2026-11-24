@@ -1,12 +1,12 @@
 {
-  "build": "20261023-modular-teste-v11-ro-slides-modelo-central-mm",
-  "environment": "TESTE",
+  "build": "20261124-producao-validacao-teste",
+  "environment": "PRODUCAO",
   "architecture": "modular-monolith",
   "rules": {
-    "productionUntouched": true,
+    "productionUntouched": false,
     "moduleChangesStayInsideModule": true,
     "sharedChangesOnlyInCore": true,
-    "backendSource": "Nucleo_AppsScript_PRODUCAO.txt"
+    "backendSource": "Script/Código.txt"
   },
   "modules": {
     "comunicados": {

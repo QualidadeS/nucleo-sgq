@@ -1,10 +1,9 @@
 {
-  "build": "20261026-modular-teste-v18-ro-drive-caminho-padroes",
+  "build": "20261124-producao-validacao-teste",
   "algorithm": "sha256",
   "files": {
-    "index.html": "49c9fa28a50933431473aec0070b660dc2126ad41c49d3fb9d1cf4a9f6b9d664",
-    "Nucleo_AppsScript_PRODUCAO.txt": "b376cf4785cae5b4bc3eb89db627e349493fb7bd5b093dbfddd32ba2211a73ec",
-    "assets/core/api-sync.js": "3fb21cbf289d8ec45b248a33b81070f6f08d7ae728bac23bd0c1ecbf6204bec8",
+    "index.html": "d545a53f54d12e462aa726a9a58d09b9d987182b14d201cebb0cb494cce5a0db",
+    "assets/core/api-sync.js": "2c8b91bfb347e30666a42902c5ca4d1a751286b3c5f9f5731da6d4d35ce353bf",
     "assets/core/auth.js": "920ddf4ed4ef24bb3f779b997096ccded49b8196da67bebf9991a61d3e40ab06",
     "assets/core/core-facade.js": "ba52e50976da75ecb9b954d9121864eddb7a98e72cea8b9f2f0e462449a0b051",
     "assets/core/core-registry.js": "b28ce1e54aa63d1312267d2d28f4aa657883584df62e00b4d3d181f333065c80",
@@ -13,8 +12,8 @@
     "assets/core/module-host.js": "4a76bc302a7cdf5eba0d0b50511aa4724f79e12d6452d6f6ade22b35e35c3a6a",
     "assets/core/module-registry.js": "2be8200beed59dda5fdcd5ed91253a9036ec820b9a3c428467274dfb88a49fdc",
     "assets/core/navigation.js": "ed6146bb5c83466603ebaded67e7dc0aeaa59a97ed3b8047ef2dcbc5f27caab1",
-    "assets/core/notifications.js": "4a31d89ae49a60ac3f8295686eeef777edba7667c7d21400c09e1a0a6a193ecd",
-    "assets/core/runtime.js": "7cf49506a12ed3c9e413f7cf27078d769879a5ac3c5fbb56d1592f9b158a100c",
+    "assets/core/notifications.js": "19c9778d2c0a6b4c0f1ee3122cb5f7fc93cbdb2e81e895355229e9c9fea7a1d1",
+    "assets/core/runtime.js": "528a04d736da3efbad46ec632c3bbb36c1f025ace140f7286f8e6cda0012ac46",
     "assets/core/settings.js": "42865a9aa2c1129ce85f3e81c8f84b986bd6fb8f92837ff6d0bb2895cdd0146a",
     "assets/core/storage.js": "d531635126826aab93dc9a256f41aebe5e5e3bc75fe99d3ec686e222bf79efa5",
     "assets/core/ui.js": "5ee134fed890769a93d45d4eab1d6b87d63677f58d2474009c33cc810fc276ed",
@@ -30,9 +29,14 @@
     "assets/modulos/rnc/module.js": "286f1565a809aae4eb109432e6500d52c2449ec3ac26fdb3905cdb7d0ee6edd7",
     "assets/modulos/sac/module.js": "e03e08441b31e8eaae91e707493902324342f997b96edd1cd9243d3802d0d955",
     "assets/modulos/treinamentos/module.js": "3a16d51a5e372cb600248b9e7ae208f692858f4e33c6895b0f9c8c8005f097f7",
-    "assets/modulos/usuarios-acessos/module.js": "710eba8fa589fce4504a15f6587b2e0e9799d7e23651b214314c6ef5069221f7",
-    "assets/nucleo-app.js": "455ff9337d1c790c0fef755e0ae79f6324fd1a408022318627525e17ebbcd1b8",
-    "assets/ro-drive-template-verify.js": "8d0c8f014f66019bdd6d667f2e215e4d5d47586b5ddefd52fb6f5c2b52599384",
-    "assets/ro-model-geometry-snapshot.js": "18dd5d37e87bf87765e4e59e12c47adead68bd83106532891a079484b4f7cac1"
+    "assets/modulos/usuarios-acessos/module.js": "87a2babbaefe2e8fda66352e904408b700f8154c723fe07e53a08a636921772a",
+    "assets/nucleo-app.js": "db1ad80d8d83a7577efa30d1688063ce72b2c63992c12880b5dce625d36bc76f",
+    "assets/ro-drive-template-verify.js": "bf09cd78cee93b8a181612342560dd4b0cc15fc534ebc7d7df2d8fd95c3a1a63",
+    "assets/ro-model-geometry-snapshot.js": "06687844f45d0e6b51c1292c09b90efabbeac4f1b0e9e560c8b8046caac17ea9",
+    "Script/Código.txt": "07bf94554966475e2d5b41c3485a740215ef6210696e2588acdced02f560cb6d",
+    "assets/nucleo-app-producao-retrabalho-v156.js": "7144eb3e1a908a6397aab92e8dc9db3a76948da6282fb866216cef9b11a512ec",
+    "assets/api-source-lock-v150.js": "b3660c832d199dd5445361755aab4da4fae24748449010237a18551266a9ccb1",
+    "assets/nucleo-runtime-config.js": "e4b50be4e5cdd976b546df1787d09c1826632fcd179f32b4749e6b152407bc1c",
+    "manifest.webmanifest": "72e47256fdb44e5b866e9a7081353525349826bf5c3ea4931a37e79955a2699e"
   }
 }
