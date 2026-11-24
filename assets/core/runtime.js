@@ -14315,7 +14315,12 @@ async function refreshRosFromOfficialSheets(force=false){
     applyImportedRos(data.dados,data);
     importedRoCacheNeedsRefresh=false;
     const syncMsg=document.getElementById('syncMsg');
-    if(syncMsg){syncMsg.textContent='R.O.s e SACs atualizados pelas planilhas centrais às '+new Date().toLocaleTimeString('pt-BR')+'.';syncMsg.className='statusline okline'}
+    if(syncMsg){
+      const confirmed=nucleoCentralDataConfirmed();
+      syncMsg.textContent='R.O.s e SACs atualizados pelas planilhas centrais às '+new Date().toLocaleTimeString('pt-BR')+'.'
+        +(confirmed?'':' Aguardando confirmação da base central.');
+      syncMsg.className=confirmed?'statusline okline':'statusline';
+    }
     return true;
   }catch(e){
     console.warn('Não foi possível consultar R.O.s e SACs nas planilhas centrais.',e);
@@ -20486,35 +20491,36 @@ async function syncNow(){
   syncMsg.className='statusline';
 
   try{
-    // Se a carga automática estiver em andamento, aguarda pouco tempo. Se ela
-    // travou, libera apenas a referência do front e executa uma leitura manual.
-    // O backend continua seguro porque a leitura não grava na planilha.
+    // A carga automática só confirma a leitura das planilhas.
+    // Mesmo quando reaproveitamos essa carga, ainda precisamos confirmar a base do portal.
+    let reusedAutomaticLoad = false;
     if(nucleoRoCentralRefreshPromise){
       syncMsg.textContent='Conferindo a carga automática em andamento...';
       const autoResult=await Promise.race([
         Promise.resolve(nucleoRoCentralRefreshPromise).then(v=>v===true?'ok':'failed').catch(()=> 'failed'),
         new Promise(resolve=>setTimeout(()=>resolve('timeout'),5000))
       ]);
-      if(autoResult==='ok'){
-        syncMsg.textContent='R.O.s e SACs atualizados pela base central.';
-        syncMsg.className='statusline okline';
-        return;
-      }
+      reusedAutomaticLoad = autoResult==='ok';
       if(autoResult==='timeout')nucleoRoCentralRefreshPromise=null;
-      syncMsg.textContent='Executando uma leitura manual da base central...';
-      updateNucleoLoading('Executando uma leitura manual da base central...');
     }
-    const data=await loadOfficialRosPaged(s,(loaded,total,message)=>{
-      updateNucleoLoading(message);
-      syncMsg.textContent=message;
-    });
 
-    if(data?.sucesso===false) throw new Error(data.erro||'Falha informada pelo Apps Script.');
-    if(!Array.isArray(data?.dados)) throw new Error('Resposta sem a lista "dados".');
+    let data;
+    let qty;
+    if(!reusedAutomaticLoad){
+      syncMsg.textContent='Executando uma leitura manual das planilhas centrais...';
+      data=await loadOfficialRosPaged(s,(loaded,total,message)=>{
+        updateNucleoLoading(message);
+        syncMsg.textContent=message;
+      });
 
-    updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
-    await new Promise(resolve=>requestAnimationFrame(resolve));
-    const qty=applyImportedRos(data.dados,data);
+      if(data?.sucesso===false) throw new Error(data.erro||'Falha informada pelo Apps Script.');
+      if(!Array.isArray(data?.dados)) throw new Error('Resposta sem a lista "dados".');
+
+      updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
+      await new Promise(resolve=>requestAnimationFrame(resolve));
+      qty=applyImportedRos(data.dados,data);
+    }
+    const loadedSummary=reusedAutomaticLoad?'R.O.s e SACs atualizados':qty+' R.O.(s) carregada(s)';
     updateNucleoLoading('Confirmando configurações e cadastros na base central...');
     let centralOk=await syncPortalBackend(false,{foreground:false});
 
@@ -20526,15 +20532,15 @@ async function syncNow(){
       centralOk=await syncPortalBackend(false,{foreground:false});
     }
 
-    const bases=(typeof data.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
+    const bases=(typeof data?.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
     if(centralOk){
-      syncMsg.textContent='Sincronização concluída e confirmada: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
+      syncMsg.textContent='Sincronização concluída e confirmada: '+loadedSummary+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
       syncMsg.className='statusline okline';
     }else{
       // As R.O.s oficiais já foram carregadas com sucesso. Não bloquear a tela inteira
       // por uma confirmação auxiliar; mantém estado de atenção e agenda nova tentativa.
       nucleoSetCentralSyncState('syncing','R.O.s atualizadas. A confirmação dos demais dados da base central será repetida automaticamente.');
-      syncMsg.textContent='R.O.s atualizadas: '+qty+' carregada(s)'+bases+'. Confirmando os demais dados da base central...';
+      syncMsg.textContent=loadedSummary+bases+'. Confirmando os demais dados da base central...';
       syncMsg.className='statusline';
       setTimeout(()=>syncPortalBackend(false,{foreground:false}),2500);
     }
