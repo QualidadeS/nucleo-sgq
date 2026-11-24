@@ -869,27 +869,47 @@ function renderActionsDashboard(){
 
   const body=document.getElementById('actionsDashboardBody');
   if(!body)return;
-  body.innerHTML=filtered.length?filtered.map(x=>`<tr>
-    <td><b>${escapeHtml(x.id||'-')}</b></td>
-    <td>${escapeHtml(unifiedActionDateLabel(x.createdAt))}</td>
-    <td><span class="action-origin-badge ${escapeHtml(x.source)}">${escapeHtml(x.type||x.sourceLabel)}</span></td>
-    <td>${escapeHtml(x.project||x.ro||'—')}</td>
-    <td>${escapeHtml(x.subject||'—')}</td>
-    <td><div class="action-main-text">${escapeHtml(x.acao)}</div>${x.manualAction?.note?`<div class="small" style="margin-top:4px">${escapeHtml(x.manualAction.note)}</div>`:''}</td>
-    <td><b>${escapeHtml(x.responsavel)}</b></td>
-    <td>${escapeHtml(x.setor)}</td>
-    <td>${x.manualAction?unifiedActionDependencyDetails(x.manualAction):escapeHtml(x.dependency||'—')}</td>
-    <td><span class="urgency-pill ${escapeHtml(normalizeAnswer(x.urgency||'media'))}">${escapeHtml(unifiedActionUrgencyLabel(x.urgency))}</span></td>
-    <td><span class="action-pill ${x.status.code}">${escapeHtml(x.status.label)}</span>${x.impacta5S?'<div class="five-s-impact">Impacta 5S</div>':x.source==='pdca'?'<div class="five-s-neutral">Sem impacto no 5S</div>':''}</td>
-    <td>
-      ${escapeHtml(x.nextStep||'—')}
-      ${x.source!=='pdca'?`<div class="action-progress-wrap"><div class="action-progress-bar"><span style="width:${Math.max(0,Math.min(100,Number(x.progress||0)))}%"></span></div><small>${Math.max(0,Math.min(100,Number(x.progress||0)))}% concluído${x.remaining?' · Falta: '+escapeHtml(x.remaining):''}</small></div>`:''}
-      <div class="small deadline-text ${x.deadline.cls}" style="margin-top:4px">${escapeHtml(x.deadline.text)}</div>
-    </td>
-    <td>${escapeHtml(unifiedActionDateTimeLabel(x.updatedAt))}</td>
-    <td><div class="unified-action-buttons">${unifiedActionRowButtons(x)}</div></td>
-  </tr>`).join(''):`<tr><td colspan="14" style="text-align:center;color:#667085;padding:24px">Nenhuma ação encontrada nesta visão.</td></tr>`;
+  body.innerHTML=filtered.length?filtered.map((x,index)=>`<tr>
+    <td><b>${escapeHtml(x.id||'—')}</b><div class="small">${escapeHtml(x.ro||'—')}</div></td>
+    <td><div class="action-main-text action-summary-text">${escapeHtml(x.acao)}</div></td>
+    <td>${escapeHtml(x.responsavel)}<div class="small">${escapeHtml(x.setor)}</div></td>
+    <td><span class="action-pill ${x.status.code}">${escapeHtml(x.status.label)}</span></td>
+    <td><button class="btn secondary" type="button" data-action-consult="${index}">Consultar</button></td>
+  </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:24px">Nenhuma ação encontrada nesta visão.</td></tr>';
+  body.querySelectorAll('[data-action-consult]').forEach(button=>{
+    button.onclick=()=>openUnifiedActionDetails(filtered[Number(button.dataset.actionConsult)]);
+  });
+
 }
+function openUnifiedActionDetails(x){
+  if(!x||!nucleoFeatureRequire('pdca','actions'))return;
+  if(x.manualAction&&!unifiedActionCanSee(x.manualAction))return;
+  const dialog=document.getElementById('actionDetailsDialog');
+  const content=document.getElementById('actionDetailsContent');
+  document.getElementById('actionDetailsTitle').textContent='Ação '+x.id;
+  const fields=[
+    ['Descrição',x.acao],['Observações',x.manualAction?.note],
+    ['Projeto / R.O.',x.project],['Cliente / assunto',x.subject],
+    ['Origem',x.sourceLabel],['Tipo',x.type],['Responsável',x.responsavel],['Setor',x.setor],
+    ['Urgência',unifiedActionUrgencyLabel(x.urgency)],['Status',x.status.label],
+    ['Prazo',x.prazo],['Situação do prazo',x.deadline.text],['Próximo passo',x.nextStep],
+    ['Progresso',x.manualAction?x.progress+'%':''],['Falta',x.remaining],
+    ['Data de criação',unifiedActionDateTimeLabel(x.createdAt)],
+    ['Última atualização',unifiedActionDateTimeLabel(x.updatedAt)],
+    ['Impacto no 5S',x.source==='pdca'?(x.impacta5S?'Impacta 5S':'Sem impacto no 5S'):''],
+    ['Evidência',x.manualAction?.evidence||x.actionRecord?.evidenceNote]
+  ];
+  content.innerHTML='<dl class="action-details-fields">'+fields
+    .filter(([,value])=>String(value??'').trim()&&!['-','—'].includes(value))
+    .map(([label,value])=>'<div><dt>'+escapeHtml(label)+'</dt><dd>'+escapeHtml(value)+'</dd></div>').join('')
+    +'<div><dt>Dependências</dt><dd>'+(x.manualAction?unifiedActionDependencyDetails(x.manualAction):escapeHtml(x.dependency||'—'))
+    +'</dd></div></dl><div class="unified-action-buttons">'+unifiedActionRowButtons(x)+'</div>';
+  content.querySelectorAll('.unified-action-buttons button').forEach(button=>{
+    button.addEventListener('click',()=>dialog.close(),{capture:true});
+  });
+  if(!dialog.open)dialog.showModal();
+}
+
 function showActionsDashboard(){
   if(!nucleoFeatureRequire('pdca','actions'))return;
   view('actionsDashboardView');
@@ -909,7 +929,7 @@ function showActionsDashboard(){
   }catch(err){
     console.error('Erro ao carregar Ações:',err);
     const body=document.getElementById('actionsDashboardBody');
-    if(body)body.innerHTML='<tr><td colspan="14" style="padding:24px;text-align:center;color:#667085">Não foi possível carregar as ações nesta visualização.</td></tr>';
+    if(body)body.innerHTML='<tr><td colspan="5" style="padding:24px;text-align:center;color:#667085">Não foi possível carregar as ações nesta visualização.</td></tr>';
   }
 }
 
