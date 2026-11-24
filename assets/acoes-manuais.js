@@ -326,12 +326,37 @@ function unifiedActionCodePrefix(ro){
   return number?'ACT-'+number.replace(/^0+(?=\d)/,'')+'-':'ACT-';
 }
 
+function unifiedActionLegacySequences(records){
+  const scopes=new Map();
+  const sequences=new Map();
+  for(const record of records){
+    const scope=unifiedActionCodeScope(record);
+    if(!scopes.has(scope))scopes.set(scope,{used:new Set(),groups:new Map()});
+    const {used,groups}=scopes.get(scope);
+    if(record.actionCode){
+      if(Number(record.actionSequence)>0)used.add(Number(record.actionSequence));
+      continue;
+    }
+    const key=JSON.stringify([record.groupId||record.id,record.dependencySector||'']);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(record);
+  }
+  for(const {used,groups} of scopes.values()){
+    const ordered=[...groups.entries()].sort(([a],[b])=>a.localeCompare(b));
+    let sequence=1;
+    for(const [,group] of ordered){
+      while(used.has(sequence))sequence++;
+      for(const record of group)sequences.set(record.id,sequence);
+      sequence++;
+    }
+  }
+  return sequences;
+}
+
 function unifiedActionCodeStart(records,scope){
   const previous=records.filter(record=>unifiedActionCodeScope(record)===scope);
-  const legacy=new Set(previous.filter(record=>!record.actionCode)
-    .map(record=>record.groupId||record.id));
-  const highest=previous.reduce((max,record)=>Math.max(max,Number(record.actionSequence)||0),0);
-  return Math.max(legacy.size,highest)+1;
+  const legacy=unifiedActionLegacySequences(previous);
+  return previous.reduce((max,record)=>Math.max(max,Number(record.actionSequence)||legacy.get(record.id)||0),0)+1;
 }
 
 let unifiedActionPendingCreation=null;
@@ -708,12 +733,14 @@ function actionDashboardItems(){
   });
 
   // Ações atribuídas / pessoais.
-  getUnifiedManualActions().filter(unifiedActionCanSee).forEach(a=>{
+  const manualActions=getUnifiedManualActions();
+  const legacySequences=unifiedActionLegacySequences(manualActions);
+  manualActions.filter(unifiedActionCanSee).forEach(a=>{
     const status=unifiedManualActionStatus(a);
     items.push({
       source:a.source==='self'?'self':'assigned',
       sourceLabel:a.source==='self'?'Pessoal':'Atribuída',
-      id:a.actionCode||a.id||'-',
+      id:a.actionCode||unifiedActionCodePrefix(a.ro)+legacySequences.get(a.id),
       createdAt:a.createdAt||'',
       type:a.type||'Ação',
       project:[a.ro,a.project].filter(Boolean).join(' · ')||'—',
