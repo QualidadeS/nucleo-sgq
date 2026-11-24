@@ -415,6 +415,7 @@ function nucleoPdcaPreferredRo2026(items,triageMap=null){
 function nucleoPdcaReviewCandidates2026(){
   const cutoff=new Date(2026,0,1,0,0,0,0),triageMap=getSavedTriageMap(),review=nucleoPdcaReviewMap2026();
   const groups=new Map(),out=[];
+  let reviewChanged=false;
   getAllRoRecords().forEach(ro=>{
     const key=nucleoPdcaReviewRoKey2026(ro);if(!key)return;
     const d=nucleoPdcaReviewDate2026(ro);if(!d||d<cutoff)return;
@@ -429,10 +430,16 @@ function nucleoPdcaReviewCandidates2026(){
     if(!hasActiveDuplicate&&nucleoPdcaReviewTerminal2026(ro,triageMap))return;
     const manual=review[canonical];
     const hasEvidence=nucleoPdcaReviewHasEvidence2026(ro);
-    if(hasEvidence && manual?.decision!=='yes')review[canonical]={decision:'yes',automatic:true,at:new Date().toISOString(),by:'Núcleo',ro:key};
+    if(hasEvidence && manual?.decision!=='yes'){
+      review[canonical]={decision:'yes',automatic:true,at:new Date().toISOString(),by:'Núcleo',ro:key};
+      reviewChanged=true;
+    }
     if(!review[canonical])out.push({ro,key,canonical,date:d});
   });
-  nucleoSavePdcaReviewMap2026(review);
+  if(reviewChanged){
+    try{nucleoSavePdcaReviewMap2026(review);}
+    catch(error){console.warn('[NÚCLEO PDCA] Cache da revisão indisponível.',error);}
+  }
   return out.sort((a,b)=>b.date-a.date);
 }
 
@@ -673,41 +680,51 @@ function renderPdcaReview2026(){
   const panel=document.getElementById('pdcaPrioritiesContent');
   if(!panel)return;
 
-  const rows=nucleoPdcaReviewCandidates2026();
   const count=document.getElementById('pdcaPrioritiesCount');
-  if(count)count.textContent=rows.length+' para definir';
+  try{
+    const rows=nucleoPdcaReviewCandidates2026();
 
-  if(!rows.length){
-    panel.innerHTML='<div style="padding:28px;text-align:center"><b>Nenhuma prioridade pendente.</b><div class="small" style="margin-top:5px">Todas as R.O.s de 2026 já possuem definição de PDCA.</div></div>';
-    return;
+    if(!rows.length){
+      if(count)count.textContent='0 para definir';
+      panel.innerHTML='<div style="padding:28px;text-align:center"><b>Nenhuma prioridade pendente.</b><div class="small" style="margin-top:5px">Todas as R.O.s de 2026 já possuem definição de PDCA.</div></div>';
+      return;
+    }
+
+    panel.innerHTML=`
+      <div style="overflow:auto">
+        <table class="action-table" style="min-width:900px">
+          <thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Definir PDCA</th></tr></thead>
+          <tbody>
+            ${rows.slice(0,150).map(x=>{
+              const r=x.ro;
+              const origin=String(r.origemBase||r.raw?.__origemBase||'');
+              const sector=effectiveRoSector(r,getSavedTriageMap())||'-';
+              return `<tr style="background:#fffdf5">
+                <td><b>${escapeHtml(x.key)}</b></td>
+                <td>${escapeHtml(formatDateBR(r.data||r.dataRegistro||r.dataSolicitacao||''))}</td>
+                <td>${escapeHtml(r.cliente||r.origem||'-')}</td>
+                <td>${escapeHtml(sector)}</td>
+                <td>
+                  <div style="display:flex;gap:8px;white-space:nowrap">
+                    <button class="btn primary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','yes')">Tem PDCA</button>
+                    <button class="btn secondary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','no')">Não tem PDCA</button>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${rows.length>150?'<p class="small" style="margin-top:10px">Mostrando as 150 prioridades mais recentes. Resolva estas para carregar as próximas.</p>':''}`;
+    if(count)count.textContent=rows.length+' para definir';
+  }catch(error){
+    if(count)count.textContent='';
+    const message=document.createElement('p');
+    message.setAttribute('role','alert');
+    message.textContent='Não foi possível carregar as prioridades de PDCA. '+(error?.message||'Erro desconhecido.');
+    panel.replaceChildren(message);
+    console.error('[NÚCLEO PDCA] Falha ao carregar prioridades.',error);
   }
-
-  panel.innerHTML=`
-    <div style="overflow:auto">
-      <table class="action-table" style="min-width:900px">
-        <thead><tr><th>R.O.</th><th>Data</th><th>Cliente / origem</th><th>Setor</th><th>Definir PDCA</th></tr></thead>
-        <tbody>
-          ${rows.slice(0,150).map(x=>{
-            const r=x.ro;
-            const origin=String(r.origemBase||r.raw?.__origemBase||'');
-            const sector=effectiveRoSector(r,getSavedTriageMap())||'-';
-            return `<tr style="background:#fffdf5">
-              <td><b>${escapeHtml(x.key)}</b></td>
-              <td>${escapeHtml(formatDateBR(r.data||r.dataRegistro||r.dataSolicitacao||''))}</td>
-              <td>${escapeHtml(r.cliente||r.origem||'-')}</td>
-              <td>${escapeHtml(sector)}</td>
-              <td>
-                <div style="display:flex;gap:8px;white-space:nowrap">
-                  <button class="btn primary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','yes')">Tem PDCA</button>
-                  <button class="btn secondary" type="button" onclick="nucleoMarkPdcaReview2026('${escapeHtml(x.key)}','${escapeHtml(origin)}','no')">Não tem PDCA</button>
-                </div>
-              </td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-    </div>
-    ${rows.length>150?'<p class="small" style="margin-top:10px">Mostrando as 150 prioridades mais recentes. Resolva estas para carregar as próximas.</p>':''}`;
 }
 
 function nucleoOpenPdcaPriorities(){
