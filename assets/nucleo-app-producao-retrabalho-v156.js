@@ -15747,14 +15747,18 @@ function openRoHistory(number,unit){
       ['Justificativa da triagem',t.note||'Não registrada'],['Justificativa do direcionamento',t.assignmentReason],
       ['PDCA',t.pdcaRequired===true?'Obrigatório':t.pdcaRequired===false?'Dispensado':''],['Prazo do PDCA',t.pdcaDeadline&&formatDateBR(t.pdcaDeadline)]
     ])):[card('Triagem',[['Situação','Nenhuma triagem registrada']])]),
-    ...(pdcas.length?pdcas.map(p=>{
+    ...(pdcas.length?pdcas.map((p,index)=>{
       const answers=p.answers||p.respostas||{};
       const actions=allPdcaActionsForRecord(p);
+      const attached=nucleoPdcaUsesAttachedPdf(p);
+      const action=attached
+        ? '<button class="btn secondary" type="button" data-history-pdca="'+index+'">Ver PDF original</button>'
+        : p.id?'<button class="btn secondary" type="button" data-history-pdca="'+index+'">Ver resposta do PDCA</button>':'';
       return card('Resposta · '+(p.id||'PDCA'),[
-        ['Data da resposta',date(p.sentAt||p.envio)||'Não registrada'],['Respondida por',p.responsavel],['Setor',p.setor],
+        ['Data da resposta',date(p.sentAt||p.envio)||'Não registrada'],['Respondida por',p.responsavel],['Setor',p.setor||p.sector],['Arquivo',p.fileName],['Versão',p.version],
         ['Problema',answers.p1],['Causa raiz',answers.p7],['Meta',answers.p8],['Status da meta',answers.p10],
         ['Resultado da verificação',answers.c1],['Padronização',answers.a2],['Apresentado em',date(p.apresentadoEm)]
-      ])+actions.map(a=>card('Ação do '+(p.id||'PDCA'),[
+      ]).replace('</article>',action+'</article>')+actions.map(a=>card('Ação do '+(p.id||'PDCA'),[
         ['Ação',a.action],['Responsáveis',a.owner],['Prazo',a.deadline&&date(a.deadline)],
         ['Situação',inferActionStatus({...p,answers:{...answers,p12:a.deadline},acaoConferidaEm:a.completedAt||a.acaoConferidaEm||(a.id?.endsWith('-A1')?p.acaoConferidaEm:'')}).label],
         ['Conclusão registrada',date(a.completedAt||a.acaoConferidaEm||(!a.id?.endsWith('-A1')?'':p.acaoConferidaEm))],['Evidência',a.evidenceNote]
@@ -15769,7 +15773,31 @@ function openRoHistory(number,unit){
       ['Definida em',date(r.treatmentDefinedAt)],['Concluída em',date(r.treatmentCompletedAt)],['Orientação da Qualidade',r.qualityNote]
     ]))
   ];
-  document.getElementById('roHistoryContent').innerHTML=sections.join('');
+  const content=document.getElementById('roHistoryContent');
+  content.innerHTML=sections.join('');
+  content.querySelectorAll('[data-history-pdca]').forEach(button=>{
+    button.onclick=async()=>{
+      const p=pdcas[Number(button.dataset.historyPdca)];
+      if(!p||!canConsultRoHistory()||!canViewPdca(p))return;
+      if(!nucleoPdcaUsesAttachedPdf(p)){
+        modal.close();
+        openPdcaReport(p.id);
+        return;
+      }
+      const token=getSession()?.authToken;
+      button.disabled=true;
+      try{
+        const attachment=await nucleoResolvePdcaAttachment(p);
+        if(getSession()?.authToken!==token||!modal.open||!content.contains(button))return;
+        modal.close();
+        await nucleoDriveOpenExternalPdf(attachment,false);
+      }catch(error){
+        alert(error.message||'PDF original indisponível.');
+      }finally{
+        button.disabled=false;
+      }
+    };
+  });
   if(!modal.open)modal.showModal();
 }
 
