@@ -120,16 +120,13 @@ function unifiedActionUrgencyLabel(v){
 
 function unifiedManualActionStatus(a){
   if(a?.completedAt || Number(a?.progress||0)>=100)return {code:'done',label:'Concluída',reason:'Conclusão registrada.'};
-  const d=parseBrDate(a?.deadline||'');
-  if(d){
-    const today=new Date();today.setHours(0,0,0,0);
-    const end=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-    if(today>end)return {code:'overdue',label:'Atrasada',reason:'O prazo da ação venceu.'};
-  }
+  if(unifiedManualActionDeadline(a).days<0)return {code:'overdue',label:'Atrasada',reason:'O prazo da ação venceu.'};
   return {code:'pending',label:'Pendente',reason:'Aguardando conclusão.'};
 }
 function unifiedManualActionDeadline(a){
-  return actionDeadlineInfo({answers:{p12:a?.deadline||''}});
+  const value=String(a?.deadline||'').trim();
+  const iso=value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return actionDeadlineInfo({answers:{p12:iso?iso[3]+'/'+iso[2]+'/'+iso[1]:value}});
 }
 
 function unifiedActionAllSectors(){
@@ -881,6 +878,61 @@ function renderActionsDashboard(){
   });
 
 }
+async function distributeExistingActionParts(id,button){
+  if(button.disabled)return;
+  button.disabled=true;
+  try{
+    await loadUnifiedManualActions();
+    const list=getUnifiedManualActions();
+    const parent=list.find(a=>a.id===id);
+    if(!parent||(!isAdmin()&&parent.createdByKey!==unifiedCurrentUserKey()))return;
+    const unit=explicitPortalUnit(parent.roUnit||parent.unit);
+    if(!unit)throw new Error('A unidade da ação precisa estar identificada.');
+    const parts=parent.dependencies?.sectorResponsibilities||[];
+    const users=getOperationalUsers().filter(unifiedActionIsActiveUser);
+    const groupId=parent.groupId||parent.id;
+    let sequence=unifiedActionCodeStart(list,unifiedActionCodeScope(parent));
+    const existing=new Set(list.map(a=>a.id));
+    const records=[];
+    for(const part of parts){
+      const description=String(part.description||'').trim();
+      if(!description)continue;
+      const recipients=new Map(users.filter(u=>userHasUnitSector(u,unit,part.sector))
+        .map(u=>[unifiedActionUserKey(u),u]).filter(([key])=>key));
+      if(!recipients.size)throw new Error('Não há usuários ativos em '+part.sector+' nesta unidade.');
+      const previous=list.find(a=>a.groupId===groupId&&a.dependencySector===part.sector);
+      const partSequence=previous?.actionSequence||sequence;
+      const code=previous?.actionCode||unifiedActionCodePrefix(parent.ro)+partSequence;
+      for(const [key,user] of recipients){
+        const childId=parent.id+'-DEP-'+encodeURIComponent(JSON.stringify([part.sector,key]));
+        if(existing.has(childId)||list.some(a=>a.groupId===groupId&&a.dependencySector===part.sector&&a.assigneeKey===key))continue;
+        existing.add(childId);
+        records.push({
+          id:childId,groupId,source:'assigned',recordKind:'manual_action',
+          dependencySector:part.sector,actionCode:code,actionSequence:partSequence,
+          ro:parent.ro,roUnit:parent.roUnit,sourceRoOrigin:parent.sourceRoOrigin,
+          action:description,deadline:parent.deadline,type:parent.type,project:parent.project,
+          subject:parent.subject,urgency:parent.urgency,sector:part.sector,unit,
+          assigneeKey:key,assigneeName:user.name||user.email,
+          createdByKey:parent.createdByKey,createdByName:parent.createdByName,
+          createdAt:new Date().toISOString(),progress:0,history:[]
+        });
+      }
+      if(!previous&&records.some(a=>a.actionCode===code))sequence++;
+    }
+    if(records.length){
+      await saveUnifiedManualActions(list.concat(records));
+      for(const record of records){
+        createNotification({type:'action',skipEmail:true,audience:'user',userKey:record.assigneeKey,
+          sector:record.sector,title:'Nova ação atribuída',message:record.action});
+      }
+    }
+    renderActionsDashboard();
+    alert(records.length?'Partes atribuídas aos setores.':'As partes já estão atribuídas.');
+  }catch(error){alert(error.message||String(error));}
+  finally{button.disabled=false;}
+}
+
 function openUnifiedActionDetails(x){
   if(!x||!nucleoFeatureRequire('pdca','actions'))return;
   if(x.manualAction&&!unifiedActionCanSee(x.manualAction))return;
@@ -907,6 +959,16 @@ function openUnifiedActionDetails(x){
   content.querySelectorAll('.unified-action-buttons button').forEach(button=>{
     button.addEventListener('click',()=>dialog.close(),{capture:true});
   });
+  const action=x.manualAction;
+  if(action?.dependencies?.sectorResponsibilities?.some(part=>String(part.description||'').trim())
+    &&(isAdmin()||action.createdByKey===unifiedCurrentUserKey())){
+    const distribute=document.createElement('button');
+    distribute.type='button';
+    distribute.className='btn secondary';
+    distribute.textContent='Distribuir partes aos setores';
+    distribute.onclick=()=>distributeExistingActionParts(action.id,distribute);
+    content.querySelector('.unified-action-buttons').append(distribute);
+  }
   if(!dialog.open)dialog.showModal();
 }
 
