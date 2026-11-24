@@ -1517,9 +1517,12 @@ async function runPortalDiagnostics(){
       'E-mail: '+(d.email?'OK':'ERRO'),
       'Base central: '+(d.baseCentral?'OK':'ERRO')
     ];
-    if(box){box.textContent=parts.join(' · ');box.className='statusline okline'}
+    if(box){
+      box.textContent=parts.join(' · ');
+      box.className='statusline '+(parts.every(part=>part.endsWith(': OK'))?'okline':'diagnostic-error');
+    }
   }catch(e){
-    if(box){box.textContent='Falha no diagnóstico: '+(e.message||e);box.className='statusline'}
+    if(box){box.textContent='Falha no diagnóstico: '+(e.message||e);box.className='statusline diagnostic-error'}
   }
 }
 async function exportPortalConfiguration(){
@@ -1853,7 +1856,7 @@ function refreshMenuNotificationBadges(){
 
   const candidateIds=[
     'navRos','navMySubmittedRos','navSent','navActions','navPendingHub',
-    'navPendingActions','navTriage','navExternalRoControl','navMySacs','navSacTracking','navSimpleRework','navContests','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navAdmin'
+    'navPendingActions','navTriage','navExternalRoControl','navSacClassified','navMySacs','navSacTracking','navSimpleRework','navContests','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navAdmin'
   ];
 
   candidateIds.forEach(navId=>{
@@ -5731,7 +5734,7 @@ function externalTreatmentStatusLabel(v){
 }
 function externalRoPendingCount(){
   if(!isAdmin())return 0;
-  return getExternalRoControls().filter(r=>r.status!=='done').length;
+  return getExternalRoControls().filter(sacIsPendingCandidate).length;
 }
 function refreshExternalRoSidebarBadge(){
   const badge=document.getElementById('externalRoSidebarBadge');
@@ -6132,15 +6135,36 @@ function showMySacs(){
   renderMySacs();
 }
 
-function showExternalRoControl(){
+let sacControlModule='evaluate';
+function showExternalRoControl(module='evaluate'){
   if(!isAdmin()){showList();return}
+  sacControlModule=module==='classified'?'classified':'evaluate';
+  sacQuickTab='all';
+  ['externalRoStatusFilter','externalRoImpactFilter'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='all';});
+  const search=document.getElementById('externalRoSearch');if(search)search.value='';
   view('externalRoControlView');
-  setNav('externalro');
+  setNav(sacControlModule==='classified'?'sacclassified':'externalro');
+  updateSacControlModuleUi();
   renderExternalRoControl();
 }
-
 let sacQuickTab='all';
-
+function updateSacControlModuleUi(){
+  const evaluating=sacControlModule==='evaluate';
+  const title=document.getElementById('sacControlTitle');
+  const description=document.getElementById('sacControlDescription');
+  const tabs=document.getElementById('sacQuickTabs');
+  const notice=document.querySelector('#externalRoControlView .sac-analysis-notice');
+  if(title)title.textContent=evaluating?'R.O.s para avaliar':'SACs classificados';
+  if(description)description.textContent=evaluating?'Avalie se a R.O. externa precisa de SAC ou deve permanecer somente como R.O.':'Atualize a ficha e acompanhe a situação, o andamento e a conclusão dos SACs.';
+  if(tabs)tabs.hidden=evaluating;
+  if(tabs)tabs.style.display=evaluating?'none':'flex';
+  if(notice)notice.hidden=!evaluating;
+  const all=document.getElementById('sacTabAll');if(all)all.textContent='Todos os SACs';
+  const status=document.getElementById('externalRoStatusFilter');
+  const treatment=document.getElementById('externalRoImpactFilter');
+  [status,treatment].forEach(el=>{if(el){el.disabled=evaluating;const field=el.closest('.field');if(field)field.hidden=evaluating;}});
+  ['sacTabAll','sacTabForm','sacTabActive','sacTabDone'].forEach(id=>{const el=document.getElementById(id);if(el){const selected=({sacTabAll:'all',sacTabForm:'form',sacTabActive:'active',sacTabDone:'done'})[id]===sacQuickTab;el.classList.toggle('primary',selected);el.classList.toggle('secondary',!selected);}});
+}
 function setSacQuickTab(tab){
   sacQuickTab=tab||'all';
   const map={
@@ -6183,15 +6207,11 @@ function sacHasFilledForm(r){
   return true;
 }
 function sacMatchesQuickTab(r){
-  if(sacIsPendingCandidate(r)){
-    return sacQuickTab==='all'||sacQuickTab==='unclassified';
-  }
+  if(sacControlModule==='evaluate')return sacIsPendingCandidate(r);
   if(!sacIsRealSac(r))return false;
-  if(sacQuickTab==='unclassified')return false;
-  if(sacQuickTab==='defined')return sacIsClassified(r) && r.treatmentStatus!=='done';
   if(sacQuickTab==='form')return sacHasFilledForm(r);
-  if(sacQuickTab==='active')return r.treatmentStatus==='started' || r.status==='treatment';
-  if(sacQuickTab==='done')return r.treatmentStatus==='done' || r.status==='done';
+  if(sacQuickTab==='active')return r.treatmentStatus==='started'||r.status==='treatment';
+  if(sacQuickTab==='done')return r.treatmentStatus==='done'||r.status==='done';
   return true;
 }
 function updateSacQuickSummary(allRows,visibleRows){
@@ -6208,14 +6228,14 @@ function updateSacQuickSummary(allRows,visibleRows){
     done:sacs.filter(r=>r.treatmentStatus==='done'||r.status==='done').length
   };
   const label={
-    all:'Visão geral',
+    all:sacControlModule==='evaluate'?'R.O.s para avaliar':'SACs classificados',
     unclassified:'R.O.s para avaliar',
     defined:'SACs classificados',
     form:'Ficha preenchida',
     active:'Em andamento',
     done:'Concluídos'
   }[sacQuickTab]||'Visão geral';
-  el.textContent=`${label}: ${visibleRows.length} registro(s) · Para avaliar: ${counts.unclassified} · SACs: ${sacs.length}`;
+  el.textContent=`${label}: ${visibleRows.length} registro(s)`;
 }
 
 
@@ -6333,6 +6353,7 @@ function sacSortRows(rows,mode){
 }
 
 function renderExternalRoControl(){
+  updateSacControlModuleUi();
   nucleoRenderSacDrafts();
   if(!isAdmin()&&!isRepresentativeSacAccess())return;
   const status=document.getElementById('externalRoStatusFilter')?.value||'all';
@@ -6424,7 +6445,7 @@ function renderExternalRoControl(){
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <b style="font-size:16px">${escapeHtml(r.ro||'—')}</b>
-            ${isAdmin()?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
+            ${isAdmin()&&!sacIsClassified(r)?`<button class="btn primary" type="button" style="padding:5px 8px;font-size:11px;min-height:auto" onclick="openExternalRoControlModal('${escapeHtml(r.id)}')">Classificar SAC</button>`:''}
           </div>
           <div class="small" style="margin-top:4px"><b>Direcionado para:</b> ${escapeHtml(sacDirectedSector(r))}</div>
         </div>
@@ -7172,7 +7193,26 @@ function updateExternalTreatmentRecord(id,patch){
   portalBackendSave('external_ro_controls',record.id,record);
   return record;
 }
-function startExternalTreatment(id){
+function chooseSacStartNotification(record){
+  return new Promise(resolve=>{
+    const dialog=document.createElement('dialog');
+    dialog.className='modal-box';
+    dialog.setAttribute('aria-labelledby','sacStartTitle');
+    dialog.innerHTML='<h2 id="sacStartTitle">Iniciar SAC</h2>'+
+      '<p>Confirmar o início da tratativa da R.O. '+escapeHtml(record.ro)+'?</p>'+
+      '<label style="display:flex;align-items:center;gap:8px"><input name="notifyRepresentative" type="checkbox" style="width:auto"> Notificar representante</label>'+
+      '<p class="small">O aviso ao reclamante permanece conforme o fluxo atual.</p>'+
+      '<div class="actions"><button type="button" class="btn secondary" data-cancel>Cancelar</button><button type="button" class="btn primary" data-start>Iniciar SAC</button></div>';
+    let settled=false;
+    const finish=value=>{if(settled)return;settled=true;dialog.close();dialog.remove();resolve(value);};
+    dialog.querySelector('[data-cancel]').onclick=()=>finish(null);
+    dialog.querySelector('[data-start]').onclick=()=>finish(dialog.querySelector('[name="notifyRepresentative"]').checked);
+    dialog.addEventListener('cancel',e=>{e.preventDefault();finish(null);});
+    dialog.addEventListener('close',()=>finish(null));
+    document.body.appendChild(dialog);dialog.showModal();
+  });
+}
+async function startExternalTreatment(id){
   if(!isAdmin())return;
   const current=getExternalRoControls().find(x=>String(x.id)===String(id));
   if(!current)return;
@@ -7181,20 +7221,24 @@ function startExternalTreatment(id){
     openExternalRoControlModal(id);
     return;
   }
-  if(!confirm('Confirmar o início da tratativa da R.O. '+current.ro+'? O reclamante será notificado.'))return;
+  const notifyRepresentative=await chooseSacStartNotification(current);
+  if(notifyRepresentative===null)return;
   const now=new Date().toISOString();
   const record=updateExternalTreatmentRecord(id,{
+    notifyRepresentativeOnStart:notifyRepresentative,
     treatmentStatus:'started',
     treatmentStartedAt:current.treatmentStartedAt||now,
     status:'treatment'
   });
   if(!record)return;
+  if(notifyRepresentative){
   appendRepresentativeSacNotification(
     record,
     'SAC '+record.ro+' em andamento',
     'A tratativa foi iniciada: '+externalTreatmentLabel(record.treatmentType)+'. Prazo vigente: '+formatDateBR(record.treatmentDeadline)+'.'
   );
   updateExternalTreatmentRecord(record.id,{representativeNotifications:record.representativeNotifications});
+  }
   externalComplainantNotification(
     record,
     'Classificação e encaminhamento iniciada',
@@ -9393,7 +9437,7 @@ function renderSgqCharts(d){
     sectorBox.innerHTML=sectors.length?sectors.map(x=>`
       <div class="sgq-bar-row">
         <div class="sgq-bar-label" title="${escapeHtml(x.name||'Sem setor')}">${escapeHtml(x.name||'Sem setor')}</div>
-        <div class="sgq-bar-track"></div>
+        <div class="sgq-bar-track"><div class="sgq-bar-fill" style="width:${x.total / maxSector * 100}%"></div></div>
         <div class="sgq-bar-value">${x.total}</div>
       </div>`).join(''):'<div class="small">Sem dados por setor.</div>';
   }
@@ -9407,7 +9451,7 @@ function renderSgqCharts(d){
     monthBox.innerHTML=months.length?months.map(x=>`
       <div class="sgq-month-item">
         <div class="sgq-month-value">${x.value}</div>
-        <div class="sgq-month-bar-wrap"></div>
+        <div class="sgq-month-bar-wrap"><div class="sgq-month-bar" style="height:${x.value / maxMonth * 100}%"></div></div>
         <div class="sgq-month-label">${escapeHtml(x.label)}</div>
       </div>`).join(''):'<div class="small">Sem datas suficientes para gerar a evolução.</div>';
   }
@@ -10799,11 +10843,16 @@ function getAdminConfig(){
   return c;
 }
 
+let nucleoApiUrlDirty=false;
+document.addEventListener('input',function(event){
+ if(event.target?.id==='apiUrl')nucleoApiUrlDirty=true;
+},true);
 function loadAdminConfig(){
   const c=getAdminConfig();
 
   document.querySelectorAll('#settingsView input, #settingsView select, #settingsView textarea').forEach((el,i)=>{
     if(!el.id) el.id='adminCfgAuto'+i;
+    if(el.id==='apiUrl'&&(nucleoApiUrlDirty||document.activeElement===el))return;
     if(nucleoRoSyncPeriodDirty&&['roSyncPeriod','roSyncDateFrom'].includes(el.id))return;
     if(Object.prototype.hasOwnProperty.call(c,el.id)) el.value=c[el.id];
   });
@@ -10811,7 +10860,8 @@ function loadAdminConfig(){
   // A integração é restaurada do armazenamento dedicado para não sumir
   // depois da sincronização da base central.
   const integration=getSavedIntegrationSettings();
-  if(document.getElementById('apiUrl'))document.getElementById('apiUrl').value=integration.apiUrl||c.apiUrl||'';
+  const apiField=document.getElementById('apiUrl');
+  if(apiField&&!nucleoApiUrlDirty&&document.activeElement!==apiField)apiField.value=integration.apiUrl||c.apiUrl||'';
   if(document.getElementById('apiKey'))document.getElementById('apiKey').value=integration.apiKey||c.apiKey||'';
   if(document.getElementById('autoSync'))document.getElementById('autoSync').value=String(integration.autoSync||c.autoSync||'0');
   if(!nucleoRoSyncPeriodDirty){
@@ -11150,6 +11200,7 @@ function saveSettings(){
 
   document.querySelectorAll('#settingsView input, #settingsView select, #settingsView textarea').forEach((el,i)=>{
     if(!el.id) el.id='adminCfgAuto'+i;
+    if(el.id==='apiUrl'&&(nucleoApiUrlDirty||document.activeElement===el))return;
     if(el.type==='file')return;
     c[el.id]=el.value;
   });
@@ -13060,7 +13111,7 @@ function renderNcCapaTreatmentList(){
   }
 
   if(!rows.length){
-    host.innerHTML='<div style="padding:28px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa"><b>Nenhum registro encontrado.</b><div class="small" style="margin-top:5px">Ajuste os filtros ou a busca.</div></div>';
+    host.innerHTML='<div class="nc-empty-state" style="padding:28px;border:1px solid #e5e7eb;border-radius:12px;background:#fafafa"><b>Nenhum registro encontrado.</b><div class="small" style="margin-top:5px">Ajuste os filtros ou a busca.</div></div>';
     return;
   }
 
@@ -14407,12 +14458,32 @@ async function deleteAdminOperationalRecord(id){
   }
 }
 
+function toggleSgqAdminRegistration(){
+  const panel=document.getElementById('sgqAdminRegistration');
+  const button=document.getElementById('navSgqAdminRegistration');
+  if(!panel||!button||!nucleoPersonPermissions(getSession()||{}).sgq)return;
+  panel.hidden=!panel.hidden;
+  button.setAttribute('aria-expanded',String(!panel.hidden));
+  button.textContent=panel.hidden?'Cadastro de administrador':'Fechar cadastro de administrador';
+  if(!panel.hidden)panel.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
 function openAdmin(){
   if(nucleoPersonPermissions(getSession()).sgq)nucleoReadAvatarGalleryConfig();
   refreshSectorSelectors();
   if(!isAdmin()){showList();return;}
   view('settingsView');setNav('admin');loadAdminConfig();
   ensureUnitQualitySettings();
+  const adminRegistration=document.getElementById('sgqAdminRegistration');
+  const adminShortcut=document.getElementById('navSgqAdminRegistration');
+  if(adminRegistration)adminRegistration.hidden=true;
+  if(adminShortcut){
+    adminShortcut.hidden=!nucleoPersonPermissions(getSession()).sgq;
+    adminShortcut.setAttribute('aria-expanded','false');
+    adminShortcut.textContent='Cadastro de administrador';
+  }
+  const unitSettings=document.getElementById('unitQualitySettings');
+  if(unitSettings)unitSettings.open=false;
   const sacShortcut=document.getElementById('navSacEmailSettings');
   if(sacShortcut)sacShortcut.hidden=!nucleoPersonFeatureCan('sectors','emails');
   window.scrollTo({top:0,behavior:'instant'});
@@ -14645,9 +14716,9 @@ function restoreSideModules(){
     setSideModuleOpen(id,s[id]===undefined?defaultOpen:!!s[id],false);
   });
 }
-function openModuleForNav(id){const m={navNewRo:'moduleRo',navMySubmittedRos:'moduleRo',navAssignedRos:'moduleRo',navSent:'moduleRo',navActions:'moduleRo',navPendingActions:'moduleRo',navTriage:'moduleRo',navContests:'moduleRo',navNewExternalRo:'moduleRo',navExternalRoControl:'moduleSac',navMySacs:'moduleSac',navSacsConsult:'moduleSac',navSacTracking:'moduleSac',navSimpleRework:'moduleSac',navPendingHub:'modulePersonal',navDocumentRequests:'modulePersonal',navIndicators:'moduleManagement',navAnnouncements:'moduleManagement',navEquipment:'moduleManagement',navTraining:'moduleManagement',navNcCapa:'moduleManagement',navDocuments:'moduleManagement',navProcesses:'moduleManagement'};if(m[id])setSideModuleOpen(m[id],true)}
+function openModuleForNav(id){const m={navNewRo:'moduleRo',navMySubmittedRos:'moduleRo',navAssignedRos:'moduleRo',navSent:'moduleRo',navActions:'moduleRo',navPendingActions:'moduleRo',navTriage:'moduleRo',navContests:'moduleRo',navNewExternalRo:'moduleRo',navExternalRoControl:'moduleSac',navSacClassified:'moduleSac',navMySacs:'moduleSac',navSacsConsult:'moduleSac',navSacTracking:'moduleSac',navSimpleRework:'moduleSac',navPendingHub:'modulePersonal',navDocumentRequests:'modulePersonal',navIndicators:'moduleManagement',navAnnouncements:'moduleManagement',navEquipment:'moduleManagement',navTraining:'moduleManagement',navNcCapa:'moduleManagement',navDocuments:'moduleManagement',navProcesses:'moduleManagement'};if(m[id])setSideModuleOpen(m[id],true)}
 function setNav(which){
-  ['navPersonalSettings','navSistemaTeste','navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navMyAccess',...Object.values(NUCLEO_ACCESS_CONSULTATIONS).map(([id])=>id),'navAdmin'].forEach(function(id){
+  ['navPersonalSettings','navSistemaTeste','navRos','navNewRo','navNewExternalRo','navMySubmittedRos','navAssignedRos','navSent','navActions','navPendingHub','navDocumentRequests','navProfile','navTriage','navExternalRoControl','navSacClassified','navMySacs','navContests','navIndicators','navPendingActions','navAnnouncements','navEquipment','navTraining','navNcCapa','navDocuments','navProcesses','navMyAccess',...Object.values(NUCLEO_ACCESS_CONSULTATIONS).map(([id])=>id),'navAdmin'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.classList.remove('active');
   });
@@ -14660,6 +14731,7 @@ function setNav(which){
     actions:'navActions',
     triage:'navTriage',
     externalro:'navExternalRoControl',
+    sacclassified:'navSacClassified',
     mysacs:'navMySacs',
     contests:'navContests',
     indicators:'navIndicators',
@@ -14685,7 +14757,7 @@ function setNav(which){
       sent:'PDCAs enviados',
       actions:'Ações',
       triage:'Triagem de R.O.s',
-      externalro:'Controle de SAC',
+      externalro:'R.O.s para avaliar',sacclassified:'SACs classificados',
       mysacs:'Meus SACs',
       contests:'Contestações',
       indicators:'Indicadores SGQ',
@@ -14985,6 +15057,8 @@ function badgeClass(status){if(status==="Em contestação")return"badge warn";if
   const filterEl=document.getElementById('filter');
   const rowsEl=document.getElementById('rows');
   if(!searchEl||!filterEl||!rowsEl)return;
+  document.getElementById('personalRoViewsToolbar').hidden=roListMode!=='assigned';
+  rowsEl.closest('table').classList.toggle('personal-assigned-table',roListMode==='assigned');
   const q=searchEl.value.trim().toLowerCase();
   const admin=isAdmin();
   const canPresent=nucleoPersonFeatureCan('pdca','present');
@@ -15212,6 +15286,9 @@ function contestRoFromList(numero,sector){
 }
 
 function view(id){
+  if(id!=='nucleoPersonalView'&&!document.getElementById('nucleoPersonalView')?.classList.contains('hidden')){
+    nucleoApplyPersonalAppearance(nucleoNormalizePersonalPrefs(nucleoPersonalPrefs()));
+  }
   document.body.classList.toggle('triage-wide',id==='triageView');
   const sacModal=document.getElementById('externalRoControlModalOverlay');
   if(sacModal)sacModal.classList.remove('open');
@@ -15933,7 +16010,7 @@ function overviewQuickCatalog(){
     {id:'documents',label:'Solicitação de Documentos',detail:'Pedir ou acompanhar documentos',action:"showAdminOperationalModule('documents')",allowed:()=>canRequestDocuments()},
     {id:'mysacs',label:'Meus SACs',detail:'Reclamações em que você é representante',action:'showMySacs()',allowed:()=>!isAdmin()&&overviewSafe(()=>isRepresentativeSacAccess(),false)},
     {id:'triage',label:'Triagem de R.O.s',detail:'Classificar e direcionar ocorrências',action:'showTriage()',allowed:()=>isAdmin()},
-    {id:'saccontrol',label:'Controle de SAC',detail:'Classificação e encaminhamento',action:'showExternalRoControl()',allowed:()=>isAdmin()},
+    {id:'saccontrol',label:'R.O.s para avaliar',detail:'Avaliar necessidade de SAC',action:'showExternalRoControl()',allowed:()=>isAdmin()},
     {id:'pendingactions',label:'Ações pendentes',detail:'Conferência e acompanhamento do SGQ',action:'showPendingActions()',allowed:()=>isAdmin()},
     {id:'contests',label:'Contestações',detail:'Analisar solicitações',action:'showContestations()',allowed:()=>isAdmin()},
     {id:'equipment',label:'Equipamentos e metrologia',detail:'Ativos, calibrações e histórico',action:"showAdminOperationalModule('equipment')",allowed:()=>isAdmin()},
@@ -16205,6 +16282,7 @@ function showAssignedRos(){
   if(extra)extra.style.display='flex';
   populateAssignedRoFilters();
   render();
+  nucleoApplyPersonalRoView(nucleoPersonalPrefs()?.defaultRoView);
   try{refreshRoSummary()}catch(e){}
   try{refreshUserPendingActionAlert()}catch(e){}
 }function showDetail(){fillDetail();view('detailView')}function showSettings(){
@@ -17071,7 +17149,7 @@ function enforceAdminVisibility(){
   const adminIds=[
     'navExternalPdcas','navAdmin','navEquipment','navTraining','navNcCapa','navDocuments',
     'navProcesses','navIndicators','navAnnouncements',
-    'navPendingActions','navTriage','navContests','navExternalRoControl','navSacTracking','navSimpleRework'
+    'navPendingActions','navTriage','navContests','navExternalRoControl','navSacClassified','navSacTracking','navSimpleRework'
   ];
   adminIds.forEach(id=>{
     const el=document.getElementById(id);
@@ -17168,10 +17246,16 @@ function unitConfiguration(unit){
   try{const own=JSON.parse(localStorage.getItem('nucleo-unit-configs')||'[]').find(c=>c.id===unit);if(own)return own;const sectors=JSON.parse(localStorage.getItem('nucleo-unit-public-sectors')||'{}');if(sectors[unit]!==undefined)return {sectorList:sectors[unit]};}catch(_){}
   return null;
 }
+function openUnitSacEmailSettings(){
+  const panel=document.getElementById('unitQualitySettings');
+  if(!panel||panel.hidden||getComputedStyle(panel).display==='none')return;
+  panel.open=true;
+  panel.scrollIntoView({behavior:'smooth'});
+}
 function ensureUnitQualitySettings(){
   const settings=document.getElementById('settingsView');if(!settings)return;
   let box=document.getElementById('unitQualitySettings');
-  if(!box){box=document.createElement('div');box.id='unitQualitySettings';box.className='settings-block unit-settings-card';box.innerHTML="<div class=\"unit-settings-heading\"><div><span class=\"unit-settings-eyebrow\">ADMINISTRAÇÃO</span><h3>Configurações por unidade</h3><p class=\"help\">Cadastros, setores e e-mails próprios de cada fábrica.</p></div><label class=\"unit-settings-picker\"><div class=\"label\">Unidade em edição</div><select id=\"qualityConfigUnit\"><option value=\"matriz\">SETA SC — Matriz</option><option value=\"filial\">SETA ES — Unidade Linhares</option></select></label></div><div class=\"unit-settings-grid\"><section class=\"unit-settings-section\"><h4>Setores desta unidade</h4><label><div class=\"label\">Um setor por linha</div><textarea id=\"qualityConfigSectors\" rows=\"7\" placeholder=\"Ex.: Qualidade&#10;PCP&#10;Produção\"></textarea></label></section><section class=\"unit-settings-section\"><h4>Destinatários padrão</h4><label><div class=\"label\">E-mail da qualidade</div><input type=\"email\" id=\"qualityConfigEmail\" placeholder=\"qualidade@empresa.com.br\"></label><label><div class=\"label\">E-mail da Diretoria para SAC</div><input type=\"email\" id=\"qualityConfigDirector\" placeholder=\"diretoria@empresa.com.br\"></label><p class=\"help\">As cópias fixas são configuradas no bloco abaixo.</p></section></div><div class=\"unit-settings-footer\"><button class=\"btn primary\" id=\"qualityConfigSave\">Salvar configuração desta unidade</button><span id=\"qualityConfigStatus\" class=\"small\" role=\"status\"></span></div>";const users=document.getElementById('cfgUsers');if(users)users.before(box);else settings.prepend(box);document.getElementById('qualityConfigUnit').onchange=()=>{loadUnitQualitySettings();applySettingsUnitSelection();};document.getElementById('qualityConfigSave').onclick=saveUnitQualitySettings;}
+  if(!box){box=document.createElement('details');box.id='unitQualitySettings';box.className='settings-block unit-settings-card';box.innerHTML="<summary class=\"btn secondary unit-settings-toggle\"><span class=\"unit-settings-open-label\">Abrir configurações por unidade</span><span class=\"unit-settings-close-label\">Fechar configurações por unidade</span></summary><div class=\"unit-settings-heading\"><div><span class=\"unit-settings-eyebrow\">ADMINISTRAÇÃO</span><h3>Configurações por unidade</h3><p class=\"help\">Cadastros, setores e e-mails próprios de cada fábrica.</p></div><label class=\"unit-settings-picker\"><div class=\"label\">Unidade em edição</div><select id=\"qualityConfigUnit\"><option value=\"matriz\">SETA SC — Matriz</option><option value=\"filial\">SETA ES — Unidade Linhares</option></select></label></div><div class=\"unit-settings-grid\"><section class=\"unit-settings-section\"><h4>Setores desta unidade</h4><label><div class=\"label\">Um setor por linha</div><textarea id=\"qualityConfigSectors\" rows=\"7\" placeholder=\"Ex.: Qualidade&#10;PCP&#10;Produção\"></textarea></label></section><section class=\"unit-settings-section\"><h4>Destinatários padrão</h4><label><div class=\"label\">E-mail da qualidade</div><input type=\"email\" id=\"qualityConfigEmail\" placeholder=\"qualidade@empresa.com.br\"></label><label><div class=\"label\">E-mail da Diretoria para SAC</div><input type=\"email\" id=\"qualityConfigDirector\" placeholder=\"diretoria@empresa.com.br\"></label><p class=\"help\">As cópias fixas são configuradas no bloco abaixo.</p></section></div><div class=\"unit-settings-footer\"><button class=\"btn primary\" id=\"qualityConfigSave\">Salvar configuração desta unidade</button><span id=\"qualityConfigStatus\" class=\"small\" role=\"status\"></span></div>";const users=document.getElementById('cfgUsers');if(users)users.before(box);else settings.prepend(box);document.getElementById('qualityConfigUnit').onchange=()=>{loadUnitQualitySettings();applySettingsUnitSelection();};document.getElementById('qualityConfigSave').onclick=saveUnitQualitySettings;}
   const isQuality=getSession()?.role==='quality';const select=document.getElementById('qualityConfigUnit');select.disabled=isQuality;if(isQuality)select.value='filial';
   ['cfgUnits','cfgTriage','cfgBackend'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isQuality?'none':'';});
   const addUnit=document.getElementById('newUserUnit');if(isQuality&&addUnit){addUnit.value='Unidade Linhares - Filial';addUnit.disabled=true;}
@@ -17568,8 +17652,8 @@ function nucleoApplyPersonAccess(){
   nucleoRefreshAccessConsultations(user);
   return;
  }
- const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navMySacs:'sac',navSacTracking:'sac',navSimpleRework:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
- Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
+ const map={navRos:'ros',navAssignedRos:'ros',navMySubmittedRos:'ros',navTriage:'ros',navContests:'ros',navSent:'pdca',navActions:'pdca',navPendingActions:'pdca',navExternalPdcas:'pdca',navExternalRoControl:'sac',navSacClassified:'sac',navMySacs:'sac',navSacTracking:'sac',navSimpleRework:'sac',navDocuments:'documents',navDocumentRequests:'documents',navIndicators:'indicators',navAnnouncements:'announcements',navEquipment:'equipment',navTraining:'training',navNcCapa:'nc',navProcesses:'processes'};
+ Object.entries(map).forEach(([id,module])=>{const el=document.getElementById(id);if(!el)return;const allowed=nucleoPersonCan(module,id==='navTriage'||id==='navExternalRoControl'||id==='navSacClassified');if(!allowed){el.style.setProperty('display','none','important');el.classList.add('hidden');}else{el.style.removeProperty('display');el.classList.remove('hidden');}});
  nucleoApplyFeatureAccess();
  nucleoRefreshAccessConsultations(user);
  for(const id of ['moduleRo','modulePersonal']){
@@ -17584,8 +17668,26 @@ function nucleoApplyPersonAccess(){
 }
 
 function nucleoRefreshAuditMenu(user){
-  const item=document.getElementById('navAudit5s');
-  if(item)item.hidden=!user?.authToken;
+ const item=document.getElementById('navAudit5s');
+ if(!item)return;
+ const token=user?.authToken;
+ if(!token){nucleoSidebarAuditAccess=null;item.hidden=true;return;}
+ if(isAdmin()){item.hidden=false;return;}
+ const now=new Date();
+ const month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+ const unit=nucleoPersonUnits(user).includes(explicitPortalUnit(user.unit))?explicitPortalUnit(user.unit):nucleoPersonUnits(user)[0];
+ const key=token+'|'+unit+'|'+month;
+ if(nucleoSidebarAuditAccess?.key===key){item.hidden=!nucleoSidebarAuditAccess.allowed;return;}
+ const state={key,allowed:false};
+ nucleoSidebarAuditAccess=state;
+ item.hidden=true;
+ portalJsonp({acao:'nucleo_5s_access',unit,month},30000).then(access=>{
+  if(nucleoSidebarAuditAccess!==state||getSession()?.authToken!==token)return;
+  if(!access?.sucesso){nucleoSidebarAuditAccess=null;return;}
+  state.allowed=Boolean(access.canAudit||access.canSeeAllResults||access.resultSectors?.length);
+  item.hidden=!state.allowed;
+  nucleoRefreshAccessConsultations(getSession());
+ }).catch(()=>{if(nucleoSidebarAuditAccess===state)nucleoSidebarAuditAccess=null;});
 }
 
 function nucleoRefreshAccessConsultations(user){
@@ -17612,7 +17714,7 @@ function nucleoShowMyAccess(tab='permissions'){
  if(!host)return;
  const navigation={
   ros:['navAssignedRos','navMySubmittedRos','navRos','navTriage'],
-  pdca:['navSent','navActions','navExternalPdcas'],sac:['navExternalRoControl','navMySacs'],
+  pdca:['navSent','navActions','navExternalPdcas'],sac:['navExternalRoControl','navSacClassified','navMySacs'],
   indicators:['navIndicators'],
   equipment:['navEquipment'],training:['navTraining'],nc:['navNcCapa'],processes:['navProcesses']
  };
@@ -17781,7 +17883,7 @@ function nucleoFeatureEditor(user,parent){
 }
 function nucleoApplyFeatureAccess(){
  if(getSession()?.permissions?.detailVersion!==1)return;
- const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navSimpleRework:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','*'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','*'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
+ const nav={navRos:['ros','consult'],navAssignedRos:['ros','assigned'],navMySubmittedRos:['ros','submitted'],navTriage:['ros','triage'],navContests:['ros','reviewContests'],navSent:['pdca','received'],navActions:['pdca','actions'],navPendingActions:['pdca','reviewActions'],navExternalPdcas:['pdca','import'],navExternalRoControl:['sac','edit'],navSacClassified:['sac','edit'],navMySacs:['sac','consult'],navSacTracking:['sac','consult'],navSimpleRework:['sac','consult'],navDocuments:['documents','*'],navDocumentRequests:['documents','*'],navIndicators:['indicators','consult'],navAnnouncements:['announcements','*'],navEquipment:['equipment','*'],navTraining:['training','*'],navNcCapa:['nc','*'],navProcesses:['processes','*']};
  Object.entries(nav).forEach(([id,[module,key]])=>{const el=document.getElementById(id);if(el&&!(id==='navMySubmittedRos'?(canConsultRoHistory()||nucleoPersonFeatureCan(module,key)):id==='navDocumentRequests'?['consult','request','prepare'].some(feature=>nucleoPersonFeatureCan(module,feature)):id==='navAnnouncements'?(nucleoPersonFeatureCan(module,'consult')||isAdmin()&&nucleoPersonFeatureCan(module,'publish')):key==='*'?nucleoPersonCan(module):nucleoPersonFeatureCan(module,key))){el.style.setProperty('display','none','important');el.classList.add('hidden');}});
 }
 
@@ -18739,7 +18841,8 @@ function nucleoPersonalPrefs(){
 }
 
 function nucleoApplyPersonalTheme(theme){
-  document.documentElement.dataset.nucleoTheme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.nucleoTheme = theme === 'dark' ||
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
 }
 
 function nucleoPersonalSessionChanged(){
@@ -18748,7 +18851,7 @@ function nucleoPersonalSessionChanged(){
   if (token === nucleoPersonalToken) return;
   nucleoPersonalToken = token;
   nucleoPersonalData = null;
-  nucleoApplyPersonalTheme('light');
+  nucleoApplyPersonalPresentation(null);
   const page = document.getElementById('nucleoPersonalView');
   page.classList.add('hidden');
   page.querySelectorAll('ul').forEach(list => list.replaceChildren());
@@ -18757,7 +18860,8 @@ function nucleoPersonalSessionChanged(){
   void portalJsonp({acao:'portal_personal_settings'}, 15000).then(data => {
     if (getSession()?.authToken !== token || request !== nucleoPersonalRequest || !data?.preferences) return;
     nucleoPersonalData = data.preferences;
-    nucleoApplyPersonalTheme(data.preferences.theme);
+    nucleoApplyPersonalPresentation(data.preferences);
+    if(roListMode==='assigned'&&!document.getElementById('roListView').classList.contains('hidden'))nucleoApplyPersonalRoView(data.preferences.defaultRoView);
     refreshNotificationBell();
   }).catch(() => {});
 }
@@ -18779,11 +18883,12 @@ async function nucleoOpenPersonalSettings(){
   setNav('personalSettings');
   document.getElementById('crumbCurrent').textContent = 'Configurações pessoais';
   const form = document.getElementById('nucleoPersonalForm');
-  const button = form.querySelector('button');
+  const button = form.querySelector('button[type=submit]');
   const status = document.getElementById('nucleoPersonalStatus');
   const when = at => formatDateTimeBR(at) || 'Data não informada';
   button.disabled = true;
   status.textContent = 'Carregando preferências…';
+  document.getElementById('nucleoPersonalVersion').textContent='Tela V144';
   nucleoPersonalRenderList('nucleoPersonalNotificationHistory',
     visibleNotifications(true).slice(0,100).map(n => when(n.createdAt) + ' · ' + (n.title || nucleoPersonalTypes[n.type] || 'Notificação')),
     'Nenhuma notificação no histórico.');
@@ -18792,10 +18897,13 @@ async function nucleoOpenPersonalSettings(){
     const result = await portalJsonp({acao:'portal_personal_settings',history:'1'}, 45000);
     if (getSession()?.authToken !== token || request !== nucleoPersonalRequest) return;
     if (!result?.sucesso || !result.preferences) throw new Error(result?.erro || 'A implantação ainda não disponibiliza as preferências.');
+    document.getElementById('nucleoPersonalVersion').textContent='Tela V144 · '+(result.preferencesApi
+      ? 'API de preferências V'+result.preferencesApi
+      : 'API conectada sem identificação de versão');
     nucleoPersonalToken = token;
     nucleoPersonalData = result.preferences;
-    document.getElementById('nucleoPersonalTheme').value = result.preferences.theme;
-    nucleoApplyPersonalTheme(result.preferences.theme);
+    nucleoRenderPersonalControls(result.preferences);
+    nucleoApplyPersonalPresentation(result.preferences);
     const render = (id, types, channel) => {
       document.getElementById(id).innerHTML = types.map(type =>
         '<label><input type="checkbox" data-channel="'+channel+'" value="'+type+'" '+
@@ -18821,7 +18929,7 @@ async function nucleoOpenPersonalSettings(){
 async function nucleoSavePersonalSettings(){
   const token = getSession()?.authToken;
   const form = document.getElementById('nucleoPersonalForm');
-  const button = form.querySelector('button');
+  const button = form.querySelector('button[type=submit]');
   if (!token || button.disabled) return;
   const status = document.getElementById('nucleoPersonalStatus');
   const channel = name => ({
@@ -18830,17 +18938,15 @@ async function nucleoSavePersonalSettings(){
       .map(input => [input.value, input.checked]))
   });
   const preferences = {
+    ...nucleoPersonalPrefs(), ...nucleoReadPersonalControls(),
     theme: document.getElementById('nucleoPersonalTheme').value,
     nucleus: channel('nucleus'), email: channel('email')
   };
   button.disabled = true;
   status.textContent = 'Salvando…';
   try {
-    const result = await portalJsonp({acao:'portal_personal_settings',preferences:JSON.stringify(preferences)}, 20000);
+    await nucleoCommitPersonalPrefs(preferences,token);
     if (getSession()?.authToken !== token) return;
-    if (!result?.sucesso || !result.preferences) throw new Error(result?.erro || 'Preferências não confirmadas.');
-    nucleoPersonalData = result.preferences;
-    nucleoApplyPersonalTheme(result.preferences.theme);
     refreshNotificationBell();
     renderNotificationPanel();
     status.textContent = 'Preferências salvas.';
@@ -18850,12 +18956,284 @@ async function nucleoSavePersonalSettings(){
     if (getSession()?.authToken === token) button.disabled = false;
   }
 }
-nucleoPersonalSessionChanged();
+function nucleoPersonalMenuIds(){
+  return ['navRos','moduleRo','moduleSac','modulePersonal','navDocumentRequests','moduleManagement',
+    'navEquipment','navTraining','navNcCapa','navProcesses','navUsersConsult','navSectorsConsult',
+    'navAudit5s','navIndicators','navAnnouncements'];
+}
+function nucleoPersonalRoColumns(){
+  return ['unidade','setor','origem','prazo','status','pdca'];
+}
+function nucleoPersonalRoFields(){
+  return ['search','assignedSectorFilter','assignedOriginFilter','assignedUnitFilter','filter','assignedEmailFilter'];
+}
+function nucleoNormalizePersonalPrefs(input){
+  input=input||{};
+  const oneOf=(value,values,fallback)=>values.includes(value)?value:fallback;
+  const list=(value,values)=>Array.isArray(value)?[...new Set(value.filter(item=>values.includes(item)))]:[];
+  const menu=nucleoPersonalMenuIds(), columns=nucleoPersonalRoColumns();
+  const types=['ro','pdca','sac','deadline','announcement','equipment','document','action','contest','registration'];
+  const flags=channel=>Object.fromEntries(types.map(type=>[type,input[channel]?.[type]!==false]));
+  const views=[];
+  for(const view of (Array.isArray(input.roViews)?input.roViews.slice(0,5):[])){
+    const name=typeof view?.name==='string'?view.name.trim().slice(0,40):'';
+    if(!name||views.some(item=>item.name===name))continue;
+    const fields=Object.fromEntries(nucleoPersonalRoFields().map(id=>[id,
+      typeof view.fields?.[id]==='string'?view.fields[id].slice(0,80):'']));
+    views.push({name,fields,lifecycle:view.lifecycle==='history'?'history':'active'});
+  }
+  return {
+    theme:oneOf(input.theme,['light','dark','system'],'light'),
+    accent:oneOf(input.accent,['blue','green','wine'],'blue'),
+    font:oneOf(input.font,['normal','large'],'normal'),
+    density:oneOf(input.density,['comfortable','compact'],'comfortable'),
+    menuOrder:list(input.menuOrder,menu),favorites:list(input.favorites,menu),
+    hiddenRoColumns:list(input.hiddenRoColumns,columns),roViews:views,
+    defaultRoView:views.some(item=>item.name===input.defaultRoView)?input.defaultRoView:'',
+    nucleus:flags('nucleus'),email:flags('email')
+  };
+}
 
-showAudit5S=function(){
-  view('audit5sView');
-  setNav('audit5s');
-};
+function nucleoPersonalMenuSource(id){
+  const node=document.getElementById(id);
+  const button=node?.matches('button')?node:node?.querySelector('.side-module-head');
+  if(!button||!getSession()?.authToken||button.closest('[hidden],.hidden')||
+      getComputedStyle(button).display==='none'||getComputedStyle(node).display==='none')return null;
+  if(id==='moduleManagement')return null;
+  return button;
+}
+function nucleoApplyPersonalPresentation(preferences){
+  const prefs=nucleoNormalizePersonalPrefs(preferences);
+  nucleoApplyPersonalAppearance(prefs);
+  document.documentElement.dataset.nucleoRoColumns=prefs.hiddenRoColumns.join(' ');
+  nucleoApplyPersonalMenu(prefs);
+}
+
+function nucleoApplyPersonalAppearance(prefs){
+  const root=document.documentElement;
+  root.dataset.nucleoAccent=prefs.accent;
+  root.dataset.nucleoFont=prefs.font;
+  root.dataset.nucleoDensity=prefs.density;
+  nucleoApplyPersonalTheme(prefs.theme);
+}
+
+function nucleoApplyPersonalMenu(prefs){
+  const ids=nucleoPersonalMenuIds();
+  const order=[...new Set([...prefs.menuOrder,...ids])];
+  for(const id of ids)document.getElementById(id)?.style.setProperty('order',String(order.indexOf(id)+1));
+  const favorites=document.getElementById('nucleoPersonalFavorites');
+  if(favorites){
+    const shortcuts=order.filter(id=>prefs.favorites.includes(id)).map(id=>{
+      const source=nucleoPersonalMenuSource(id);
+      if(!source)return null;
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='side-item';
+      const icon=document.createElement('span');
+      icon.className='side-num';
+      icon.textContent='★';
+      const label=document.createElement('span');
+      label.textContent=(source.querySelector('b')?.textContent||source.textContent).trim();
+      button.title=label.textContent;
+      button.setAttribute('aria-label',label.textContent);
+      button.append(icon,label);
+      button.onclick=()=>{
+        const target=nucleoPersonalMenuSource(id);
+        if(!target)return;
+        target.click();
+        if(target.classList.contains('side-module-head'))target.scrollIntoView({block:'nearest'});
+      };
+      return button;
+    }).filter(Boolean);
+    favorites.replaceChildren(...shortcuts);
+    favorites.hidden=!shortcuts.length;
+  }
+  nucleoRenderPersonalRoViews();
+}
+
+function nucleoRenderPersonalMenuEditor(prefs){
+  const container=document.getElementById('nucleoPersonalMenuEditor');
+  const ids=nucleoPersonalMenuIds();
+  const order=[...new Set([...prefs.menuOrder,...ids])];
+  container.replaceChildren();
+  const management=document.getElementById('moduleManagement');
+  const groups=new Map();
+  for(const id of order){
+    const source=nucleoPersonalMenuSource(id);
+    if(!source&&id!=='moduleManagement')continue;
+    if(id==='moduleManagement'&&!ids.some(item=>management?.contains(nucleoPersonalMenuSource(item))))continue;
+    const groupName=id!=='moduleManagement'&&management?.contains(source)?'Dentro de Módulos de gestão':'Menu principal';
+    if(!groups.has(groupName)){
+      const group=document.createElement('div');
+      group.className='personal-menu-group';
+      const heading=document.createElement('h3');
+      heading.textContent=groupName;
+      group.append(heading);
+      groups.set(groupName,group);
+    }
+    const name=id==='moduleManagement'?'Módulos de gestão':(source.querySelector('b')?.textContent||source.textContent).trim();
+    const row=document.createElement('div');
+    row.className='personal-menu-row';
+    row.dataset.menuId=id;
+    const label=document.createElement('span');
+    label.className='personal-menu-name';
+    label.textContent=name;
+    const actions=document.createElement('div');
+    actions.className='personal-menu-actions';
+    row.append(label);
+    for(const [direction,text] of [[-1,'↑'],[1,'↓']]){
+      const button=document.createElement('button');
+      button.type='button';
+      button.className='btn secondary';
+      button.textContent=text;
+      button.setAttribute('aria-label',(direction<0?'Mover para cima: ':'Mover para baixo: ')+name);
+      button.onclick=()=>{
+        const other=direction<0?row.previousElementSibling:row.nextElementSibling;
+        if(other?.matches('[data-menu-id]'))direction<0?other.before(row):other.after(row);
+      };
+      actions.append(button);
+    }
+    if(source){
+      const favorite=document.createElement('label');
+      const check=document.createElement('input');
+      check.type='checkbox';
+      check.dataset.favorite=id;
+      check.checked=prefs.favorites.includes(id);
+      check.setAttribute('aria-label','Fixar '+name);
+      favorite.append(check,' Fixar');
+      actions.append(favorite);
+    }
+    row.append(actions);
+    groups.get(groupName).append(row);
+  }
+  for(const name of ['Menu principal','Dentro de Módulos de gestão']){
+    if(groups.has(name))container.append(groups.get(name));
+  }
+}
+function nucleoRenderPersonalControls(preferences){
+  const prefs=nucleoNormalizePersonalPrefs(preferences);
+  for(const key of ['theme','accent','font','density'])document.getElementById('nucleoPersonal'+key[0].toUpperCase()+key.slice(1)).value=prefs[key];
+  nucleoRenderPersonalMenuEditor(prefs);
+  const columns=document.getElementById('nucleoPersonalRoColumns');
+  columns.hidden=!nucleoPersonFeatureCan('ros','assigned');
+  for(const input of columns.querySelectorAll('input'))input.checked=!prefs.hiddenRoColumns.includes(input.value);
+}
+
+function nucleoReadPersonalControls(){
+  const form=document.getElementById('nucleoPersonalForm');
+  const previous=nucleoNormalizePersonalPrefs(nucleoPersonalPrefs());
+  const ids=[...form.querySelectorAll('[data-menu-id]')].map(row=>row.dataset.menuId);
+  return {
+    accent:document.getElementById('nucleoPersonalAccent').value,
+    font:document.getElementById('nucleoPersonalFont').value,
+    density:document.getElementById('nucleoPersonalDensity').value,
+    menuOrder:[...ids,...previous.menuOrder.filter(id=>!ids.includes(id))],
+    favorites:[...form.querySelectorAll('[data-favorite]:checked')].map(input=>input.dataset.favorite)
+      .concat(previous.favorites.filter(id=>!ids.includes(id))),
+    hiddenRoColumns:!nucleoPersonFeatureCan('ros','assigned')?previous.hiddenRoColumns:
+      [...form.querySelectorAll('#nucleoPersonalRoColumns input:not(:checked)')].map(input=>input.value)
+  };
+}
+
+function nucleoRenderPersonalRoViews(){
+  const select=document.getElementById('personalRoView');
+  if(!select)return;
+  const prefs=nucleoNormalizePersonalPrefs(nucleoPersonalPrefs());
+  const current=select.value;
+  select.replaceChildren(new Option('Selecionar visualização',''),...prefs.roViews.map(view=>
+    new Option(view.name+(view.name===prefs.defaultRoView?' (padrão)':''),view.name)));
+  select.value=prefs.roViews.some(item=>item.name===current)?current:'';
+  if(!getSession()?.authToken)document.getElementById('personalRoViewStatus').textContent='';
+}
+
+function nucleoApplyPersonalRoView(name){
+  const item=nucleoPersonalPrefs()?.roViews?.find(view=>view.name===name);
+  if(!item||!nucleoPersonFeatureCan('ros','assigned'))return;
+  setAssignedLifecycle(item.lifecycle);
+  for(const id of nucleoPersonalRoFields()){
+    const field=document.getElementById(id);
+    if(!field)continue;
+    const value=item.fields[id]||'';
+    if(field instanceof HTMLSelectElement){
+      if([...field.options].some(option=>option.value===value&&!option.disabled))field.value=value;
+      else field.selectedIndex=0;
+    }else field.value=value;
+  }
+  document.getElementById('personalRoView').value=name;
+  render();
+}
+
+async function nucleoChangePersonalRoViews(operation){
+  const status=document.getElementById('personalRoViewStatus');
+  const token=getSession()?.authToken;
+  if(!token||!nucleoPersonFeatureCan('ros','assigned'))return;
+  if(!nucleoPersonalPrefs()){status.textContent='Carregue as preferências da conta antes de salvar.';return;}
+  const prefs=nucleoNormalizePersonalPrefs(nucleoPersonalPrefs());
+  const select=document.getElementById('personalRoView');
+  let name=select.value;
+  if(operation==='save'){
+    name=window.prompt('Nome da visualização (até 40 caracteres)',name)?.trim();
+    if(!name)return;
+    if(name.length>40){status.textContent='Use um nome com até 40 caracteres.';return;}
+    const index=prefs.roViews.findIndex(item=>item.name===name);
+    if(index<0&&prefs.roViews.length>=5){status.textContent='Exclua uma visualização para salvar outra. O limite é cinco.';return;}
+    if(index>=0&&!confirm('Substituir a visualização “'+name+'”?'))return;
+    const fields=Object.fromEntries(nucleoPersonalRoFields().map(id=>[id,document.getElementById(id)?.value||'']));
+    const saved={name,lifecycle:assignedLifecycle,fields};
+    if(index<0)prefs.roViews.push(saved);else prefs.roViews[index]=saved;
+  }else{
+    if(!name){status.textContent='Selecione uma visualização.';return;}
+    if(operation==='default')prefs.defaultRoView=prefs.defaultRoView===name?'':name;
+    if(operation==='delete'){
+      if(!confirm('Excluir a visualização “'+name+'”?'))return;
+      prefs.roViews=prefs.roViews.filter(item=>item.name!==name);
+    }
+  }
+  status.textContent='Salvando…';
+  try{
+    await nucleoCommitPersonalPrefs(prefs,token);
+    if(getSession()?.authToken!==token)return;
+    select.value=prefs.roViews.some(item=>item.name===name)?name:'';
+    status.textContent='Visualizações salvas.';
+  }catch(error){if(getSession()?.authToken===token)status.textContent=error.message;}
+}
+
+async function nucleoCommitPersonalPrefs(preferences,token){
+  if(nucleoCommitPersonalPrefs.pending===token)throw new Error('Aguarde o salvamento atual.');
+  nucleoCommitPersonalPrefs.pending=token;
+  try{
+    const base=nucleoSessionApiBase(token)||portalApiBase();
+    const result=await portalJsonp({acao:'portal_personal_settings',preferences:JSON.stringify(nucleoNormalizePersonalPrefs(preferences))},25000,base);
+    if(getSession()?.authToken!==token)return;
+    if(result?.codigo==='TESTE_SOMENTE_LEITURA'){
+      throw new Error('O salvamento de preferências foi bloqueado pela API conectada. A versão da rota precisa ser V144.');
+    }
+    if(!result?.sucesso||!result.preferences)throw new Error(result?.erro||'Preferências não confirmadas.');
+    nucleoPersonalData=result.preferences;
+    nucleoApplyPersonalPresentation(result.preferences);
+  }finally{
+    if(nucleoCommitPersonalPrefs.pending===token)nucleoCommitPersonalPrefs.pending=null;
+  }
+}
+
+const nucleoAppearanceKeys=['Theme','Accent','Font','Density'];
+function nucleoPreviewPersonalAppearance(){
+  const prefs=Object.fromEntries(nucleoAppearanceKeys.map(key=>[
+    key.toLowerCase(),document.getElementById('nucleoPersonal'+key).value
+  ]));
+  nucleoApplyPersonalAppearance(nucleoNormalizePersonalPrefs(prefs));
+  document.getElementById('nucleoPersonalStatus').textContent='Prévia aplicada. Salve para guardar na sua conta.';
+}
+for(const key of nucleoAppearanceKeys){
+  document.getElementById('nucleoPersonal'+key)?.addEventListener('change',nucleoPreviewPersonalAppearance);
+}
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{
+  const isOpen=!document.getElementById('nucleoPersonalView')?.classList.contains('hidden');
+  const theme=isOpen?document.getElementById('nucleoPersonalTheme').value:nucleoPersonalPrefs()?.theme;
+  if(theme==='system')nucleoApplyPersonalTheme('system');
+});
+
+nucleoPersonalSessionChanged();
 
 function isSimpleRework(record){return record?.recordKind==='rework_replacement';}
 function simpleReworkRows(){return getExternalRoControls().filter(isSimpleRework);}
@@ -18866,9 +19244,15 @@ function openSimpleRework(id=''){
   dialog.className='modal-box simple-rework-dialog';
   dialog.innerHTML='<h2>Retrabalho / reposição</h2><form><div class="settings-grid">'+
     '<label>R.O. interna ou externa<input name="ro" list="simpleReworkRoOptions" autocomplete="off" placeholder="Digite o número da R.O."><datalist id="simpleReworkRoOptions"></datalist><small>Digite parte do número e selecione a R.O. interna ou externa. Deixe vazio para não vincular.</small></label>'+
-    '<label>Cliente<input name="client" maxlength="200" required></label>'+
+    '<label>Dt. Entr. Alt.<input name="entryDateAlt" type="date"></label>'+
+    '<label>Dt. Ent. Orig.<input name="entryDateOriginal" type="date"></label>'+
+    '<label>Cód. Cli.<input name="clientCode" maxlength="80"></label>'+
+    '<label>Nome do cliente<input name="client" maxlength="200" required></label>'+
+    '<label>Ped. Cliente<input name="customerOrder" maxlength="200"></label>'+
+    '<label>Motivo<input name="reason" maxlength="1000"></label>'+
+    '<label>Origem<select name="reworkOrigin"><option value="">Selecione</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select></label>'+
     '<label>Pedido de origem<input name="originOrder" maxlength="100"></label>'+
-    '<label>Metragem (m²)<input name="meterage" type="number" min="0" step="0.01"></label>'+
+    '<label>M² total<input name="meterage" type="number" min="0" step="any"></label>'+
     '<label>Pedido de reposição<input name="replacementOrder" maxlength="100"></label>'+
     '<label>Tipo de reposição<select name="replacementType"><option value="">Selecione</option><option value="Interna">Interna</option><option value="Externa">Externa</option></select></label>'+
     '<label>Tratativa<select name="treatmentType"><option value="total_rework">Retrabalho total</option><option value="label_rework">Retrabalho com etiqueta</option><option value="reclass_rework">Reclassificar e retrabalhar</option><option value="reclass_label_rework">Reclassificar e retrabalhar com etiquetas</option><option value="missing_items">Reposição de itens faltantes</option></select></label>'+
@@ -18896,7 +19280,7 @@ function openSimpleRework(id=''){
   fields.ro.oninput=populateRos;
   populateRos();
   for(const person of directory)if(person.email)fields.representativeEmail.add(new Option(person.name+' · '+person.email,person.email));
-  for(const key of ['ro','client','originOrder','meterage','replacementOrder','replacementType','treatmentType','treatmentDeadline','unit','representativeEmail','treatmentDescription']){
+  for(const key of ['ro','entryDateAlt','entryDateOriginal','clientCode','customerOrder','reason','reworkOrigin','client','originOrder','meterage','replacementOrder','replacementType','treatmentType','treatmentDeadline','unit','representativeEmail','treatmentDescription']){
     if(current?.[key]!==undefined)fields[key].value=current[key];
   }
   fields.representativeTracking.checked=current?.representativeTracking===true;
@@ -18928,6 +19312,9 @@ function openSimpleRework(id=''){
     const record={...current,id:current?.id||'REWORK-'+crypto.randomUUID(),recordKind:'rework_replacement',
       sacDecision:'sac',autoLinked:false,ro:fields.ro.value,
       sourceRoOrigin:fields.ro.value.startsWith('RO-IN-')?'Interna':fields.ro.value?'Externa':'',
+      entryDateAlt:fields.entryDateAlt.value,entryDateOriginal:fields.entryDateOriginal.value,
+      clientCode:fields.clientCode.value.trim(),customerOrder:fields.customerOrder.value.trim(),
+      reason:fields.reason.value.trim(),reworkOrigin:fields.reworkOrigin.value,
       client:fields.client.value.trim(),originOrder:fields.originOrder.value.trim(),
       order:fields.originOrder.value.trim(),meterage:fields.meterage.value===''?null:Number(fields.meterage.value),
       replacementOrder:fields.replacementOrder.value.trim(),replacementType:['Interna','Externa'].includes(fields.replacementType.value)?fields.replacementType.value:'',
@@ -18956,8 +19343,8 @@ function openSimpleRework(id=''){
       if(token!==getSession()?.authToken)return;
       if(!result?.registro||result.registro.recordKind!==record.recordKind)throw new Error('A base não confirmou o registro.');
       const rows=getExternalRoControls().filter(item=>item.id!==record.id);
-      rows.push(result.registro);
-      saveExternalRoControlsLocal(rows);
+      rows.push(result.registro);saveExternalRoControlsLocal(rows);
+
       dialog.close();
       renderSimpleReworks();
       refreshRepresentativeSacMenu();
@@ -18972,8 +19359,9 @@ function renderSimpleReworks(){
   renderSimpleReworkFilters();
   const rows=filterSimpleReworks(simpleReworkRows(),simpleReworkFilters).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
   const summary=rows.reduce((s,row)=>({count:s.count+1,meters:s.meters+(Number(row.meterage)||0),done:s.done+(row.treatmentStatus==='done'?1:0)}),{count:0,meters:0,done:0});
-  host.innerHTML='<div class="actions"><span class="small">'+summary.count+' registros · '+summary.meters.toLocaleString('pt-BR')+' m² · '+summary.done+' concluídos</span></div>'+
-    (rows.length?'<div class="simple-rework-cards">'+rows.map(r=>'<article class="card"><h3>'+escapeHtml(r.client||'—')+'</h3><div>'+escapeHtml(r.ro||'Sem R.O. vinculada')+'</div><p>Pedido de origem: '+escapeHtml(r.originOrder||'—')+'<br>Pedido de reposição: '+escapeHtml(r.replacementOrder||'—')+'<br>Tipo de reposição: '+escapeHtml(r.replacementType||'—')+'<br>Metragem: '+escapeHtml(r.meterage??'—')+' m²<br>Etapa: '+escapeHtml(r.reworkStage||'Aguardando início')+'<br>Representante: '+escapeHtml(r.representative||'—')+' · '+(r.representativeTracking?'Acompanhamento habilitado':'Acompanhamento desabilitado')+'</p>'+simpleReworkHistoryHtml(r)+'<div class="actions"><button class="btn secondary" onclick="openSimpleRework(\''+escapeHtml(r.id)+'\')">Editar</button><button class="btn primary" onclick="openSacStageUpdate(\''+escapeHtml(r.id)+'\')">Atualizar estágio</button>'+(r.treatmentStatus!=='done'&&r.status!=='done'?'<button class="btn secondary" onclick="completeSimpleRework(\''+escapeHtml(r.id)+'\')">Marcar como concluído</button>':'')+'</div></article>').join('')+'</div>':'<p>Nenhum retrabalho ou reposição registrado.</p>');
+  host.innerHTML='<div class="rework-indicators" aria-label="Indicadores dos registros filtrados">'+
+    [['Registros',summary.count],['Metragem (m²)',summary.meters.toLocaleString('pt-BR')],['Concluídos',summary.done]].map(([label,value])=>'<article class="card"><span class="small">'+label+'</span><strong>'+value+'</strong></article>').join('')+'</div>'+
+    (rows.length?'<div class="simple-rework-cards">'+rows.map(r=>'<details class="card rework-record"><summary><b>'+escapeHtml(r.client||'—')+'</b><span>Situação atual: '+(r.treatmentStatus==='done'||r.status==='done'?'Concluído':'Em andamento')+'</span><span>Etapa: '+escapeHtml(r.reworkStage||'Aguardando início')+'</span></summary><div class="rework-record-body"><div>'+escapeHtml(r.ro||'Sem R.O. vinculada')+'</div>'+simpleReworkExtraFields(r)+'<p>Pedido de origem: '+escapeHtml(r.originOrder||'—')+'<br>Pedido de reposição: '+escapeHtml(r.replacementOrder||'—')+'<br>Tipo de reposição: '+escapeHtml(r.replacementType||'—')+'<br>Metragem: '+escapeHtml(r.meterage??'—')+' m²<br>Etapa: '+escapeHtml(r.reworkStage||'Aguardando início')+'<br>Representante: '+escapeHtml(r.representative||'—')+' · '+(r.representativeTracking?'Acompanhamento habilitado':'Acompanhamento desabilitado')+'</p>'+simpleReworkHistoryHtml(r)+'<div class="actions"><button class="btn secondary" onclick="openSimpleRework(\''+escapeHtml(r.id)+'\')">Editar</button><button class="btn primary" onclick="openSimpleReworkStage(\''+escapeHtml(r.id)+'\')">Atualizar estágio</button>'+(r.treatmentStatus!=='done'&&r.status!=='done'?'<button class="btn secondary" onclick="completeSimpleRework(\''+escapeHtml(r.id)+'\')">Marcar como concluído</button>':'')+'</div></div></details>').join('')+'</div>':'<p>Nenhum retrabalho ou reposição registrado.</p>');
 }
 
 async function updateSimpleReworkStage(record,stage,note){
@@ -18993,6 +19381,7 @@ async function updateSimpleReworkStage(record,stage,note){
     if(token!==getSession()?.authToken)return;
     if(!result?.registro||result.registro.reworkStage!==next)throw new Error('A base não confirmou a atualização.');
     saveExternalRoControlsLocal(getExternalRoControls().map(item=>item.id===updated.id?result.registro:item));
+
     renderSimpleReworks();
   }catch(error){alert(error.message);}
 }
@@ -19012,11 +19401,11 @@ function filterSimpleReworks(rows,f){
   const done=r.treatmentStatus==='done'||r.status==='done';
   if(f.status==='active'&&done||f.status==='done'&&!done)return false;
   if(f.tracking==='yes'&&r.representativeTracking!==true||f.tracking==='no'&&r.representativeTracking===true)return false;
-  for(const key of ['unit','treatmentType','replacementType','reworkStage'])if(f[key]&&String(r[key]||'')!==f[key])return false;
+  for(const key of ['unit','treatmentType','replacementType','reworkStage','reworkOrigin'])if(f[key]&&String(r[key]||'')!==f[key])return false;
   if(f.representative&&String(r.representativeEmail||r.representative||'')!==f.representative)return false;
-  for(const key of ['client','ro','originOrder','replacementOrder'])if(f[key]&&!norm(r[key]).includes(norm(f[key])))return false;
+  for(const key of ['client','ro','originOrder','replacementOrder','clientCode','customerOrder','reason'])if(f[key]&&!norm(r[key]).includes(norm(f[key])))return false;
   if(f.origin==='internal'&&!String(r.ro).startsWith('RO-IN-')||f.origin==='external'&&!String(r.ro).startsWith('RO-EX-')||f.origin==='none'&&r.ro)return false;
-  if(f.search&&!norm([r.client,r.ro,r.originOrder,r.replacementOrder,r.replacementType,r.representative,r.treatmentDescription].join(' ')).includes(norm(f.search)))return false;
+  if(f.search&&!norm([r.client,r.clientCode,r.customerOrder,r.reason,r.reworkOrigin,r.ro,r.originOrder,r.replacementOrder,r.replacementType,r.representative,r.treatmentDescription].join(' ')).includes(norm(f.search)))return false;
   const created=String(r.createdAt||'').slice(0,10),deadline=String(r.treatmentDeadline||'');
   if(f.from&&(!created||created<f.from)||f.to&&(!created||created>f.to))return false;
   if(f.deadlineFrom&&(!deadline||deadline<f.deadlineFrom)||f.deadlineTo&&(!deadline||deadline>f.deadlineTo))return false;
@@ -19032,6 +19421,7 @@ function renderSimpleReworkFilters(){
  ['status','Andamento',[['','Todos / histórico'],['active','Em andamento'],['done','Concluídos']]],
  ['tracking','Acompanhamento pelo representante',[['','Todos'],['yes','Habilitado'],['no','Desabilitado']]],
  ['representative','Representante',[['','Todos'],...[...new Map(rows.filter(r=>r.representativeEmail||r.representative).map(r=>[String(r.representativeEmail||r.representative),r.representative||r.representativeEmail])).entries()]]],
+ ['reworkOrigin','Origem do retrabalho',[['','Todas'],['Interna','Interna'],['Externa','Externa']]],
  ['origin','Vínculo com R.O.',[['','Todos'],['internal','Interna'],['external','Externa'],['none','Sem R.O. vinculada']]],
  ['unit','Unidade',[['','Todas'],...options('unit',v=>v==='matriz'?'Matriz':v==='filial'?'Filial':v)]],
  ['treatmentType','Tratativa',[['','Todas'],...options('treatmentType',externalTreatmentLabel)]],
@@ -19039,12 +19429,31 @@ function renderSimpleReworkFilters(){
  ['reworkStage','Etapa',[['','Todas'],...options('reworkStage')]],
  ['deadline','Prazo',[['','Todos'],['overdue','Em atraso'],['today','Vence hoje'],['none','Sem prazo']]]
  ];
- const wasOpen=host.querySelector('details')?.open===true;
- const activeCount=Object.values(f).filter(Boolean).length;
- host.innerHTML='<details class="simple-rework-filter-panel" '+(wasOpen?'open':'')+'><summary class="btn secondary" style="cursor:pointer;display:list-item;width:fit-content;list-style-position:inside">Filtros'+(activeCount?' ('+activeCount+' ativos)':'')+'</summary><div class="settings-grid" style="margin-top:14px">'+selects.map(([key,title,items])=>'<label>'+title+'<select data-rework-filter="'+key+'">'+items.map(([v,l])=>'<option value="'+escapeHtml(v)+'" '+(f[key]===v?'selected':'')+'>'+escapeHtml(l)+'</option>').join('')+'</select></label>').join('')+
- [['search','Busca geral'],['client','Cliente'],['ro','R.O.'],['originOrder','Pedido de origem'],['replacementOrder','Pedido de reposição'],['from','Cadastro a partir de'],['to','Cadastro até'],['deadlineFrom','Prazo a partir de'],['deadlineTo','Prazo até']].map(([key,title])=>'<label>'+title+'<input data-rework-filter="'+key+'" type="'+(['from','to','deadlineFrom','deadlineTo'].includes(key)?'date':'search')+'" value="'+escapeHtml(f[key]||'')+'"></label>').join('')+'</div><button class="btn secondary" type="button" id="clearReworkFilters" style="margin-top:12px">Limpar filtros</button></details>';
- host.querySelectorAll('[data-rework-filter]').forEach(el=>el.onchange=()=>{simpleReworkFilters[el.dataset.reworkFilter]=el.value;renderSimpleReworks();});
- host.querySelector('#clearReworkFilters').onclick=()=>{simpleReworkFilters={};renderSimpleReworks();};
+ const types=[...selects.map(([key,title,items])=>({key,title,items})),...[
+ ['search','Busca geral'],['clientCode','Cód. Cli.'],['customerOrder','Ped. Cliente'],['reason','Motivo'],['client','Cliente'],['ro','R.O.'],['originOrder','Pedido de origem'],['replacementOrder','Pedido de reposição'],['from','Cadastro a partir de'],['to','Cadastro até'],['deadlineFrom','Prazo a partir de'],['deadlineTo','Prazo até']
+ ].map(([key,title])=>({key,title,date:['from','to','deadlineFrom','deadlineTo'].includes(key)}))];
+ const previousType=host.querySelector('#reworkFilterType')?.value||'status';
+ const previousValue=host.querySelector('#reworkFilterValue')?.value;
+ const active=Object.entries(f).filter(([,v])=>v);
+ host.innerHTML='<form id="reworkFilterForm" class="rework-filter-builder"><label>Tipo de filtro<select id="reworkFilterType">'+types.map(t=>'<option value="'+t.key+'" '+(t.key===previousType?'selected':'')+'>'+escapeHtml(t.title)+'</option>').join('')+'</select></label><label id="reworkFilterValueLabel">Opção / valor<span id="reworkFilterValueHost"></span></label><button class="btn primary" type="submit">Aplicar filtro</button></form><div class="rework-active-filters">'+active.map(([key,value])=>{
+  const type=types.find(t=>t.key===key);const label=type?.items?.find(([v])=>v===value)?.[1]||value;
+  return '<button class="btn secondary" type="button" data-remove-rework-filter="'+key+'" aria-label="'+escapeHtml('Remover filtro '+(type?.title||key))+'">'+escapeHtml(type?.title||key)+': '+escapeHtml(label)+' ×</button>';
+ }).join('')+(active.length?'<button class="btn secondary" type="button" id="clearReworkFilters">Limpar filtros</button>':'')+'</div>';
+ const typeSelect=host.querySelector('#reworkFilterType');
+ const renderValue=(draft)=>{
+  const type=types.find(t=>t.key===typeSelect.value),value=draft??f[type.key]??'';
+  const field=host.querySelector('#reworkFilterValueHost');
+  field.innerHTML=type.items?'<select id="reworkFilterValue">'+type.items.map(([v,l])=>'<option value="'+escapeHtml(v)+'" '+(v===value?'selected':'')+'>'+escapeHtml(l)+'</option>').join('')+'</select>':'<input id="reworkFilterValue" type="'+(type.date?'date':'search')+'" value="'+escapeHtml(value)+'" placeholder="Digite o valor">';
+ };
+ renderValue(previousValue);
+ typeSelect.onchange=()=>renderValue();
+ host.querySelector('#reworkFilterForm').onsubmit=event=>{
+  event.preventDefault();const key=typeSelect.value,value=host.querySelector('#reworkFilterValue').value.trim();
+  if(value)simpleReworkFilters[key]=value;else delete simpleReworkFilters[key];
+  renderSimpleReworks();
+ };
+ host.querySelectorAll('[data-remove-rework-filter]').forEach(button=>button.onclick=()=>{delete simpleReworkFilters[button.dataset.removeReworkFilter];renderSimpleReworks();});
+ const clear=host.querySelector('#clearReworkFilters');if(clear)clear.onclick=()=>{simpleReworkFilters={};renderSimpleReworks();};
 }
 
 function simpleReworkHistoryHtml(record){
@@ -19063,4 +19472,16 @@ function completeSimpleRework(id){
  const record=simpleReworkRows().find(r=>String(r.id)===String(id));
  if(!record||record.treatmentStatus==='done'||record.status==='done')return;
  return updateSimpleReworkStage(record,'Concluído','Marcado como concluído.');
+}
+
+function openSimpleReworkStage(id){
+ const record=simpleReworkRows().find(r=>r.id===id);if(!record)return;
+ const stage=prompt('Nova etapa do retrabalho:',record.reworkStage||'Aguardando início');
+ if(stage===null||!stage.trim())return;
+ const note=prompt('Observação (opcional):','');if(note===null)return;
+ return updateSimpleReworkStage(record,stage,note);
+}
+
+function simpleReworkExtraFields(r){
+ return '<p>'+[['Dt. Entr. Alt.',r.entryDateAlt?formatDateBR(r.entryDateAlt):''],['Dt. Ent. Orig.',r.entryDateOriginal?formatDateBR(r.entryDateOriginal):''],['Cód. Cli.',r.clientCode],['Ped. Cliente',r.customerOrder],['Motivo',r.reason],['Origem',r.reworkOrigin]].map(([label,value])=>escapeHtml(label)+': '+escapeHtml(value||'—')).join('<br>')+'</p>';
 }
