@@ -313,6 +313,27 @@ function refreshUnifiedActionPeopleBySector(){
   }
 }
 
+function unifiedActionCodeScope(record){
+  const ro=String(record.ro||'').trim().toUpperCase();
+  if(!ro)return '';
+  const unit=explicitPortalUnit(record.roUnit||record.unit)||'';
+  const origin=normalizeAnswer(record.sourceRoOrigin||'');
+  return JSON.stringify([ro,unit,/^RO[- ]?(IN|EX)[- ]/.test(ro)?'':origin]);
+}
+
+function unifiedActionCodePrefix(ro){
+  const number=String(ro||'').trim().match(/\d+$/)?.[0];
+  return number?'ACT-'+number.replace(/^0+(?=\d)/,'')+'-':'ACT-';
+}
+
+function unifiedActionCodeStart(records,scope){
+  const previous=records.filter(record=>unifiedActionCodeScope(record)===scope);
+  const legacy=new Set(previous.filter(record=>!record.actionCode)
+    .map(record=>record.groupId||record.id));
+  const highest=previous.reduce((max,record)=>Math.max(max,Number(record.actionSequence)||0),0);
+  return Math.max(legacy.size,highest)+1;
+}
+
 let unifiedActionPendingCreation=null;
 async function saveUnifiedAction(button){
   if(button?.disabled)return;
@@ -399,14 +420,22 @@ async function createUnifiedAction(){
     }
   }
 
+  await loadUnifiedManualActions();
+  const list=getUnifiedManualActions();
   const destinations=[...assignees,...deliveries];
   const signature=JSON.stringify({creatorKey,mode,ro,text,deadline,note,type,project,subject,dependencies,urgency,nextStep,progress,remaining,destinations});
   if(unifiedActionPendingCreation?.signature!==signature){
     const groupId='ACTGRP-'+Date.now()+'-'+Math.random().toString(36).slice(2,9);
+    const codeScope=unifiedActionCodeScope({ro:ro?.number,roUnit:ro?.unit,sourceRoOrigin:ro?.origin});
+    const firstSequence=unifiedActionCodeStart(list,codeScope);
+    const prefix=unifiedActionCodePrefix(ro?.number);
+    const sectorSequences=new Map(dependencies.sectors.map((sector,i)=>[sector,firstSequence+i+1]));
     const records=destinations.map((recipient,index)=>{
       const isDependency=index>=assignees.length;
+      const actionSequence=isDependency?sectorSequences.get(recipient.sector):firstSequence;
       return {
         id:'ACT-'+groupId.slice(7)+'-'+index,
+        actionCode:prefix+actionSequence,actionSequence,
         groupId:destinations.length>1?groupId:'',
         source:isDependency||mode!=='self'?'assigned':'self',
         recordKind:'manual_action',
@@ -434,8 +463,6 @@ async function createUnifiedAction(){
     unifiedActionPendingCreation={signature,records};
   }
   const records=unifiedActionPendingCreation.records;
-  await loadUnifiedManualActions();
-  const list=getUnifiedManualActions();
   const existing=new Set(list.map(record=>record.id));
   await saveUnifiedManualActions(list.concat(records.filter(record=>!existing.has(record.id))));
   unifiedActionPendingCreation=null;
@@ -686,7 +713,7 @@ function actionDashboardItems(){
     items.push({
       source:a.source==='self'?'self':'assigned',
       sourceLabel:a.source==='self'?'Pessoal':'Atribuída',
-      id:a.id||'-',
+      id:a.actionCode||a.id||'-',
       createdAt:a.createdAt||'',
       type:a.type||'Ação',
       project:[a.ro,a.project].filter(Boolean).join(' · ')||'—',
