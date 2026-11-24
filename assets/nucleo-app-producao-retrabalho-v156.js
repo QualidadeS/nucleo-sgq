@@ -15298,7 +15298,7 @@ function view(id){
   const sacModal=document.getElementById('externalRoControlModalOverlay');
   if(sacModal)sacModal.classList.remove('open');
   document.body.style.overflow='';
-  ['audit5sView','nucleoPersonalView','nucleoSistemaView','pdcaImportView','listView','roListView','adminModuleView','mySubmittedRosView','detailView','pdcaView','sentView','pdcaReportView','pendingHubView','actionsDashboardView','triageView','externalRoControlView','mySacsView','sacTrackingView','simpleReworkView','contestationsView','sgqIndicatorsView','managementView','pendingActionsView','profileView','announcementsView','settingsView'].forEach(function(x){
+  ['pendingPresentationsView','audit5sView','nucleoPersonalView','nucleoSistemaView','pdcaImportView','listView','roListView','adminModuleView','mySubmittedRosView','detailView','pdcaView','sentView','pdcaReportView','pendingHubView','actionsDashboardView','triageView','externalRoControlView','mySacsView','sacTrackingView','simpleReworkView','contestationsView','sgqIndicatorsView','managementView','pendingActionsView','profileView','announcementsView','settingsView'].forEach(function(x){
     var el=document.getElementById(x);
     if(el) el.classList.add('hidden');
   });
