@@ -6342,7 +6342,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/core/utils.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/users/module.js?v=20261028-login-view-fix-v5"></script>
 <script src="assets/modules-v2/ro/module.js?v=20261023-modular-full-test-v4-safe"></script>
-<script src="assets/modules-v2/pdca/module.js?v=20261028-pdca-history-delivery-v1"></script>
+<script src="assets/modules-v2/pdca/module.js?v=20261124-pdca-prioridades"></script>
 <script src="assets/modules-v2/sac/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/audit5s/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/equipment/module.js?v=20261023-modular-full-test-v4-safe"></script>
@@ -6353,7 +6353,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/modules-v2/indicators/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/modules-v2/announcements/module.js?v=20261023-modular-full-test-v4-safe"></script>
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
-<script src="assets/nucleo-app-producao-retrabalho-v156.js?v=20261124-transferencia-teste"></script>
+<script src="assets/nucleo-app-producao-retrabalho-v156.js?v=20261124-sync-central-pdca"></script>
 <script src="assets/ro-apresentacao.js?v=20261124"></script>
 <script src="assets/acoes-manuais.js?v=20261124-partes-setores"></script>
 <script src="assets/api-source-lock-v150.js"></script>
@@ -7921,6 +7921,85 @@ body.nucleo-hide-sac-indicators [data-nucleo-sac-indicator="1"]{
   #roListView .assigned-filter-row{grid-template-columns:minmax(0,1fr) auto!important}
   #roListView .assigned-filter-row>select{display:none!important}
   #roListView #assignedFilterButton{display:inline-flex}
+}
+</style>
+<style id="assigned-container-layout">
+#roListView { container: assigned-ro / inline-size; }
+
+@media (min-width:761px) {
+  #roListView .ro-control-table :is(th, td) {
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  #roListView .ro-control-table th:nth-child(7) { width:15%!important; }
+  #roListView .ro-control-table th:nth-child(8) { width:21%!important; }
+  #roListView #rows td:nth-child(8) > .assigned-response-actions {
+    flex-wrap:wrap!important;
+  }
+  #roListView .ro-control-table :is(.ro-link-btn, .badge, .status-badge, .btn) {
+    max-width:100%;
+    white-space:normal!important;
+    overflow-wrap:anywhere;
+  }
+
+  @container assigned-ro (max-width:830px) {
+    #roListView .assigned-filter-row {
+      grid-template-columns:repeat(3,minmax(0,1fr));
+    }
+    #roListView .assigned-filter-row #search {grid-column:1/-1}
+    #roListView .ro-control-table,
+    #roListView #rows {display:block}
+    #roListView .ro-control-table thead {
+      position:absolute;
+      width:1px;
+      height:1px;
+      overflow:hidden;
+      clip-path:inset(50%);
+    }
+    #roListView #rows > tr {
+      display:grid;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:8px 16px;
+      margin-bottom:10px;
+      padding:12px;
+      border:1px solid var(--line,#dce3eb);
+      border-radius:10px;
+    }
+    #roListView .ro-control-table #rows > tr > td {
+      width:auto!important;
+      min-width:0!important;
+      padding:0;
+      border:0;
+      text-align:start;
+      white-space:normal!important;
+      overflow-wrap:anywhere;
+      grid-column:auto;
+      grid-row:auto;
+    }
+    #roListView #rows > tr > :is(td:first-child,td:nth-child(8),td[colspan]) {
+      grid-column:1/-1;
+    }
+    #roListView #rows > tr > td:nth-child(n+2):nth-child(-n+7)::before {
+      display:block;
+      font-size:.85em;
+      font-weight:600;
+      margin-bottom:2px;
+    }
+    #roListView #rows > tr > td:nth-child(2)::before {content:"Unidade"}
+    #roListView #rows > tr > td:nth-child(3)::before {content:"Setor responsável"}
+    #roListView #rows > tr > td:nth-child(4)::before {content:"Origem"}
+    #roListView #rows > tr > td:nth-child(5)::before {content:"Prazo"}
+    #roListView #rows > tr > td:nth-child(6)::before {content:"Status"}
+    #roListView #rows > tr > td:nth-child(7)::before {content:"PDCA"}
+    #roListView #rows :is(.pdca-source-control,.assigned-presentation-actions,.assigned-operational-icons,.assigned-response-actions,.assigned-draft-actions) {
+      justify-content:flex-start!important;
+      flex-wrap:wrap!important;
+    }
+  }
+
+  @container assigned-ro (max-width:490px) {
+    #roListView .assigned-filter-row {grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
 }
 </style>
 <style id="nucleo-dark-theme-v135">
