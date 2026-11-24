@@ -2680,12 +2680,38 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
 
 <style id="actions-sheet-v30-style">
 #actionsDashboardView{max-width:none}
-#actionsDashboardView .action-table{min-width:1750px;font-size:calc(12px * var(--nucleo-font-scale, 1))}
+#actionsDashboardView .action-summary-table{table-layout:fixed}
+#actionsDashboardView .action-summary-table th:nth-child(1){width:15%}
+#actionsDashboardView .action-summary-table th:nth-child(3){width:21%}
+#actionsDashboardView .action-summary-table th:nth-child(4){width:14%}
+#actionsDashboardView .action-summary-table th:nth-child(5){width:115px}
+#actionsDashboardView .action-summary-table :is(th,td){overflow-wrap:anywhere;white-space:normal}
+.action-summary-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+#actionDetailsDialog{width:min(730px,calc(100% - 24px));max-height:85dvh;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:18px;background:var(--card,#fff);color:inherit}
+#actionDetailsDialog::backdrop{background:#0f172a66}
+.action-details-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.action-details-heading h3{overflow-wrap:anywhere}
+.action-details-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px}
+.action-details-fields > div:first-child,.action-details-fields > div:last-child{grid-column:1/-1}
+.action-details-fields dt{font-weight:700}
+.action-details-fields dd{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){
+  #actionsDashboardView .action-summary-table :is(table,tbody){display:block}
+  #actionsDashboardView .action-summary-table{display:block}
+  #actionsDashboardView .action-summary-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  #actionsDashboardBody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;border-bottom:1px solid var(--line);padding:8px 0;gap:4px}
+  #actionsDashboardBody td{border:0;padding:4px}
+  #actionsDashboardBody td:nth-child(2){grid-column:1/-1;grid-row:2}
+  #actionsDashboardBody td:nth-child(4){grid-column:2;grid-row:1}
+  #actionsDashboardBody td[colspan]{grid-column:1/-1}
+}
+
+#actionsDashboardView .action-table{min-width:0;font-size:calc(12px * var(--nucleo-font-scale, 1))}
 #actionsDashboardView .action-table th{white-space:nowrap;position:sticky;top:0;background:#f8fafc;z-index:1}
 #actionsDashboardView .action-table td{vertical-align:top;line-height:1.35}
-#actionsDashboardView .action-table td:nth-child(6){min-width:280px}
-#actionsDashboardView .action-table td:nth-child(7){min-width:150px}
-#actionsDashboardView .action-table td:nth-child(12){min-width:220px}
+
+
+
 .urgency-pill{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;font-size:calc(11px * var(--nucleo-font-scale, 1));font-weight:750;white-space:nowrap}
 .urgency-pill.alta{background:#fff1f2;color:#b42318}
 .urgency-pill.media{background:#fff8e6;color:#9a6700}
@@ -3055,7 +3081,7 @@ dialog[open]::backdrop{background:rgba(15,23,42,.58)}
   }
   table{display:table!important;width:100%!important}
   .ro-control-table{min-width:1040px!important}
-  #actionsDashboardView .action-table{min-width:1450px!important}
+
   th,td{font-size:calc(12px * var(--nucleo-font-scale, 1))!important;padding:10px 8px!important}
 
   /* Modais, relatórios e PDFs */
@@ -4215,32 +4241,20 @@ html[data-nucleo-theme="dark"] :is(.side-item,.small,.help,.crumbs,.label){color
   </div>
 
   <div style="overflow:auto">
-    <table class="mobile-code-actions action-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Data</th>
-          <th>Tipo</th>
-          <th>Projeto / R.O.</th>
-          <th>Cliente / assunto</th>
-          <th>Ação</th>
-          <th>Responsável</th>
-          <th>Setor</th>
-          <th>Dependência</th>
-          <th>Urgência</th>
-          <th>Status</th>
-          <th>Próximo passo</th>
-          <th>Última atualização</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
+    <table class="action-table action-summary-table">
+      <thead><tr><th>ID / R.O.</th><th>Ação</th><th>Responsável</th><th>Status</th><th>Consulta</th></tr></thead>
       <tbody id="actionsDashboardBody"></tbody>
     </table>
   </div>
 </section>
 
-
-
+<dialog id="actionDetailsDialog" aria-labelledby="actionDetailsTitle">
+  <div class="action-details-heading">
+    <h3 id="actionDetailsTitle"></h3>
+    <form method="dialog"><button class="btn secondary">Fechar</button></form>
+  </div>
+  <div id="actionDetailsContent"></div>
+</dialog>
 
 <div id="unifiedActionOverlay" class="triage-modal-overlay" onclick="if(event.target===this)closeUnifiedActionModal()">
   <div class="triage-modal unified-action-modal">
@@ -6355,7 +6369,7 @@ function renderSupplierIndicatorsWorkspace(){
 <script src="assets/team-load-local-v47.js?v=20261027-team-local-central"></script>
 <script src="assets/nucleo-app-producao-retrabalho-v156.js?v=20261124-historico-pdf"></script>
 <script src="assets/ro-apresentacao.js?v=20261124"></script>
-<script src="assets/acoes-manuais.js?v=20261124-codigos-acoes-historico"></script>
+<script src="assets/acoes-manuais.js?v=20261124-acoes-consulta"></script>
 <script src="assets/api-source-lock-v150.js"></script>
 
 <script id="nucleoModuleMaintenanceGuardV1">
