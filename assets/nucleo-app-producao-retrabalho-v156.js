@@ -17018,78 +17018,18 @@ async function finishPDCA(){
   }
 }
 async function syncNow(){
-  // Sincronizar é uma ação operacional: qualquer usuário autenticado pode executar.
-  // Links, chave, regras e período continuam protegidos na Administração.
-  if(syncNow.inProgress)return;
-  syncNow.inProgress=true;
-  nucleoSetCentralSyncState('syncing','Sincronização manual em andamento. Os dados locais ainda não estão confirmados.');
-  const syncMsg=document.getElementById('syncMsg');
   const token=getSession()?.authToken;
-  let s=getSavedIntegrationSettings();
-  await showNucleoLoading('Buscando '+integrationPeriodLabel(s)+' nas abas Interna e Externa...','Sincronizando com a planilha');
+  if(!token)return false;
 
-  if(!s.apiUrl){
-    syncMsg.textContent='Configure primeiro a URL do Web App/API em Administração.';
-    syncMsg.className='statusline';
-    hideNucleoLoading();
-    syncNow.inProgress=false;
-    return;
+  const confirmed=await nucleoRunFullSync({source:'manual',foreground:true});
+  if(!confirmed||getSession()?.authToken!==token||!nucleoCentralDataConfirmed())return false;
+
+  const status=document.getElementById('syncMsg');
+  if(status){
+    status.textContent='Sincronização concluída e confirmada.';
+    status.className='statusline okline';
   }
-
-  syncMsg.textContent='Sincronizando...';
-  syncMsg.className='statusline';
-
-  try{
-    // Se a carga automática estiver em andamento, aguarda pouco tempo. Se ela
-    // travou, libera apenas a referência do front e executa uma leitura manual.
-    // O backend continua seguro porque a leitura não grava na planilha.
-    if(nucleoRoCentralRefreshPromise){
-      syncMsg.textContent='Conferindo a carga automática em andamento...';
-      const autoResult=await Promise.race([
-        Promise.resolve(nucleoRoCentralRefreshPromise).then(v=>v===true?'ok':'failed').catch(()=> 'failed'),
-        new Promise(resolve=>setTimeout(()=>resolve('timeout'),5000))
-      ]);
-      if(autoResult==='ok'){
-        nucleoRenderCentralSyncState();
-        return;
-      }
-      if(autoResult==='timeout')nucleoRoCentralRefreshPromise=null;
-      syncMsg.textContent='Executando uma leitura manual da base central...';
-      updateNucleoLoading('Executando uma leitura manual da base central...');
-    }
-    s=await resolveRoSyncSettings(token);
-    if(!s||getSession()?.authToken!==token)return;
-    const data=await loadOfficialRosPaged(s,(loaded,total,message)=>{
-      updateNucleoLoading(message);
-      syncMsg.textContent=message;
-    });
-
-    if(getSession()?.authToken!==token)return;
-    if(currentRoSyncPeriodSignature(s)!==currentRoSyncPeriodSignature()){
-      throw new Error('O período de busca mudou durante a leitura. Clique em Sincronizar novamente.');
-    }
-    if(data?.sucesso===false) throw new Error(data.erro||'Falha informada pelo Apps Script.');
-    if(!Array.isArray(data?.dados)) throw new Error('Resposta sem a lista "dados".');
-
-    updateNucleoLoading('Organizando '+data.dados.length+' R.O.s recebidas...');
-    await new Promise(resolve=>requestAnimationFrame(resolve));
-    const qty=applyImportedRos(data.dados,data);
-    updateNucleoLoading('Confirmando configurações e cadastros na base central...');
-    const centralOk=await syncPortalBackend(false,{foreground:false});
-    if(!centralOk)throw new Error('As R.O.s foram lidas, mas a base central não confirmou todos os dados do Núcleo.');
-    const bases=(typeof data.quantidadeInterna!=='undefined')?' · Interna: '+data.quantidadeInterna+' · Externa/SAC: '+(data.quantidadeExterna||0):'';
-    syncMsg.textContent='Sincronização concluída e confirmada: '+qty+' R.O.(s) carregada(s)'+bases+' · período: '+integrationPeriodLabel(s)+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+'.';
-    syncMsg.className='statusline okline';
-  }catch(err){
-    const detail=String(err?.message||err||'Erro não informado');
-    nucleoSetCentralSyncState('error','Sincronização não confirmada: '+detail);
-    syncMsg.textContent='Não foi possível concluir a carga das R.O.s: '+detail+'.';
-    syncMsg.className='statusline';
-    console.error('[NÚCLEO SYNC] Falha na sincronização manual',err);
-  }finally{
-    hideNucleoLoading();
-    syncNow.inProgress=false;
-  }
+  return true;
 }
 try{localStorage.removeItem(IMPORTED_RAW_KEY)}catch(e){}
 ensurePreviewSession();
