@@ -208,20 +208,30 @@ function unifiedActionDependencyText(a){
 function unifiedActionDependencyDetails(a){
  const summary=unifiedActionDependencyText(a);
  const me=unifiedCurrentUserKey();
- if(!isAdmin()&&a.createdByKey!==me)return escapeHtml(summary);
+ if(a.dependencySector||(!isAdmin()&&a.createdByKey!==me))return escapeHtml(summary);
  const parts=new Map((a.dependencies?.sectorResponsibilities||[]).map(part=>[part.sector,part.description]));
- if(a.groupId&&!a.dependencySector){
-   for(const child of getUnifiedManualActions()){
-     if(child.groupId===a.groupId&&child.dependencySector){
-       parts.set(child.dependencySector,child.action);
-     }
-   }
- }
- const details=[...parts].filter(([,description])=>description);
- if(!details.length)return escapeHtml(summary);
- return '<div>'+escapeHtml(summary)+'</div><details><summary>Consultar</summary>'+details.map(([sector,description])=>
-   '<div style="margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere"><b>'+escapeHtml(sector)+'</b><br>'+escapeHtml(description)+'</div>'
- ).join('')+'</details>';
+ const groupId=a.groupId||a.id;
+ const children=getUnifiedManualActions().filter(child=>child.groupId===groupId&&child.dependencySector);
+ for(const child of children)parts.set(child.dependencySector,child.action);
+ for(const sector of a.dependencies?.sectors||[])if(!parts.has(sector))parts.set(sector,'');
+ if(!parts.size)return escapeHtml(summary);
+ return '<div>'+escapeHtml(summary)+'</div><div style="display:grid;gap:8px;margin-top:10px">'+
+   [...parts].map(([sector,description])=>{
+     const assigned=children.filter(child=>child.dependencySector===sector);
+     const done=assigned.filter(child=>unifiedManualActionStatus(child).code==='done').length;
+     const checked=assigned.length>0&&done===assigned.length;
+     const label=assigned.length?done+'/'+assigned.length+' concluídas':'Aguardando distribuição';
+     const people=assigned.map(child=>{
+       const completed=unifiedManualActionStatus(child).code==='done';
+       return '<div class="small" style="margin-top:4px">'+(completed?'✓ ':'○ ')+escapeHtml(child.assigneeName||child.assigneeKey||'Responsável')+
+         ' · '+(completed?'Concluída':'Pendente')+
+         (!completed&&unifiedManualActionCanComplete(child)?' <button class="btn secondary" type="button" data-dependency-complete="'+escapeHtml(child.id)+'">Concluir</button>':'')+'</div>';
+     }).join('');
+     return '<div style="border:1px solid var(--line);padding:10px;border-radius:8px"><b>'+ (checked?'✓ ':'○ ')+escapeHtml(sector)+'</b>'+
+       '<div class="small">'+escapeHtml(label)+'</div>'+
+       '<details style="margin-top:5px"><summary>Consultar parte</summary>'+
+       '<div style="white-space:pre-wrap;overflow-wrap:anywhere">'+escapeHtml(description)+'</div>'+people+'</details></div>';
+   }).join('')+'</div>';
 }
 document.addEventListener('change',event=>{
  if(event.target.id==='unifiedActionDependencySectors')renderUnifiedSectorResponsibilities();
@@ -770,7 +780,15 @@ function actionDashboardItems(){
   // Ações atribuídas / pessoais.
   const manualActions=getUnifiedManualActions();
   const legacySequences=unifiedActionLegacySequences(manualActions);
-  manualActions.filter(unifiedActionCanSee).forEach(a=>{
+  const mainGroups=new Set(manualActions.filter(a=>!a.dependencySector).map(a=>a.groupId||a.id));
+  const me=unifiedCurrentUserKey();
+  manualActions.filter(a=>{
+    if(!unifiedActionCanSee(a))return false;
+    if(!a.dependencySector)return true;
+    // A gestão acompanha as partes na ação principal.
+    // A fila operacional contém apenas as atribuições do próprio responsável.
+    return admin?!mainGroups.has(a.groupId):String(a.assigneeKey||'').toLowerCase()===me;
+  }).forEach(a=>{
     const status=unifiedManualActionStatus(a);
     items.push({
       source:a.source==='self'?'self':'assigned',
@@ -912,7 +930,19 @@ function renderActionsDashboard(){
     <td><button class="btn secondary" type="button" data-action-consult="${index}">Consultar</button></td>
   </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:24px">Nenhuma ação encontrada nesta visão.</td></tr>';
   body.querySelectorAll('[data-action-consult]').forEach(button=>{
-    button.onclick=()=>openUnifiedActionDetails(filtered[Number(button.dataset.actionConsult)]);
+    button.onclick=async()=>{
+      const item=filtered[Number(button.dataset.actionConsult)];
+      if(!item)return;
+      if(!item.manualAction){openUnifiedActionDetails(item);return;}
+      button.disabled=true;
+      try{
+        await loadUnifiedManualActions();
+        const current=actionDashboardItems().find(row=>row.manualAction?.id===item.manualAction.id);
+        if(current)openUnifiedActionDetails(current);
+        else alert('A ação não está mais disponível nesta visualização.');
+      }catch(error){alert(error.message||String(error));}
+      finally{button.disabled=false;}
+    };
   });
 
 }
@@ -1002,6 +1032,15 @@ function openUnifiedActionDetails(x){
     +'</dd></div></dl><div class="unified-action-buttons">'+unifiedActionRowButtons(x)+'</div>';
   content.querySelectorAll('.unified-action-buttons button').forEach(button=>{
     button.addEventListener('click',()=>dialog.close(),{capture:true});
+  });
+  content.querySelectorAll('[data-dependency-complete]').forEach(button=>{
+    button.onclick=async()=>{
+      const id=button.dataset.dependencyComplete;
+      dialog.close();
+      await window.completeUnifiedManualAction(id);
+      const current=actionDashboardItems().find(row=>row.manualAction?.id===x.manualAction?.id);
+      if(current)openUnifiedActionDetails(current);
+    };
   });
   const action=x.manualAction;
   if(action?.dependencies?.sectorResponsibilities?.some(part=>String(part.description||'').trim())
