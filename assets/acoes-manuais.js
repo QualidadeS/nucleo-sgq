@@ -15,7 +15,10 @@ async function saveUnifiedManualActions(list){
  for(const record of list){
    const previous=before.find(x=>x.id===record.id);
    if(previous&&JSON.stringify(previous)===JSON.stringify(record))continue;
-   const result=await portalBackendSaveConfirmedPost('pdca_actions',record.id,{...record,updatedAt:new Date().toISOString(),_manualExpected:previous?.updatedAt||previous?.createdAt||''},90000);
+   const payload={...record,updatedAt:new Date().toISOString(),_manualExpected:previous?.updatedAt||previous?.createdAt||''};
+   const result=previous
+     ? await portalBackendSaveConfirmedPost('pdca_actions',record.id,payload,90000)
+     : await confirmNewUnifiedManualAction(payload,token);
    if(token!==getSession()?.authToken)throw new Error('A sessão mudou. Sincronize para conferir o resultado.');
    if(!result?.sucesso||!result.registro)throw new Error(result?.erro||'A ação não foi confirmada. Confira as ações antes de tentar novamente.');
    unifiedCentralToken=token;unifiedCentralActions=unifiedCentralActions.filter(x=>x.id!==record.id).concat(result.registro);
@@ -26,6 +29,41 @@ async function saveUnifiedManualActions(list){
    unifiedCentralActions=unifiedCentralActions.filter(x=>x.id!==removed.id);
  }
 }
+async function confirmNewUnifiedManualAction(record,token){
+  let saveError;
+  try{
+    // As ações manuais são registros pequenos. Recebe a resposta da própria
+    // gravação, em vez de enviar por iframe e depender de outro endpoint.
+    const response=await portalBackendSaveConfirmed('pdca_actions',record.id,record);
+    if(response?.sucesso!==true)throw new Error(response?.erro||'Gravação não confirmada.');
+  }catch(error){
+    saveError=error;
+  }
+  for(let attempt=0;attempt<3;attempt++){
+    if(getSession()?.authToken!==token)throw new Error('A sessão mudou. Entre novamente.');
+    try{
+      const response=await portalJsonp({acao:'portal_manual_actions',mode:'list'},60000);
+      if(getSession()?.authToken!==token)throw new Error('A sessão mudou.');
+      const saved=response?.sucesso===true&&Array.isArray(response.records)
+        ? response.records.find(item=>item.id===record.id):null;
+      if(saved&&saved.assigneeKey===record.assigneeKey&&saved.action===record.action
+        &&String(saved.sector||'')===String(record.sector||'')
+        &&saved.recordKind===record.recordKind){
+        return {sucesso:true,registro:saved};
+      }
+    }catch(error){if(!saveError)saveError=error;}
+    if(attempt<2)await new Promise(resolve=>setTimeout(resolve,700*(attempt+1)));
+  }
+  throw new Error('Ação '+(record.actionCode||record.id)+' · '+(record.sector||record.assigneeName||'')+
+    ': '+(saveError?.message||'A base central ainda não retornou o registro. Faça nova tentativa para continuar a distribuição.'));
+}
+
+async function unifiedDependencyRecordId(parentId,sector,key){
+  const bytes=new TextEncoder().encode(JSON.stringify([parentId,sector,key]));
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return 'ACT-DEP-'+Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
+}
+
 function unifiedActionUserKey(user){
   return String(user?.email||user?.name||'').trim().toLowerCase();
 }
@@ -904,7 +942,7 @@ async function distributeExistingActionParts(id,button){
       const partSequence=previous?.actionSequence||sequence;
       const code=previous?.actionCode||unifiedActionCodePrefix(parent.ro)+partSequence;
       for(const [key,user] of recipients){
-        const childId=parent.id+'-DEP-'+encodeURIComponent(JSON.stringify([part.sector,key]));
+        const childId=await unifiedDependencyRecordId(parent.id,part.sector,key);
         if(existing.has(childId)||list.some(a=>a.groupId===groupId&&a.dependencySector===part.sector&&a.assigneeKey===key))continue;
         existing.add(childId);
         records.push({
@@ -929,7 +967,13 @@ async function distributeExistingActionParts(id,button){
     }
     renderActionsDashboard();
     alert(records.length?'Partes atribuídas aos setores.':'As partes já estão atribuídas.');
-  }catch(error){alert(error.message||String(error));}
+  }catch(error){
+    try{
+      await loadUnifiedManualActions();
+      renderActionsDashboard();
+    }catch(refreshError){console.warn('Não foi possível atualizar as ações.',refreshError);}
+    alert(error.message||String(error));
+  }
   finally{button.disabled=false;}
 }
 
