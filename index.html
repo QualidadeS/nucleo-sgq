@@ -6072,68 +6072,7 @@ window.addEventListener('DOMContentLoaded',()=>{setTimeout(()=>syncPublicPortalC
 
 /* NÚCLEO UX — feedback automático para esperas iniciadas pelo usuário.
    Não interfere nas sincronizações silenciosas/background. */
-(function installUserActionLoadingFeedback(){
-  if(window.__nucleoUserActionLoadingInstalled)return;
-  window.__nucleoUserActionLoadingInstalled=true;
 
-  function userStartedThis(){
-    try{return !!(navigator.userActivation && navigator.userActivation.isActive)}catch(e){return false}
-  }
-  function begin(label){
-    if(!userStartedThis())return false;
-    // Um <dialog> aberto fica na camada superior do navegador e sempre aparece
-    // acima de overlays comuns. Nos editores, isso fazia o carregamento global
-    // ficar atrás do diálogo e deixava uma faixa branca/contornada sobre a tela.
-    // Os diálogos já possuem feedback local de status, então não abrimos o
-    // overlay global enquanto houver um diálogo modal ativo.
-    try{
-      if(document.querySelector('dialog[open]'))return false;
-    }catch(e){}
-    try{showNucleoLoading(label||'Processando sua solicitação...','Aguarde');return true}catch(e){return false}
-  }
-  function end(active){
-    if(!active)return;
-    try{hideNucleoLoading()}catch(e){}
-  }
-
-  // Requisições HTTP disparadas por clique/ação do usuário.
-  if(typeof window.fetch==='function' && !window.fetch.__nucleoWrapped){
-    const nativeFetch=window.fetch.bind(window);
-    const wrapped=function(){
-      const active=begin('Comunicando com a base central...');
-      let result;
-      try{result=nativeFetch.apply(null,arguments)}catch(err){end(active);throw err}
-      return Promise.resolve(result).finally(()=>end(active));
-    };
-    wrapped.__nucleoWrapped=true;
-    window.fetch=wrapped;
-  }
-
-  // JSONP do portal (login, cadastro e ações da base central).
-  if(typeof window.portalJsonp==='function' && !window.portalJsonp.__nucleoWrapped){
-    const nativePortalJsonp=window.portalJsonp;
-    const wrappedPortal=function(){
-      const active=begin('Processando na base central...');
-      let result;
-      try{result=nativePortalJsonp.apply(this,arguments)}catch(err){end(active);throw err}
-      return Promise.resolve(result).finally(()=>end(active));
-    };
-    wrappedPortal.__nucleoWrapped=true;
-    window.portalJsonp=wrappedPortal;
-  }
-
-  if(typeof window.jsonpRequest==='function' && !window.jsonpRequest.__nucleoWrapped){
-    const nativeJsonp=window.jsonpRequest;
-    const wrappedJsonp=function(){
-      const active=begin('Sincronizando dados...');
-      let result;
-      try{result=nativeJsonp.apply(this,arguments)}catch(err){end(active);throw err}
-      return Promise.resolve(result).finally(()=>end(active));
-    };
-    wrappedJsonp.__nucleoWrapped=true;
-    window.jsonpRequest=wrappedJsonp;
-  }
-})();
 </script>
 
 <style id="assigned-ro-cleanup-v2">
@@ -8413,4 +8352,79 @@ html[data-nucleo-accent] .sidebar #modulePersonal .side-module-body .side-item.a
 .rework-record>summary span{display:block;margin:7px 0 0 16px;font-size:calc(13px * var(--nucleo-font-scale, 1))}
 .rework-record[open]>summary{border-bottom:1px solid var(--border,#dce4ee)}
 .rework-record-body{padding:16px}
-</style></body></html>
+</style><dialog id="nucleoOperationWait" aria-labelledby="nucleoOperationTitle" aria-describedby="nucleoOperationMessage">
+  <div id="nucleoOperationTitle"><strong>Processando…</strong></div>
+  <progress aria-label="Carregando"></progress>
+  <p id="nucleoOperationMessage">Aguarde a conclusão antes de sair desta página.</p>
+</dialog>
+<p id="nucleoOperationResult" role="status" hidden></p>
+<style>
+#nucleoOperationResult{position:fixed;bottom:16px;right:16px;z-index:99999;padding:10px 14px;border-radius:10px;background:#e8f5ee;color:#18553a}
+#nucleoOperationWait{width:min(410px,calc(100% - 32px));padding:24px;border:1px solid var(--line);border-radius:14px;background:var(--card,#fff);color:inherit}
+#nucleoOperationWait::backdrop{background:#0f172a66}
+#nucleoOperationWait progress{width:100%;margin-top:12px;accent-color:#0c5792}
+#nucleoOperationMessage{margin:8px 0 0}
+</style>
+<script>
+(function installNucleoOperationWait(){
+  const dialog=document.getElementById('nucleoOperationWait');
+  let pending=0;
+  let resultTimer;
+  const result=document.getElementById('nucleoOperationResult');
+  function showConfirmation(){
+    clearTimeout(resultTimer);
+    result.textContent='Alteração confirmada pela base central.';
+    result.hidden=false;
+    resultTimer=setTimeout(()=>{result.hidden=true;},4500);
+  }
+  const warnBeforeLeaving=event=>{
+    event.preventDefault();
+    event.returnValue='';
+  };
+  dialog.addEventListener('cancel',event=>event.preventDefault());
+
+  async function track(work){
+    if(pending++===0){
+      window.addEventListener('beforeunload',warnBeforeLeaving);
+      dialog.showModal();
+    }
+    try{
+      return await work();
+    }finally{
+      if(--pending===0){
+        dialog.close();
+        window.removeEventListener('beforeunload',warnBeforeLeaving);
+      }
+    }
+  }
+
+  function wrap(name,wholeOperation=false){
+    const original=window[name];
+    if(typeof original!=='function')return;
+    window[name]=function(...args){
+      if(!wholeOperation&&!pending&&!navigator.userActivation?.isActive){
+        return original.apply(this,args);
+      }
+      return track(async()=>{
+        const response=await original.apply(this,args);
+        if(name==='portalJsonp'&&pending===1&&response?.sucesso===true
+          &&/^portal_(save|delete)(?:_|$)/.test(String(args[0]?.acao||'')))showConfirmation();
+        return response;
+      });
+    };
+  }
+
+  // These handlers already report confirmation or rejection after saving.
+  [
+    'saveUnifiedAction','distributeExistingActionParts','saveUnifiedActionUpdate',
+    'completeUnifiedManualAction','deleteUnifiedManualAction'
+  ].forEach(name=>wrap(name,true));
+
+  document.getElementById('syncMsg')?.setAttribute('role','status');
+  wrap('syncNow',true);
+
+  // Cover other foreground requests, including requests started inside a dialog.
+  ['fetch','portalJsonp','jsonpRequest','withNucleoLoading'].forEach(name=>wrap(name));
+})();
+</script>
+</body></html>
