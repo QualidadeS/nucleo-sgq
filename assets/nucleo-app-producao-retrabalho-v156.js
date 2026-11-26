@@ -733,7 +733,7 @@ function processDeadlineAlerts(showMessage=false){
   });
   localStorage.setItem(DEADLINE_ALERTS_KEY,JSON.stringify(state));if(showMessage)alert(created?created+' alerta(s) atualizado(s).':'Nenhum novo alerta de prazo.');refreshNotificationBell();
 }
-const NUCLEO_DEFAULT_API_URL=''; // TESTE: nunca usar backend de produção como fallback
+const NUCLEO_DEFAULT_API_URL=String(window.NUCLEO_RUNTIME_CONFIG?.apiUrl||'').trim();
 const PORTAL_BACKEND_STATE_KEY='portal-sgq-backend-state-v1';
 const PORTAL_BACKEND_LAST_SYNC_KEY='portal-sgq-backend-last-sync-v1';
 let portalBackendSyncInProgress=false;
@@ -827,9 +827,9 @@ function nucleoPersistedApiUrl(){
 }
 function portalApiBase(){
   return String(
+    (nucleoValidApiUrl(NUCLEO_DEFAULT_API_URL)?NUCLEO_DEFAULT_API_URL:'')||
     nucleoConfirmedApiUrl||
     nucleoPersistedApiUrl()||
-    NUCLEO_DEFAULT_API_URL||
     ''
   ).trim().replace(/\/+$/,'');
 }
@@ -3139,7 +3139,7 @@ async function syncPublicPortalConfig(){
   nucleoPublicConfigReady=false;
   try{
     const base=portalApiBase();
-    if(!base)throw new Error('URL do Apps Script TESTE não configurada neste navegador.');
+    if(!base)throw new Error('URL do Apps Script de produção não configurada.');
 
     const res=await portalJsonp({acao:'portal_public_config'},20000,base);
     if(!res?.sucesso||!res.config)throw new Error(res?.erro||'A configuração central não respondeu.');
