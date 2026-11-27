@@ -18397,16 +18397,32 @@ async function finalizeAndSendSac(id){
 }
 
 var nucleoInlineTeamExpanded=false,nucleoInlineTeamKey='',nucleoInlineTeamPromise=null,nucleoInlineTeamAt=0,nucleoInlineTeamData=[];
-async function nucleoEnsureInlineTeam(){
+async function nucleoEnsureInlineTeam(force=false){
  const page=document.getElementById('listView');if(!page)return;
  let box=document.getElementById('overviewTeam');if(!box){box=document.createElement('section');box.id='overviewTeam';box.className='overview-panel';box.style.marginTop='16px';box.innerHTML='<h3 style="margin:0 0 10px">Minha equipe</h3><div id="overviewTeamFilters" class="actions" style="align-items:center"></div><div id="overviewTeamPeople" role="status">Carregando equipe…</div>';page.appendChild(box);}
- const key=JSON.stringify([getSession()?.email,getSession()?.personId,getSession()?.name,getSession()?.authToken]);
- if(key===nucleoInlineTeamKey&&(nucleoInlineTeamPromise||Date.now()-nucleoInlineTeamAt<60000))return;
- nucleoInlineTeamKey=key;nucleoInlineTeamAt=0;document.getElementById('overviewTeamPeople').textContent='Carregando equipe…';
+ const session=getSession();
+ if(!session?.authToken)return;
+ const key=JSON.stringify([session.email,session.personId,session.name,session.authToken]);
+ const people=document.getElementById('overviewTeamPeople');
+ const filters=document.getElementById('overviewTeamFilters');
+ if(key===nucleoInlineTeamKey&&(nucleoInlineTeamPromise||(!force&&Date.now()-nucleoInlineTeamAt<60000)))return;
+ nucleoInlineTeamKey=key;nucleoInlineTeamAt=0;people.textContent='Carregando equipe…';filters.replaceChildren();
  const request=nucleoLoadTeamProfiles();nucleoInlineTeamPromise=request;
- try{const result=await request;if(key!==nucleoInlineTeamKey)return;if(!result?.sucesso)throw Error(result?.erro||'Consulta não concluída.');nucleoInlineTeamData=result.teams||[];nucleoInlineTeamAt=Date.now();
+ try{const result=await request;if(key!==nucleoInlineTeamKey||getSession()?.authToken!==session.authToken)return;if(!result?.sucesso)throw Error(result?.erro||'Consulta não concluída.');nucleoInlineTeamData=result.teams||[];nucleoInlineTeamAt=Date.now();
  document.getElementById('overviewTeamFilters').innerHTML='<label>Setor <select id="overviewTeamSector" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todos os meus setores</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.sector))].map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('')+'</select></label><label>Unidade <select id="overviewTeamUnit" onchange="nucleoRenderInlineTeam(false)"><option value="all">Todas as minhas unidades</option>'+[...new Set(nucleoInlineTeamData.map(t=>t.unit))].map(t=>'<option value="'+escapeHtml(t)+'">'+(t==='filial'?'Filial — Linhares':'Matriz')+'</option>').join('')+'</select></label>';nucleoRenderInlineTeam(false);
- }catch(e){if(key===nucleoInlineTeamKey)document.getElementById('overviewTeamPeople').textContent='Não foi possível carregar a equipe. Clique em Atualizar para tentar novamente.';}finally{if(nucleoInlineTeamPromise===request)nucleoInlineTeamPromise=null;}
+ }catch(error){
+   if(key!==nucleoInlineTeamKey||getSession()?.authToken!==session.authToken)return;
+   console.warn('[MINHA EQUIPE] Falha na consulta central:',error);
+   people.textContent='Não foi possível carregar a equipe. ';
+   const retry=document.createElement('button');
+   retry.type='button';
+   retry.className='btn secondary';
+   retry.textContent='Atualizar equipe';
+   retry.addEventListener('click',()=>nucleoEnsureInlineTeam(true));
+   people.append(retry);
+ }finally{
+   if(nucleoInlineTeamPromise===request)nucleoInlineTeamPromise=null;
+ }
 }
 function nucleoUniqueTeamPeople(teams,sector,unit){
  const people=new Map();
@@ -18423,8 +18439,16 @@ function nucleoUniqueTeamPeople(teams,sector,unit){
 }
 async function nucleoLoadTeamProfiles(){
  const token=getSession()?.authToken;
- const result=await portalJsonp({acao:'portal_my_team'},60000);
+ const request=()=>portalJsonp({acao:'portal_my_team'},60000);
+ let result;
+ try{
+   result=await request();
+ }catch(error){
+   if(error.code!=='PORTAL_TRANSPORT'||getSession()?.authToken!==token)throw error;
+   result=await request();
+ }
  if(getSession()?.authToken!==token)throw Error('A sessão mudou durante a consulta.');
+ if(result?.sucesso&&!Array.isArray(result.teams))throw Error('A API de produção não devolveu os dados da equipe.');
  return result;
 }
 
