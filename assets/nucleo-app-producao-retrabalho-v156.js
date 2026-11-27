@@ -934,8 +934,9 @@ function portalJsonp(params,timeoutMs=60000,baseOverride='',options={}){
 
     script.async=true;
     script.src=base+'?'+parts.join('&');
-    script.onerror=()=>finish(new Error('O Apps Script respondeu, mas o navegador não conseguiu carregar os dados da base central.'));
-    const timer=setTimeout(()=>finish(new Error('O Apps Script executou, mas não devolveu a confirmação ao aplicativo dentro do tempo limite.')),timeoutMs);
+    const transportError=message=>Object.assign(new Error(message),{code:'PORTAL_TRANSPORT'});
+    script.onerror=()=>finish(transportError('O navegador não conseguiu carregar a resposta do Apps Script.'));
+    const timer=setTimeout(()=>finish(transportError('O Apps Script não devolveu a confirmação dentro do tempo limite.')),timeoutMs);
 
     document.head.appendChild(script);
   });
@@ -3135,13 +3136,23 @@ async function saveSectorConfiguration(){
 
 }
 
+async function portalLoginRequest(params,timeoutMs,base){
+  try{
+    return await portalJsonp(params,timeoutMs,base);
+  }catch(error){
+    if(error.code!=='PORTAL_TRANSPORT')throw error;
+    await new Promise(resolve=>setTimeout(resolve,900));
+    return portalJsonp(params,timeoutMs,base);
+  }
+}
+
 async function syncPublicPortalConfig(){
   nucleoPublicConfigReady=false;
   try{
     const base=portalApiBase();
     if(!base)throw new Error('URL do Apps Script de produção não configurada.');
 
-    const res=await portalJsonp({acao:'portal_public_config'},20000,base);
+    const res=await portalLoginRequest({acao:'portal_public_config'},20000,base);
     if(!res?.sucesso||!res.config)throw new Error(res?.erro||'A configuração central não respondeu.');
 
     // AMBIENTE TESTE: a URL já confirmada neste navegador é a autoridade.
@@ -3276,9 +3287,9 @@ async function loginUser(){
       if(!publicOk)throw new Error('Não foi possível confirmar a configuração central do Núcleo. Tente novamente.');
     }
     renderLoginMessage('Validando acesso...','info');
-    const remote=await portalJsonp({
+    const remote=await portalLoginRequest({
       acao:'portal_login_jsonp', nome:name, unidade:unit, setor:sector, senha:password
-    },60000);
+    },30000,portalApiBase());
     if(!remote || remote.sucesso!==true){
       renderLoginMessage(loginReasonMessage(remote),'error');
       return;
