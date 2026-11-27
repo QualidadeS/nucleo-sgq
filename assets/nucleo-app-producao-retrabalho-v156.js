@@ -18462,7 +18462,12 @@ function nucleoTeamsFromConfirmedSnapshot(session){
      if(!user||isDeletedUserRecord(user)||user.active===false||!['approved','aprovado'].includes(normalize(user.approvalStatus||'approved'))||['nao','false','inativo'].includes(normalize(user.active))||['inactive','inativo'].includes(normalize(user.status)))return false;
      const direct=explicitPortalUnit(user.unit)===scope.unit;
      const sectors=[...(direct?[user.sector,...(user.managedSectors||[])]:[]),...(user.sectorMemberships||[]).filter(m=>explicitPortalUnit(m.unit)===scope.unit).map(m=>m.sector)];
-     return sectors.some(sector=>isQuality(scope.sector)?isQuality(sector):normalize(sector)===normalize(scope.sector));
+     if(isQuality(scope.sector)){
+       const permissions=nucleoPersonPermissions(user);
+       const qualityMember=user.role==='quality'||permissions.sgq===true||isQuality(user.sector);
+       return sectors.some(isQuality)||(qualityMember&&nucleoTeamRegisteredUnits(user).includes(scope.unit));
+     }
+     return sectors.some(sector=>normalize(sector)===normalize(scope.sector));
    }).map(user=>({
      personKey:String(user.personId||user.storageId||user.email||[user.name,scope.unit,scope.sector].join('|')),
      name:user.name,description:user.description,jobTitle:user.jobTitle,workDescription:user.workDescription,avatar:user.avatar,
@@ -18481,6 +18486,19 @@ async function nucleoLoadTeamProfiles(){
    const result=await portalJsonp({acao:'portal_my_team'},20000);
    if(!result?.sucesso||!Array.isArray(result.teams))throw Error(result?.erro||'A API de produção não devolveu os dados da equipe.');
    if(session?.authToken!==getSession()?.authToken)throw Error('A sessão mudou durante a consulta.');
+   const directory=nucleoTeamsFromConfirmedSnapshot(session);
+   if(directory&&(session.role==='quality'||nucleoPersonPermissions(session).sgq===true||normalizePersonName(session.sector||'')==='sgq')){
+     const qualityTeams=directory.teams.filter(team=>team.sector==='SGQ e Qualidade'&&team.people.length);
+     const teams=result.teams.slice();
+     for(const team of qualityTeams){
+       const position=teams.findIndex(item=>item.unit===team.unit&&['sgq','qualidade','sgq e qualidade'].includes(normalizePersonName(item.sector||'')));
+       if(position<0){teams.push(team);continue;}
+       const people=new Map(team.people.map(person=>[person.personKey,person]));
+       for(const person of teams[position].people||[])people.set(person.personKey,person);
+       teams[position]={...team,people:[...people.values()]};
+     }
+     return {...result,teams};
+   }
    return result;
  }catch(error){
    if(session?.authToken!==getSession()?.authToken)throw error;
