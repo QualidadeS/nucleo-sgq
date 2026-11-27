@@ -18432,6 +18432,7 @@ function nucleoUniqueTeamPeople(teams,sector,unit){
    const key=p.personKey||p.personId||JSON.stringify([p.name,p.description||'']);
    let person=people.get(key);
    if(!person){person={...p,teamMemberships:[]};people.set(key,person);}
+   if(!nucleoTeamHasAvatar(person.avatar)&&nucleoTeamHasAvatar(p.avatar))person.avatar=p.avatar;
    person.manager=person.manager||p.manager;person.self=person.self||p.self;
    if(!person.teamMemberships.some(m=>m.sector===t.sector&&m.unit===t.unit))person.teamMemberships.push({sector:t.sector,unit:t.unit});
   });
@@ -18480,6 +18481,36 @@ function nucleoTeamsFromConfirmedSnapshot(session){
  });
  return teams.some(team=>team.people.length)?{sucesso:true,teams}:null;
 }
+function nucleoTeamHasAvatar(value){
+ return /^(?:icon:|data:image\/(?:jpeg|png|webp);base64,)/.test(value||'') || Boolean(nucleoAvatarGalleryPreviews[value]);
+}
+async function nucleoResolveTeamAvatars(result,token){
+ const people=result.teams.flatMap(team=>team.people||[]);
+ const previews=new Map();
+ for(const person of people){
+   if(person.personKey&&nucleoTeamHasAvatar(person.avatar))previews.set(person.personKey,person.avatar);
+ }
+ for(const person of people){
+   if(!nucleoTeamHasAvatar(person.avatar)&&previews.has(person.personKey))person.avatar=previews.get(person.personKey);
+ }
+ const missing=new Set(people.map(person=>person.avatar).filter(value=>/^gallery:[\w-]+$/.test(value||'')&&!nucleoTeamHasAvatar(value)));
+ const visited=new Set();
+ let offset=0;
+ while(missing.size&&offset!==null&&!visited.has(offset)&&getSession()?.authToken===token){
+   visited.add(offset);
+   let page;
+   try{page=await portalJsonp({acao:'portal_avatar_gallery',offset},20000);}catch(error){break;}
+   if(getSession()?.authToken!==token||!page?.sucesso||!Array.isArray(page.items))break;
+   for(const item of page.items){
+     if(missing.has(item.value)&&nucleoTeamHasAvatar(item.preview)){
+       nucleoAvatarGalleryPreviews[item.value]=item.preview;
+       missing.delete(item.value);
+     }
+   }
+   offset=Number.isInteger(page.next)?page.next:null;
+ }
+ return result;
+}
 async function nucleoLoadTeamProfiles(){
  const session=getSession();
  try{
@@ -18494,16 +18525,19 @@ async function nucleoLoadTeamProfiles(){
        const position=teams.findIndex(item=>item.unit===team.unit&&['sgq','qualidade','sgq e qualidade'].includes(normalizePersonName(item.sector||'')));
        if(position<0){teams.push(team);continue;}
        const people=new Map(team.people.map(person=>[person.personKey,person]));
-       for(const person of teams[position].people||[])people.set(person.personKey,person);
+       for(const person of teams[position].people||[]){
+         const existing=people.get(person.personKey);
+         people.set(person.personKey,{...person,avatar:person.avatar||existing?.avatar||''});
+       }
        teams[position]={...team,people:[...people.values()]};
      }
-     return {...result,teams};
+     return nucleoResolveTeamAvatars({...result,teams},session.authToken);
    }
-   return result;
+   return nucleoResolveTeamAvatars(result,session.authToken);
  }catch(error){
    if(session?.authToken!==getSession()?.authToken)throw error;
    const snapshot=nucleoTeamsFromConfirmedSnapshot(session);
-   if(snapshot)return snapshot;
+   if(snapshot)return nucleoResolveTeamAvatars(snapshot,session.authToken);
    throw error;
  }
 }
