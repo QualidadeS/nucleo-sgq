@@ -1285,6 +1285,7 @@ function applyPortalBackendSnapshot(snapshot){
     localStorage.setItem(CONTEST_KEY,JSON.stringify(data.contestations));
   }
   if(Array.isArray(data.users)){
+    if(currentSession?.authToken) nucleoTeamSnapshot={token:currentSession.authToken,users:data.users};
     const filteredUsers=data.users.filter(u=>!isDeletedUserRecord(u));
     localStorage.setItem(USERS_KEY,JSON.stringify(filteredUsers));
     if(nucleoInlineTeamData?.length&&document.getElementById('overviewTeamPeople'))nucleoRenderInlineTeam(nucleoInlineTeamExpanded);
@@ -18437,19 +18438,56 @@ function nucleoUniqueTeamPeople(teams,sector,unit){
  });
  return [...people.values()];
 }
+let nucleoTeamSnapshot=null;
+function nucleoTeamsFromConfirmedSnapshot(session){
+ const snapshot=nucleoTeamSnapshot;
+ if(!session?.authToken||snapshot?.token!==session.authToken||!nucleoCentralDataConfirmed())return null;
+ const units=nucleoTeamRegisteredUnits(session);
+ const normalize=sector=>normalizePersonName(sector||'');
+ const isQuality=sector=>['sgq','qualidade','sgq e qualidade'].includes(normalize(sector));
+ const scopes=new Map();
+ const add=(unit,sector)=>{
+   if(!units.includes(unit)||!sector)return;
+   const name=isQuality(sector)?'SGQ e Qualidade':sector;
+   scopes.set(unit+'|'+normalize(name),{unit,sector:name});
+ };
+ const primary=explicitPortalUnit(session.unit);
+ if(primary)add(primary,session.sector);
+ for(const membership of session.sectorMemberships||[])add(explicitPortalUnit(membership.unit),membership.sector);
+ for(const sector of session.managedSectors||[])add(primary,sector);
+ if(session.role==='quality'||nucleoPersonPermissions(session).sgq)
+   for(const unit of units)add(unit,'SGQ e Qualidade');
+ const teams=[...scopes.values()].map(scope=>{
+   const people=snapshot.users.filter(user=>{
+     if(!user||isDeletedUserRecord(user)||user.active===false||!['approved','aprovado'].includes(normalize(user.approvalStatus||'approved'))||['nao','false','inativo'].includes(normalize(user.active))||['inactive','inativo'].includes(normalize(user.status)))return false;
+     const direct=explicitPortalUnit(user.unit)===scope.unit;
+     const sectors=[...(direct?[user.sector,...(user.managedSectors||[])]:[]),...(user.sectorMemberships||[]).filter(m=>explicitPortalUnit(m.unit)===scope.unit).map(m=>m.sector)];
+     return sectors.some(sector=>isQuality(scope.sector)?isQuality(sector):normalize(sector)===normalize(scope.sector));
+   }).map(user=>({
+     personKey:String(user.personId||user.storageId||user.email||[user.name,scope.unit,scope.sector].join('|')),
+     name:user.name,description:user.description,jobTitle:user.jobTitle,workDescription:user.workDescription,avatar:user.avatar,
+     primarySector:user.sector,accessUnits:nucleoTeamRegisteredUnits(user),
+     manager:explicitPortalUnit(user.unit)===scope.unit&&(user.managedSectors||[]).some(sector=>normalize(sector)===normalize(scope.sector)),
+     self:session.personId?user.personId===session.personId:!!session.email&&normalizeAnswer(user.email)===normalizeAnswer(session.email)
+   }));
+   people.sort((a,b)=>Number(b.manager)-Number(a.manager)||String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+   return {...scope,people};
+ });
+ return teams.some(team=>team.people.length)?{sucesso:true,teams}:null;
+}
 async function nucleoLoadTeamProfiles(){
- const token=getSession()?.authToken;
- const request=()=>portalJsonp({acao:'portal_my_team'},60000);
- let result;
+ const session=getSession();
  try{
-   result=await request();
+   const result=await portalJsonp({acao:'portal_my_team'},20000);
+   if(!result?.sucesso||!Array.isArray(result.teams))throw Error(result?.erro||'A API de produção não devolveu os dados da equipe.');
+   if(session?.authToken!==getSession()?.authToken)throw Error('A sessão mudou durante a consulta.');
+   return result;
  }catch(error){
-   if(error.code!=='PORTAL_TRANSPORT'||getSession()?.authToken!==token)throw error;
-   result=await request();
+   if(session?.authToken!==getSession()?.authToken)throw error;
+   const snapshot=nucleoTeamsFromConfirmedSnapshot(session);
+   if(snapshot)return snapshot;
+   throw error;
  }
- if(getSession()?.authToken!==token)throw Error('A sessão mudou durante a consulta.');
- if(result?.sucesso&&!Array.isArray(result.teams))throw Error('A API de produção não devolveu os dados da equipe.');
- return result;
 }
 
 function nucleoTeamRegisteredUnits(user){
