@@ -1398,6 +1398,7 @@ async function loadPortalBackend(showMessage,options,load){
     if(foreground)await showNucleoLoading('Preparando sincronização em partes...','Carregando NÚCLEO');
     let lastUpdated='';
     let roStepStarted=false;
+    let centralPeriod=null;
 
     for(let i=0;i<parts.length;i++){
       const [part,label]=parts[i];
@@ -1416,6 +1417,8 @@ async function loadPortalBackend(showMessage,options,load){
       if(getSession()?.authToken!==token)return false;
       const legacy=part==='core'&&res?.sucesso===true&&Array.isArray(res.dados)&&Object.hasOwn(res,'quantidadeInterna');
       if(legacy){
+        const filter=res.filtroPeriodo;
+        if(filter?.periodo)centralPeriod={roSyncPeriod:filter.periodo,roSyncDateFrom:filter.inicio};
         stage='Sincronização completa da base central';
         updateBackendStatus(null,'Carregando o conjunto completo de cadastros e configurações...');
         if(foreground)updateNucleoLoading('Carregando a base central pela rota de sincronização completa...','Carregando NÚCLEO');
@@ -1444,6 +1447,9 @@ async function loadPortalBackend(showMessage,options,load){
           console.warn('A base central não devolveu o período de busca salvo:',error);
         }
       }
+      if(part==='core'&&res.dados.config?.roSyncPeriod){
+        centralPeriod={roSyncPeriod:res.dados.config.roSyncPeriod,roSyncDateFrom:res.dados.config.roSyncDateFrom};
+      }
       lastUpdated=res.atualizadoEm||lastUpdated;
 
       // Solta a referência da resposta antes da próxima parte.
@@ -1457,7 +1463,7 @@ async function loadPortalBackend(showMessage,options,load){
       if((legacy||i>=2)&&!roStepStarted&&load.afterRoSetup){
         if(getSession()?.authToken!==token)return false;
         roStepStarted=true;
-        await load.afterRoSetup();
+        await load.afterRoSetup(centralPeriod);
         if(getSession()?.authToken!==token)return false;
       }
       if(legacy)break;
@@ -12281,9 +12287,9 @@ async function loadOfficialRosPaged(settings,onProgress){
   if(all.length!==total)throw new Error('A leitura terminou com registros faltando. Tente sincronizar novamente.');
   return {...meta,quantidade:total,quantidadeInterna:internas,quantidadeExterna:externas,dados:all,__syncMode:'paged'};
 }
-async function refreshLegacyRoCacheFromApi(force=false){
+async function refreshLegacyRoCacheFromApi(force=false,centralPeriod){
   if(nucleoRoCentralRefreshPromise)return nucleoRoCentralRefreshPromise;
-  nucleoRoCentralRefreshPromise=refreshRosFromOfficialSheets(force);
+  nucleoRoCentralRefreshPromise=refreshRosFromOfficialSheets(force,centralPeriod);
   try{return await nucleoRoCentralRefreshPromise}
   finally{nucleoRoCentralRefreshPromise=null}
 }
@@ -12336,14 +12342,14 @@ async function nucleoRunFullSync(options={}){
 
       let roResult;
       let roFailure='';
-      async function readOfficialRos(){
+      async function readOfficialRos(centralPeriod){
         if(roResult!==undefined||getSession()?.authToken!==token)return;
         if(!getSession()?.permissions||nucleoPersonCan('ros')){
           if(status){
             status.textContent='Atualizando R.O.s e SACs...';
             status.className='statusline';
           }
-          roResult=await refreshLegacyRoCacheFromApi(forceRos);
+          roResult=await refreshLegacyRoCacheFromApi(forceRos,centralPeriod);
           if(roResult===false&&forceRos)roFailure=status?.textContent||'R.O.s e SACs não conferidos com as planilhas centrais.';
         }else{
           roResult=null;
@@ -12434,16 +12440,17 @@ async function nucleoRunFullSync(options={}){
 }
 
 window.nucleoRunFullSync=nucleoRunFullSync;
-async function resolveRoSyncSettings(token){
+async function resolveRoSyncSettings(token,centralPeriod){
   const base=nucleoSessionApiBase(token)||portalApiBase();
   const result=await portalJsonp({acao:'portal_public_config'},20000,base);
   if(getSession()?.authToken!==token)return null;
   if(!result?.sucesso)throw new Error(result?.erro||'Não foi possível consultar o período de sincronização na base central.');
 
-  const roSyncPeriod=String(result.config?.roSyncPeriod??'');
-  const roSyncDateFrom=roSyncPeriod==='custom'?String(result.config?.roSyncDateFrom??''):'';
+  const config=result.config?.roSyncPeriod?result.config:centralPeriod;
+  const roSyncPeriod=String(config?.roSyncPeriod??'');
+  const roSyncDateFrom=roSyncPeriod==='custom'?String(config?.roSyncDateFrom??''):'';
   if(!['all','30','90','180','365','custom'].includes(roSyncPeriod)){
-    throw new Error('A API de teste ainda não informa o período de sincronização. Atualize o Apps Script de teste.');
+    throw new Error('A API de produção não informou o período de sincronização.');
   }
   if(roSyncPeriod==='custom'&&!/^\d{4}-\d{2}-\d{2}$/.test(roSyncDateFrom)){
     throw new Error('A base central não informou a data inicial do período personalizado.');
@@ -12452,10 +12459,10 @@ async function resolveRoSyncSettings(token){
   return getSavedIntegrationSettings();
 }
 
-async function refreshRosFromOfficialSheets(force=false){
+async function refreshRosFromOfficialSheets(force=false,centralPeriod){
   const token=getSession()?.authToken;
   try{
-    const s=await resolveRoSyncSettings(token);
+    const s=await resolveRoSyncSettings(token,centralPeriod);
     if(!s||getSession()?.authToken!==token)return false;
     const splitNow=force?{internas:[],externas:[]}:readImportedRosByOrigin();
     const periodFiltered=String(s.roSyncPeriod||'all')!=='all';
