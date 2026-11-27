@@ -1412,8 +1412,19 @@ async function loadPortalBackend(showMessage,options,load){
       }
       updateBackendStatus(null,'Sincronizando '+label+'...');
 
-      const res=await portalJsonp({acao:'portal_load_part',parte:part},90000);
+      let res=await portalJsonp({acao:'portal_load_part',parte:part},90000);
       if(getSession()?.authToken!==token)return false;
+      const legacy=part==='core'&&res?.sucesso===true&&Array.isArray(res.dados)&&Object.hasOwn(res,'quantidadeInterna');
+      if(legacy){
+        stage='Sincronização completa da base central';
+        updateBackendStatus(null,'Carregando o conjunto completo de cadastros e configurações...');
+        if(foreground)updateNucleoLoading('Carregando a base central pela rota de sincronização completa...','Carregando NÚCLEO');
+        res=null;
+        res=await portalJsonp({acao:'portal_load'},90000);
+        if(getSession()?.authToken!==token)return false;
+        if(!res?.sucesso||!res.dados?.config||!Array.isArray(res.dados.users)||!Array.isArray(res.dados.unitConfigs)||!Array.isArray(res.dados.triage)||!Array.isArray(res.dados.pdcaSent))
+          throw new Error(res?.erro||'A implantação de produção não devolveu a base central nem pela rota completa.');
+      }
       if(!res||res.sucesso===false)throw new Error(res?.erro||res?.error||'A base não confirmou a etapa.');
       if(!res.dados||typeof res.dados!=='object'||Array.isArray(res.dados)){
         const format=Array.isArray(res.dados)
@@ -1443,12 +1454,13 @@ async function loadPortalBackend(showMessage,options,load){
 
       // Depois de confirmar configuração, triagem e SACs, leia a planilha
       // antes dos módulos restantes, mantendo as requisições em sequência.
-      if(i>=2&&!roStepStarted&&load.afterRoSetup){
+      if((legacy||i>=2)&&!roStepStarted&&load.afterRoSetup){
         if(getSession()?.authToken!==token)return false;
         roStepStarted=true;
         await load.afterRoSetup();
         if(getSession()?.authToken!==token)return false;
       }
+      if(legacy)break;
     }
 
     nucleoSetCentralSyncState('synced','Base central confirmada. Os dados em tela estão atualizados.',lastUpdated);
