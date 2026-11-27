@@ -18486,6 +18486,25 @@ function nucleoTeamHasAvatar(value){
 }
 async function nucleoResolveTeamAvatars(result,token){
  const people=result.teams.flatMap(team=>team.people||[]);
+ const session=getSession();
+ if(!token||session?.authToken!==token)return result;
+ const own=people.filter(person=>person.self===true||
+   (session.personId&&String(person.personId||person.personKey||'')===String(session.personId)));
+ if(own.some(person=>!nucleoTeamHasAvatar(person.avatar))){
+   try{
+     const profile=await portalJsonp({acao:'portal_profile_avatar'},10000);
+     if(getSession()?.authToken!==token)return result;
+     if(profile?.sucesso){
+       const avatar=[profile.preview,profile.avatar].find(nucleoTeamHasAvatar);
+       if(avatar)for(const person of own){
+         if(!nucleoTeamHasAvatar(person.avatar))person.avatar=avatar;
+       }
+     }
+   }catch(error){
+     if(getSession()?.authToken!==token)return result;
+     console.warn('[MINHA EQUIPE] Foto do perfil indisponível:',error);
+   }
+ }
  const previews=new Map();
  for(const person of people){
    if(person.personKey&&nucleoTeamHasAvatar(person.avatar))previews.set(person.personKey,person.avatar);
