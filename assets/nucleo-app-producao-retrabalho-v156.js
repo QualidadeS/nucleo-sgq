@@ -12393,9 +12393,12 @@ async function nucleoRunFullSync(options={}){
       // oportunidade de executar a leitura. Nesse caso, faça-a aqui.
       await readOfficialRos();
       if(roFailure)throw new Error(roFailure);
-      if(status?.textContent?.startsWith('Etapa ')){
-        status.textContent=roResult===true?'R.O.s e SACs atualizados pelas planilhas centrais.':'';
-        status.className=roResult===true?'statusline okline':'statusline';
+      if(status&&roResult===true){
+        status.textContent='Sincronização concluída. R.O.s e SACs atualizados.';
+        status.className='statusline okline';
+      }else if(status?.textContent?.startsWith('Etapa ')){
+        status.textContent='Base central atualizada.';
+        status.className='statusline okline';
       }
 
       if(getSession()?.authToken!==token)return false;
@@ -12481,6 +12484,10 @@ async function refreshRosFromOfficialSheets(force=false,centralPeriod){
     if(data?.sucesso===false)throw new Error(data.erro||'Falha ao carregar R.O.s.');
     if(!Array.isArray(data?.dados))throw new Error('Resposta sem lista de R.O.s.');
 
+    const progress=document.getElementById('syncMsg');
+    if(progress)progress.textContent='Leitura concluída. Aplicando as R.O.s e os SACs recebidos…';
+    await new Promise(resolve=>setTimeout(resolve,0));
+    if(getSession()?.authToken!==token)return false;
     applyImportedRos(data.dados,data);
     data.dados=null;
     importedRoCacheNeedsRefresh=false;
