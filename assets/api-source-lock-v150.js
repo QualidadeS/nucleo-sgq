@@ -107,40 +107,10 @@
     return data;
   }
 
-  async function resolveGlobalApiUrl(force=false){
-    if(resolvingPromise&&!force)return resolvingPromise;
-
-    resolvingPromise=(async()=>{
-      let current=bootstrapApiUrl();
-      if(!current)throw new Error('A URL bootstrap global do Núcleo não está configurada.');
-
-      const seen=new Set();
-      for(let hop=0;hop<6;hop++){
-        if(seen.has(current))break;
-        seen.add(current);
-
-        let data;
-        try{
-          data=await probeApi(current);
-        }catch(e){
-          // Se ao menos o bootstrap existe, mantém essa URL como fallback global.
-          if(hop===0){globalApiUrl=current;return current;}
-          break;
-        }
-
-        const next=validApiUrl(data?.config?.apiUrl||'');
-        if(!next||next===current){
-          globalApiUrl=current;
-          return current;
-        }
-        current=next;
-      }
-
-      globalApiUrl=current;
-      return current;
-    })().finally(()=>{resolvingPromise=null;});
-
-    return resolvingPromise;
+  async function resolveGlobalApiUrl(){
+    const published=bootstrapApiUrl();
+    if(!published)throw new Error('A URL publicada da API do Núcleo não está configurada.');
+    return published;
   }
 
   window.nucleoResolveGlobalApiUrl=resolveGlobalApiUrl;
@@ -148,11 +118,11 @@
 
   // Compatibilidade: o nome antigo continua existindo, mas NÃO lê localStorage.
   window.nucleoPersistedApiUrl=function(){
-    return globalApiUrl||bootstrapApiUrl();
+    return bootstrapApiUrl();
   };
 
   window.portalApiBase=function(){
-    return validApiUrl(globalApiUrl)||bootstrapApiUrl();
+    return bootstrapApiUrl();
   };
 
   window.portalBackendEnabled=function(){
