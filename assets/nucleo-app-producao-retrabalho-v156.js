@@ -1416,7 +1416,10 @@ async function loadPortalBackend(showMessage,options,load){
       if(getSession()?.authToken!==token)return false;
       if(!res||res.sucesso===false)throw new Error(res?.erro||res?.error||'A base não confirmou a etapa.');
       if(!res.dados||typeof res.dados!=='object'||Array.isArray(res.dados)){
-        throw new Error('A API não retornou os dados desta etapa. Confira a implantação do Apps Script.');
+        const format=Array.isArray(res.dados)
+          ? (Object.hasOwn(res,'quantidadeInterna')?'lista geral de R.O.s':'lista')
+          : res.dados==null?'sem dados':typeof res.dados;
+        throw new Error('A rota portal_load_part ('+part+') respondeu com formato incompatível: '+format+'.');
       }
 
       applyPortalBackendSnapshot(res);
