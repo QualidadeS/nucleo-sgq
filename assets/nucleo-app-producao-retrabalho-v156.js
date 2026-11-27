@@ -18318,7 +18318,7 @@ var nucleoAvatarDraft='';
 var nucleoAvatarIcons={flower:'🌸',star:'⭐',fox:'🦊',cat:'🐱',robot:'🤖',sun:'☀️',leaf:'🍃',heart:'💜'};
 function nucleoAvatarHtml(value){value=nucleoAvatarGalleryPreviews[value]||value;if(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(value||'')&&value.length<=70000)return '<img alt="Foto de perfil" src="'+value+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;display:block;margin-bottom:8px">';const icon=nucleoAvatarIcons[String(value||'').replace('icon:','')];return '<span style="display:block;font-size:32px;margin-bottom:8px">'+(icon||'👤')+'</span>';}
 function nucleoAvatarPreview(){document.getElementById('profileAvatarPreview').innerHTML=nucleoAvatarHtml(nucleoAvatarDraft);}
-async function nucleoLoadAvatar(){const status=document.getElementById('profileAvatarStatus');try{const r=await portalJsonp({acao:'portal_profile_avatar'},60000);if(!r?.sucesso)throw new Error(r?.erro||'Falha na consulta do perfil.');document.getElementById('profileJobTitle').value=r.jobTitle||'';document.getElementById('profileWorkDescription').value=r.workDescription||'';nucleoAvatarDraft=r.avatar||'';nucleoAvatarGalleryPreviews[nucleoAvatarDraft]=r.preview||'';nucleoAvatarPreview();nucleoLoadAvatarGallery();document.getElementById('profileAvatarIcons').innerHTML=Object.entries(nucleoAvatarIcons).map(([key,icon])=>'<button type="button" class="btn secondary" aria-label="Escolher '+key+'" onclick="nucleoAvatarDraft=\'icon:'+key+'\';nucleoAvatarPreview()">'+icon+'</button>').join('');status.textContent='';}catch(e){status.textContent=e.message;}}
+async function nucleoLoadAvatar(){const status=document.getElementById('profileAvatarStatus');const token=getSession()?.authToken;try{const r=await portalJsonp({acao:'portal_profile_avatar'},60000);if(getSession()?.authToken!==token)return;if(!r?.sucesso)throw new Error(r?.erro||'Falha na consulta do perfil.');document.getElementById('profileJobTitle').value=r.jobTitle||'';document.getElementById('profileWorkDescription').value=r.workDescription||'';nucleoAvatarDraft=r.avatar||'';nucleoAvatarGalleryPreviews[nucleoAvatarDraft]=r.preview||'';nucleoAvatarPreview();nucleoRememberOwnTeamAvatar(r,token);if(nucleoInlineTeamData.length)nucleoRenderInlineTeam(nucleoInlineTeamExpanded);nucleoLoadAvatarGallery();document.getElementById('profileAvatarIcons').innerHTML=Object.entries(nucleoAvatarIcons).map(([key,icon])=>'<button type="button" class="btn secondary" aria-label="Escolher '+key+'" onclick="nucleoAvatarDraft=\'icon:'+key+'\';nucleoAvatarPreview()">'+icon+'</button>').join('');status.textContent='';}catch(e){status.textContent=e.message;}}
 async function nucleoAvatarPhoto(input){const file=input.files?.[0];if(!file)return;const status=document.getElementById('profileAvatarStatus');try{if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10000000)throw Error('Escolha uma foto JPG, PNG ou WebP de até 10 MB.');const url=URL.createObjectURL(file),img=new Image();try{await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Não foi possível ler a foto.'));img.src=url;});const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const c=canvas.getContext('2d'),side=Math.min(img.width,img.height);c.fillStyle='#fff';c.fillRect(0,0,256,256);c.imageSmoothingQuality='high';c.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,256,256);let data=canvas.toDataURL('image/jpeg',0.9);if(data.length>60000)data=canvas.toDataURL('image/jpeg',0.75);if(data.length>60000)throw Error('Escolha uma imagem menos complexa.');nucleoAvatarDraft=data;nucleoAvatarPreview();status.textContent='Foto preparada em melhor qualidade. Clique em Salvar foto ou ícone.';}finally{URL.revokeObjectURL(url);}}catch(e){status.textContent=e.message;}}
 async function nucleoSaveAvatar(button){const status=document.getElementById('profileAvatarStatus');button.disabled=true;status.textContent='Salvando na base central…';try{let r;if(nucleoAvatarDraft.startsWith('data:')){const event='AV-'+Date.now()+'-'+Math.random().toString(36).slice(2);if(!portalPostForm({acao:'portal_profile_avatar',avatar:nucleoAvatarDraft,avatarEvent:event}))throw Error('Não foi possível enviar a foto.');for(let i=0;i<12;i++){await new Promise(resolve=>setTimeout(resolve,1500));try{const check=await portalJsonp({acao:'portal_profile_avatar'},15000);if(check?.avatarEvent===event){r=check;break;}}catch(_) {}}if(!r)throw Error('A confirmação demorou. Reabra o perfil para conferir se a foto foi salva.');}else r=await portalJsonp({acao:'portal_profile_avatar',avatar:nucleoAvatarDraft},60000);if(!r?.sucesso)throw new Error(r?.erro||'Não confirmado.');nucleoAvatarDraft=r.avatar;nucleoAvatarGalleryPreviews[r.avatar]=r.preview||'';nucleoAvatarPreview();setSession({...getSession(),avatar:r.avatar});const users=getOperationalUsers(),own=users.find(u=>getSession()?.personId?u.personId===getSession().personId:u.email===getSession()?.email);if(own){own.avatar=r.avatar;localStorage.setItem(USERS_KEY,JSON.stringify(users));}status.textContent='Foto ou ícone salvo.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}}
 
@@ -18481,6 +18481,19 @@ function nucleoTeamsFromConfirmedSnapshot(session){
  });
  return teams.some(team=>team.people.length)?{sucesso:true,teams}:null;
 }
+let nucleoOwnTeamAvatar=null;
+function nucleoIsOwnTeamCard(person,session){
+ if(!session?.authToken)return false;
+ if(person.self===true)return true;
+ const ids=[session.personId,session.storageId,session.email].filter(Boolean).map(value=>String(value).toLowerCase());
+ return [person.personId,person.personKey,person.email].some(value=>value&&ids.includes(String(value).toLowerCase()));
+}
+function nucleoRememberOwnTeamAvatar(profile,token){
+ if(!token||getSession()?.authToken!==token||!profile?.sucesso)return '';
+ const avatar=[profile.preview,profile.avatar].find(nucleoTeamHasAvatar)||'';
+ nucleoOwnTeamAvatar={token,avatar};
+ return avatar;
+}
 function nucleoTeamHasAvatar(value){
  return /^(?:icon:|data:image\/(?:jpeg|png|webp);base64,)/.test(value||'') || Boolean(nucleoAvatarGalleryPreviews[value]);
 }
@@ -18488,14 +18501,13 @@ async function nucleoResolveTeamAvatars(result,token){
  const people=result.teams.flatMap(team=>team.people||[]);
  const session=getSession();
  if(!token||session?.authToken!==token)return result;
- const own=people.filter(person=>person.self===true||
-   (session.personId&&String(person.personId||person.personKey||'')===String(session.personId)));
+ const own=people.filter(person=>nucleoIsOwnTeamCard(person,session));
  if(own.some(person=>!nucleoTeamHasAvatar(person.avatar))){
    try{
      const profile=await portalJsonp({acao:'portal_profile_avatar'},10000);
      if(getSession()?.authToken!==token)return result;
      if(profile?.sucesso){
-       const avatar=[profile.preview,profile.avatar].find(nucleoTeamHasAvatar);
+       const avatar=nucleoRememberOwnTeamAvatar(profile,token);
        if(avatar)for(const person of own){
          if(!nucleoTeamHasAvatar(person.avatar))person.avatar=avatar;
        }
@@ -18583,11 +18595,15 @@ function nucleoTeamDirectoryById(){
 function nucleoTeamPersonCard(person,directory=new Map()){
  const registered=directory.get(String(person.personId||person.personKey||''))||(person.self?getSession():null);
 
+ const session=getSession();
+ const own=nucleoIsOwnTeamCard(person,session);
+ const profileAvatar=own&&nucleoOwnTeamAvatar?.token===session.authToken?nucleoOwnTeamAvatar.avatar:'';
+ const avatar=[profileAvatar,person.avatar,registered?.avatar].find(nucleoTeamHasAvatar);
  const {name}=splitPersonNameDescription(person.name,person.description||undefined);
  const units=person.accessUnits?.length?person.accessUnits:nucleoTeamRegisteredUnits(registered);
  const matriz=units.includes('matriz'),filial=units.includes('filial');
  const unitLabel=matriz&&filial?'Matriz e Filial':matriz?'Matriz':filial?'Filial':'Unidade não informada';
- return '<div class="inline-team-person" style="background:'+(person.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(person.avatar)+
+ return '<div class="inline-team-person" style="background:'+(person.manager?'#eef4ff':'#f6f8fa')+'">'+nucleoAvatarHtml(avatar)+
   '<div><strong>'+escapeHtml(name)+'</strong><div class="small">'+escapeHtml(person.primarySector||registered?.sector||'Setor não informado')+
   '</div><div class="small">'+escapeHtml(unitLabel)+'</div></div></div>';
 }
